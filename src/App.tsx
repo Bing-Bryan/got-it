@@ -1,3 +1,4 @@
+import {PdfReaderBoundary,reloadAfterPreserving} from './PdfReaderBoundary';
 import {InquiryStreamError} from './lib/inquiry-stream';
 import {loadSampleImages} from './lib/browser-library';
 import {HOSTED,hostedCapabilities} from './lib/runtime-mode';
@@ -942,6 +943,52 @@ function App() {
     [openAnchor],
   );
 
+  const providerControl = <div className="provider-control" ref={providerControlRef}>
+              <button
+                className="provider-trigger"
+                title="AI 连接与模型设置"
+                aria-label="AI 连接与模型设置"
+                type="button"
+                aria-expanded={providerOpen}
+                onClick={() => {setProviderOpen((value) => !value);if(HOSTED)void refreshProviders();}}
+              >
+                <ProviderGlyph id={activeProvider.id} />
+                <span>{activeProvider.name}</span>
+                <span className={`connection-dot ${activeProvider.availability}`} />
+                <ChevronDown size={13} />
+              </button>
+              <div className="provider-shell" hidden={!providerOpen}>
+                <ProviderPopover
+                  providers={providers}
+                  activeProviderId={workspace.activeProviderId}
+                  onSelect={selectProvider}
+                  onClose={() => setProviderOpen(false)}
+                >
+          {HOSTED?<HostedSettings key={String(providerOpen)}/>:<><CodexLogin provider={activeProvider} onConnected={onCodexConnected} />
+          <details className="model-settings" open onToggle={event => { if (event.currentTarget.open) void refreshModels(true); }}>
+          <summary>模型设置</summary><div className="model-controls">
+            <label className="settings-purpose">用途<select aria-label="设置用途" value={settingsIntent} onChange={e => setSettingsIntent(e.target.value as InquiryIntent)}>{NEW_INQUIRY_INTENTS.map(intent => <option key={intent} value={intent}>{INTENT_META[intent].label}</option>)}</select></label>
+            {workspace.activeProviderId === "codex" ? <>
+              <label>模型<select aria-label="当前用途的模型" disabled={modelsLoading || !!modelsError} value={currentModel.model} onChange={e => {
+                const model = codexModels.find(m => m.model === e.target.value);
+                if (model) changeModel({ model: model.model, reasoningEffort: model.supportedReasoningEfforts.some(e => e.reasoningEffort === currentModel.reasoningEffort) ? currentModel.reasoningEffort : model.defaultReasoningEffort });
+              }}>
+                {!selectedModelInfo ? <option value={currentModel.model} disabled>{currentModel.model}（{modelsLoading ? "加载中" : "目录暂不可用"}）</option> : null}
+                {codexModels.map(model => <option key={model.model} value={model.model}>{model.displayName}</option>)}
+              </select></label>
+              <label>推理强度<select aria-label="当前用途的推理强度" disabled={modelsLoading || !!modelsError || !selectedModelInfo} value={currentModel.reasoningEffort} onChange={e => changeModel({ ...currentModel, reasoningEffort: e.target.value })}>
+                {!selectedModelInfo?.supportedReasoningEfforts.some(e => e.reasoningEffort === currentModel.reasoningEffort) ? <option value={currentModel.reasoningEffort} disabled>{currentModel.reasoningEffort}</option> : null}
+                {selectedModelInfo?.supportedReasoningEfforts.map(effort => <option key={effort.reasoningEffort} value={effort.reasoningEffort} title={effort.description}>{effort.reasoningEffort}</option>)}
+              </select></label>
+              {!modelsLoading && !modelsError && !supportsConfig(codexModels, currentModel) ? <small role="status">当前目录不支持 {currentModel.model} / {currentModel.reasoningEffort}；已保留设置，不会自动换模型。</small> : null}
+              <button type="button" className="refresh-models" disabled={modelsLoading} onClick={() => void refreshModels(true)}>{modelsLoading ? "正在刷新…" : modelsError ? "重试读取模型" : "刷新模型列表"}</button>
+              {modelsError ? <small role="alert">{modelsError}</small> : null}
+            </> : <small>当前使用 {activeProvider.name}，模型由该连接配置。</small>}
+          </div>
+          </details></>}
+                </ProviderPopover>
+              </div>
+            </div>;
   return (
     <div
       className={`app-frame ${showStart ? "start-mode" : ""} ${bookmarksOpen ? "bookmarks-mode" : ""} ${!sidebar.pinned ? "sidebar-collapsed" : ""} ${sidebar.peek ? "sidebar-peek" : ""} ${!resultPanel.expanded ? "result-collapsed" : ""} ${mobileSidebarOpen ? "sidebar-open" : ""} ${mobilePanelOpen ? "panel-open" : ""}`}
@@ -1020,7 +1067,7 @@ function App() {
         <div className="sidebar-bookmark-footer"><button type="button" className="bookmarks-nav" aria-pressed={bookmarksOpen} disabled={!library.ready||library.busy} onClick={()=>void openBookmarks()}><Bookmark size={16} aria-hidden="true"/>全部收藏</button></div>
       </aside>
 
-      {showStart?<ReadingStartPage library={library} workspace={workspace} onFile={()=>{if(library.list.nativePicker)void library.choose();else fileInputRef.current?.click();}} onContinue={enterReading} onNote={id=>{enterReading();requestAnimationFrame(()=>openAnchor(id));}} onBookmarks={()=>void openBookmarks()} covered={bookmarksOpen}/>:null}
+      {showStart?<ReadingStartPage library={library} workspace={workspace} onFile={()=>{if(library.list.nativePicker)void library.choose();else fileInputRef.current?.click();}} onContinue={enterReading} onNote={id=>{enterReading();requestAnimationFrame(()=>openAnchor(id));}} onBookmarks={()=>void openBookmarks()} onLocateBookmark={locateBookmark} bookmarkVersion={bookmarkVersion} connectionControl={providerControl} covered={bookmarksOpen}/>:null}
       <main className="reader-column" aria-hidden={bookmarksOpen||undefined} inert={bookmarksOpen||(sidebar.narrow && mobileSidebarOpen) || (resultPanel.narrow && mobilePanelOpen)}>
         <header className="reader-toolbar">
           <div className="toolbar-title">
@@ -1044,52 +1091,7 @@ function App() {
 
           <div className="toolbar-actions">
           <DocumentBookmarks bookmarks={documentBookmarks.bookmarks} loading={documentBookmarks.loading} error={documentBookmarks.error} revisionId={activeBookmarkRevision} disabled={!library.entry||library.busy} onLocate={locateBookmark} onRetry={bookmarkFeedback.changed} onChanged={bookmarkFeedback.changed}/>
-            <div className="provider-control" ref={providerControlRef}>
-              <button
-                className="provider-trigger"
-                title="AI 连接与模型设置"
-                aria-label="AI 连接与模型设置"
-                type="button"
-                aria-expanded={providerOpen}
-                onClick={() => {setProviderOpen((value) => !value);if(HOSTED)void refreshProviders();}}
-              >
-                <ProviderGlyph id={activeProvider.id} />
-                <span>{activeProvider.name}</span>
-                <span className={`connection-dot ${activeProvider.availability}`} />
-                <ChevronDown size={13} />
-              </button>
-              <div className="provider-shell" hidden={!providerOpen}>
-                <ProviderPopover
-                  providers={providers}
-                  activeProviderId={workspace.activeProviderId}
-                  onSelect={selectProvider}
-                  onClose={() => setProviderOpen(false)}
-                >
-          {HOSTED?<HostedSettings key={String(providerOpen)}/>:<><CodexLogin provider={activeProvider} onConnected={onCodexConnected} />
-          <details className="model-settings" open onToggle={event => { if (event.currentTarget.open) void refreshModels(true); }}>
-          <summary>模型设置</summary><div className="model-controls">
-            <label className="settings-purpose">用途<select aria-label="设置用途" value={settingsIntent} onChange={e => setSettingsIntent(e.target.value as InquiryIntent)}>{NEW_INQUIRY_INTENTS.map(intent => <option key={intent} value={intent}>{INTENT_META[intent].label}</option>)}</select></label>
-            {workspace.activeProviderId === "codex" ? <>
-              <label>模型<select aria-label="当前用途的模型" disabled={modelsLoading || !!modelsError} value={currentModel.model} onChange={e => {
-                const model = codexModels.find(m => m.model === e.target.value);
-                if (model) changeModel({ model: model.model, reasoningEffort: model.supportedReasoningEfforts.some(e => e.reasoningEffort === currentModel.reasoningEffort) ? currentModel.reasoningEffort : model.defaultReasoningEffort });
-              }}>
-                {!selectedModelInfo ? <option value={currentModel.model} disabled>{currentModel.model}（{modelsLoading ? "加载中" : "目录暂不可用"}）</option> : null}
-                {codexModels.map(model => <option key={model.model} value={model.model}>{model.displayName}</option>)}
-              </select></label>
-              <label>推理强度<select aria-label="当前用途的推理强度" disabled={modelsLoading || !!modelsError || !selectedModelInfo} value={currentModel.reasoningEffort} onChange={e => changeModel({ ...currentModel, reasoningEffort: e.target.value })}>
-                {!selectedModelInfo?.supportedReasoningEfforts.some(e => e.reasoningEffort === currentModel.reasoningEffort) ? <option value={currentModel.reasoningEffort} disabled>{currentModel.reasoningEffort}</option> : null}
-                {selectedModelInfo?.supportedReasoningEfforts.map(effort => <option key={effort.reasoningEffort} value={effort.reasoningEffort} title={effort.description}>{effort.reasoningEffort}</option>)}
-              </select></label>
-              {!modelsLoading && !modelsError && !supportsConfig(codexModels, currentModel) ? <small role="status">当前目录不支持 {currentModel.model} / {currentModel.reasoningEffort}；已保留设置，不会自动换模型。</small> : null}
-              <button type="button" className="refresh-models" disabled={modelsLoading} onClick={() => void refreshModels(true)}>{modelsLoading ? "正在刷新…" : modelsError ? "重试读取模型" : "刷新模型列表"}</button>
-              {modelsError ? <small role="alert">{modelsError}</small> : null}
-            </> : <small>当前使用 {activeProvider.name}，模型由该连接配置。</small>}
-          </div>
-          </details></>}
-                </ProviderPopover>
-              </div>
-            </div>
+            {!showStart?providerControl:null}
             <button
               className="icon-button drawer-results-trigger"
               ref={resultDrawer.triggerRef}
@@ -1122,7 +1124,7 @@ function App() {
               <button type="button" onClick={() => void library.choose()}>换成我的文档</button>
             </div>
           ) : null}
-          {workspace.document.kind === "pdf" && library.entry ? <Suspense fallback={<p className="pdf-status">正在加载 PDF 阅读器…</p>}><PdfReader translation={workspace.webTranslation} showTranslation={workspace.readingSide==="translated"} toolbarHost={pdfToolbarHost} adjustmentHost={adjustmentHost} onReadingTime={receivePdfMinutes} outlineTarget={pdfDirectoryTarget?.documentId===workspace.document.id?pdfDirectoryTarget:null} onCurrentPage={setPdfCurrentPage} key={workspace.document.id+documentLoadId} document={workspace.document} revisionId={library.entry.revisionId} onBookmarkSaved={finishBookmarkSave} bookmarkCompleted={bookmarkCompleted} bookmarks={currentBookmarks} bookmarkVersion={bookmarkVersion} onBookmarkStarted={beginBookmarkSave} onBookmarkFailed={bookmarkFeedback.failed} bookmarkTarget={bookmarkTarget} onBookmarkLocated={success=>{if(!bookmarkTarget||bookmarkPreparing.current?.nonce!==bookmarkTarget.locateNonce)return;bookmarkPreparing.current=null;if(!success){showToast("无法定位收藏原文，摘录仍保留。");setBookmarksOpen(true);}else setBookmarksOpen(false);setBookmarkTarget(null);}} entryId={library.entry.id} inquiries={workspace.inquiries} activeId={workspace.activeInquiryId} target={pdfTarget} onLocated={finishSourceNavigation} initialPosition={library.initialPosition} readOnly={library.readOnly} saveStatus={saveStatus} saveBusy={library.busy} saveError={library.blocked||library.status==="阅读进度暂未保存"} onCreate={createInquiry} onActivate={openAnchor} onReady={library.rendered} onView={library.scrolled}/></Suspense> : <article
+          {workspace.document.kind === "pdf" && library.entry ? <PdfReaderBoundary key={workspace.document.id+documentLoadId} onReload={()=>reloadAfterPreserving(library.returnToStart,()=>window.location.reload())}><Suspense fallback={<p className="pdf-status">正在加载 PDF 阅读器…</p>}><PdfReader translation={workspace.webTranslation} showTranslation={workspace.readingSide==="translated"} toolbarHost={pdfToolbarHost} adjustmentHost={adjustmentHost} onReadingTime={receivePdfMinutes} outlineTarget={pdfDirectoryTarget?.documentId===workspace.document.id?pdfDirectoryTarget:null} onCurrentPage={setPdfCurrentPage} key={workspace.document.id+documentLoadId} document={workspace.document} revisionId={library.entry.revisionId} onBookmarkSaved={finishBookmarkSave} bookmarkCompleted={bookmarkCompleted} bookmarks={currentBookmarks} bookmarkVersion={bookmarkVersion} onBookmarkStarted={beginBookmarkSave} onBookmarkFailed={bookmarkFeedback.failed} bookmarkTarget={bookmarkTarget} onBookmarkLocated={success=>{if(!bookmarkTarget||bookmarkPreparing.current?.nonce!==bookmarkTarget.locateNonce)return;bookmarkPreparing.current=null;if(!success){showToast("无法定位收藏原文，摘录仍保留。");setBookmarksOpen(true);}else setBookmarksOpen(false);setBookmarkTarget(null);}} entryId={library.entry.id} inquiries={workspace.inquiries} activeId={workspace.activeInquiryId} target={pdfTarget} onLocated={finishSourceNavigation} initialPosition={library.initialPosition} readOnly={library.readOnly} saveStatus={saveStatus} saveBusy={library.busy} saveError={library.blocked||library.status==="阅读进度暂未保存"} onCreate={createInquiry} onActivate={openAnchor} onReady={library.rendered} onView={library.scrolled}/></Suspense></PdfReaderBoundary> : <article
             ref={articleRef}
             className="markdown-article"
             data-reading-side={workspace.readingSide ?? "original"}

@@ -2894,3 +2894,22 @@ details[open] > .disclosure-summary > .disclosure-chevron { transform: rotate(18
  .reader-tools--hosted.reader-tools--web { grid-template-columns: auto minmax(0, 1fr) auto; }
 }
 .pdf-region-capability { margin: 8px 12px; font-size: 12px; line-height: 1.6; color: var(--muted); }
+
+/* Scoped neutral surfaces: PDF canvases and semantic state colors retain their own colors. */
+:root { --reading-desk: #f3f1ec; --reading-card: #fffefd; --reading-muted: #ebe8e1; --reading-line: #e4e0d7; --reading-line-strong: #d3cdc1; }
+.reader-column { background: var(--reading-paper); }
+.left-sidebar, .reader-toolbar, .reader-tools, .reading-library,
+.category-toolbar, .result-navigation, .result-rail, .sidebar-bookmark-footer { background: var(--reading-desk); border-color: var(--reading-line); }
+.anchor-card, .assistant-message, .user-message p, .document-bookmarks-panel { background: var(--reading-card); border-color: var(--reading-line); }
+.markdown-article blockquote, .markdown-article pre, .markdown-article th { background: var(--reading-muted); }
+
+/* Complete the reader's neutral frame without recoloring document/PDF pixels or semantic states. */
+.sidebar-collapsed:not(.sidebar-peek) .sidebar-rail,
+.panel-desktop-head, .panel-desktop-head .inquiry-tabs { background: var(--reading-desk); border-color: var(--reading-line); }
+.provider-popover, .reading-adjustment .reading-adjustment-fields, .library-add-options,
+.library-popup-panel, .document-bookmarks-panel { --paper:var(--reading-card); --panel:var(--reading-desk); --soft:var(--reading-muted); --line:var(--reading-line); --line-strong:var(--reading-line-strong); background:var(--reading-card); border-color:var(--reading-line-strong); }
+.provider-popover select, .provider-popover input:not([type=checkbox]), .markdown-width-number { background:var(--reading-card); border-color:var(--reading-line-strong); }
+.pdf-module-error { max-width:640px;margin:32px auto;padding:24px;border:1px solid var(--reading-line-strong);border-radius:12px;background:var(--reading-card);font-size:14px;line-height:1.7; }
+.pdf-module-error h2 { font-size:18px;margin:0 0 10px; }.pdf-module-error p{margin:8px 0}.pdf-module-error button{padding:8px 12px;border:1px solid var(--reading-line-strong);border-radius:8px}
+.reading-adjustment .markdown-width-value { background:var(--reading-muted); border-color:var(--reading-line-strong); }
+.reading-adjustment .markdown-width-value:focus-within { background:var(--reading-card); border-color:var(--blue-line); }

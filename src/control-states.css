@@ -171,3 +171,18 @@
   }
   .web-static-image[role="button"]:is(:active, :focus-visible) { outline-color: var(--blue); }
 }
+
+@layer controls {
+  /* Warm only the default neutral surfaces; shared selected/open/hover/focus states retain meaning. */
+  :is(.provider-trigger,.document-bookmarks-trigger,.reading-adjustment-trigger,.library-add,.bookmarks-nav,.bookmark-back,.pdf-module-error button):not([aria-expanded=true]):not([aria-pressed=true]):not([aria-selected=true]) {
+    --control-bg:var(--reading-card); --control-border:var(--reading-line-strong);
+  }
+  :is(.sidebar-rail,.panel-desktop-head) .icon-button:not([aria-pressed=true]):not([aria-expanded=true]) {
+    --control-bg:transparent; --control-border:transparent;
+  }
+}
+@layer controls {
+  .reading-adjustment .markdown-width-reset:disabled {
+    --control-disabled-bg:var(--reading-muted); --control-disabled-border:var(--reading-line); --control-disabled-fg:var(--muted);
+  }
+}

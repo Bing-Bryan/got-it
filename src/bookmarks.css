@@ -88,3 +88,6 @@
 @layer controls {.document-bookmarks-trigger{--control-fg:var(--blue-strong);}}
 
 @layer controls {.sidebar-bookmark-footer .bookmarks-nav:not(:disabled):not([aria-pressed="true"]):not(:hover):not(:active)>svg{color:var(--blue-strong);}}
+
+.bookmarks-view { background: var(--reading-paper); }
+.bookmark-card, .bookmark-search input { background: var(--reading-card); border-color: var(--reading-line); }

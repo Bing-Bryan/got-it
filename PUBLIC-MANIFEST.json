@@ -3,8 +3,8 @@
   "files": [
     {
       "path": "src/App.tsx",
-      "bytes": 101537,
-      "sha256": "c277a5251a7274e0309e89212e51fc37f0165b7eab200d749271d0f117fd7175"
+      "bytes": 101950,
+      "sha256": "d1e6e59ec87a9f39392e0ce13620e8b6c0bb0d91be2eea747f0f841455917f64"
     },
     {
       "path": "src/BookmarkAction.tsx",
@@ -77,6 +77,11 @@
       "sha256": "2077a2f0f7f6d58ee61d81e12f614cb8488c69e42a05c46dac91e1f63975d30c"
     },
     {
+      "path": "src/PdfReaderBoundary.tsx",
+      "bytes": 2159,
+      "sha256": "1e79c6b69b355c6c3191e9c84b653bcc1d491007edfd61ab4fb7ddb044270df8"
+    },
+    {
       "path": "src/PdfSourcePreview.tsx",
       "bytes": 2062,
       "sha256": "09392b65ef2f69f03396587f7a311f270622054ca29a0531a4b6a6f4a5bc603b"
@@ -113,8 +118,8 @@
     },
     {
       "path": "src/ReadingStartPage.tsx",
-      "bytes": 10315,
-      "sha256": "61bfff5e2bba61688d935aca2d375f3c64d6b73be02a021e5ef0c1b0ce80ea05"
+      "bytes": 15351,
+      "sha256": "c1748fdb69df255dc7bd9e131498772d6839ee40481957846502202f55a07783"
     },
     {
       "path": "src/SelectionActions.tsx",
@@ -208,8 +213,8 @@
     },
     {
       "path": "src/bookmarks.css",
-      "bytes": 15321,
-      "sha256": "47afcdab38563bbf4b8f7bedf629b3db738aa2a3d9c2f32ad68e658c69f4120d"
+      "bytes": 15487,
+      "sha256": "899833c2d1237462ec1485aceb6061825674546f74e2b2e689e3ab973b03326e"
     },
     {
       "path": "src/codex-login-ui.test.tsx",
@@ -218,8 +223,8 @@
     },
     {
       "path": "src/control-states.css",
-      "bytes": 7648,
-      "sha256": "411877b945a1ede1a7f9b21abe98ec2e5cfa82cbd4cf6c4a6d482d72b64cbcca"
+      "bytes": 8469,
+      "sha256": "ed84312084cc6a01aa80205b35b07603c6dabe0ecb020a5aa3b45e501af38962"
     },
     {
       "path": "src/hosted-recovery-view.test.tsx",
@@ -803,8 +808,8 @@
     },
     {
       "path": "src/model-tabs-ui.test.tsx",
-      "bytes": 59960,
-      "sha256": "c11d437cddb119933eb76b2d8c1ce5dba6fe596f660b8b8fdb75c747c39f0ef3"
+      "bytes": 60030,
+      "sha256": "c26b118d24fb32415fb5da89f36d2a3c8fe60c277f2a99ea25367a81319dc9d8"
     },
     {
       "path": "src/multi-inquiry-ui.test.tsx",
@@ -815,6 +820,11 @@
       "path": "src/pdf-draft.test.tsx",
       "bytes": 14598,
       "sha256": "f31eaf3272e8a65505812967b6637b9913f8270c759d69f7477c082de398fe2c"
+    },
+    {
+      "path": "src/pdf-module-error.test.tsx",
+      "bytes": 4752,
+      "sha256": "51b9401cdec50c2cd47405e22750f19637b4c027911b0aa7e8a559c80821d3f8"
     },
     {
       "path": "src/pdf-outline-ui.test.tsx",
@@ -868,13 +878,13 @@
     },
     {
       "path": "src/reading-start-page.css",
-      "bytes": 8630,
-      "sha256": "edb3446603e2ab737bc2cbc46de2d633447119cd4bbdea2b4ba342f1cdcea560"
+      "bytes": 24754,
+      "sha256": "1665c4cd1566b0f41941b31b5819f921f0857f1d9fe46ea69f0515ffdd89d1ef"
     },
     {
       "path": "src/reading-start-page.test.tsx",
-      "bytes": 14323,
-      "sha256": "5a0168595a5cebd4be948c3064fd5b387057ae47d1e7f62834d0223e01a859b9"
+      "bytes": 21928,
+      "sha256": "bf82560199dbd12589416ed318dd55ce004cdb99688b7b08909b9e26501dc9a8"
     },
     {
       "path": "src/request-status.test.tsx",
@@ -888,8 +898,8 @@
     },
     {
       "path": "src/styles.css",
-      "bytes": 112932,
-      "sha256": "950a3b0847784c8fda0f50db1cf9d29ca351e003e1438ff9282988d68a3e73d9"
+      "bytes": 115155,
+      "sha256": "b0cb568f45adab3da6fa7a4f3c63cfb083e6db43dfe604af7a5e028c1bb42415"
     },
     {
       "path": "src/test-support/library.ts",
@@ -953,8 +963,8 @@
     },
     {
       "path": "src/useReadingLibrary.ts",
-      "bytes": 51598,
-      "sha256": "15d015641bfc0a9656af81dcaf403e6718b788d42cfb3dd8e21256d0ea8de0f4"
+      "bytes": 52278,
+      "sha256": "7fcd5b9b10ddae17ac6453703c320e7eee91398bf91e9f6a200722ffc80e81a1"
     },
     {
       "path": "src/useResponsiveDrawer.test.tsx",
@@ -990,6 +1000,11 @@
       "path": "src/useSidebar.ts",
       "bytes": 1701,
       "sha256": "17a49fa4ed16a148e082ed7791101d738be35e20a7d07773aa19940efe101339"
+    },
+    {
+      "path": "src/useStartBookmarks.ts",
+      "bytes": 1050,
+      "sha256": "500bb359666bc1edb4a3b49d9a143068198d746dac9c8a872ddc74856aaa0ce2"
     },
     {
       "path": "src/verification-brief.test.tsx",
@@ -1593,13 +1608,13 @@
     },
     {
       "path": "scripts/prepare-public.mjs",
-      "bytes": 2670,
-      "sha256": "107d5168f09c3149035d77ffaa2212f9acf1b8b134ecfdcb8e98a6ddbde85459"
+      "bytes": 2733,
+      "sha256": "6be4900375af1f0d9e3d9daa12bd6874b16ece77af69225dd9627e333b4159b5"
     },
     {
       "path": "scripts/prepare-public.node-test.mjs",
-      "bytes": 2641,
-      "sha256": "4cdb1dc3e5729f5d936f41edf25d681cdf6148ed648af8f2d1ca2fa782c16041"
+      "bytes": 2759,
+      "sha256": "31166fb666d04c41a2f0ab675c266ad55e62609d83160496ba514e817ec63aad"
     },
     {
       "path": "scripts/release-smoke.mjs",
@@ -1733,8 +1748,8 @@
     },
     {
       "path": "docs/updates/2026-10-18-reading-start-page.md",
-      "bytes": 1431,
-      "sha256": "33b3a5f13ed338d2ddadb9178982a2f23ee25ea2b98fe017aa0e487e87ebf639"
+      "bytes": 1832,
+      "sha256": "1160d09a78d1ac6f49ef57d06b86aeca9ebd0a22ad744b2f1eb7ca30ae6c8f3e"
     },
     {
       "path": "docs/updates/2026-10-18-warm-reading-typography.md",
@@ -1808,8 +1823,8 @@
     },
     {
       "path": "docs/ui-guidelines.md",
-      "bytes": 14502,
-      "sha256": "70791421c0ae4a046a5a641f60cce4d206a54d5d0143294e215256a02de4204d"
+      "bytes": 15411,
+      "sha256": "69355830dc4306026e671b4ff87573467883042451e55587614d2f4b8c5c5651"
     },
     {
       "path": "docs/ui/button-states.html",
@@ -1828,8 +1843,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 24939,
-      "sha256": "c054f09f55e1e3b02af09a0ee3638b45e421b94e90b6426d7091eaafe14128e9"
+      "bytes": 25015,
+      "sha256": "cfa4c0b3cc671b27ad0950c6a89000cd2af2d6bc558e3496afce1c57f66b76af"
     },
     {
       "path": "README.en.md",

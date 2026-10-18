@@ -195,8 +195,13 @@ export function useReadingLibrary(options: Options) {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const desiredPosition = useRef<ReadingPosition>({ ratio: 0 });
   const restorePending = useRef(false);
+  const lastRenderedPosition = useRef<ReadingPosition | null>(null);
   const fingerprint = readingKey;
-  function position() { return restorePending.current || latest.current.readingVisible === false ? desiredPosition.current : capturePosition(); }
+  function position() {
+    if (restorePending.current || latest.current.readingVisible === false) return desiredPosition.current;
+    if (latest.current.workspace.document.kind === "pdf" && !document.querySelector(".pdf-reader [data-pdf-page]")) return lastRenderedPosition.current ?? desiredPosition.current;
+    const current = capturePosition(); lastRenderedPosition.current = current; return current;
+  }
   function remember(e: LibraryEntry) { entryRef.current = e; setEntry(e); }
   function writeDraft(w: Workspace, p: ReadingPosition) {
     const e = entryRef.current; if (!e) return;
@@ -213,6 +218,7 @@ export function useReadingLibrary(options: Options) {
   async function refreshRecoveries() { const records = await api<RecoverySummary[]>("/recoveries"); setRecoveries(records); return records; }
   function install(e: LibraryEntry, revision = "", openReading = true) {
     setTranslationRepairCount(0);
+    lastRenderedPosition.current = null;
     desiredFragment.current = null;
     setTranslationProgress("");
     reportTranslationActivity(null);
@@ -629,7 +635,10 @@ export function useReadingLibrary(options: Options) {
   }, []);
   function rendered() {
     if(latest.current.readingVisible === false || document.querySelector(".app-frame.start-mode"))return;
+    // Lazy PDF loading/error UI has no page geometry; retain the saved position until ready.
+    if (latest.current.workspace.document.kind === "pdf" && !document.querySelector(".pdf-reader [data-pdf-page]")) return;
     if (restorePending.current) { restorePosition(desiredPosition.current); restorePending.current = false; }
+    lastRenderedPosition.current = capturePosition();
     const fragment = desiredFragment.current; desiredFragment.current = null;
     const doc = latest.current.workspace.document;
     if (fragment && doc.kind === "web") {
@@ -641,7 +650,8 @@ export function useReadingLibrary(options: Options) {
   }
   function scrolled() {
     if (latest.current.readingVisible === false || restorePending.current || !ready || busyRef.current || readonlyRef.current || recoveryRef.current || blockedDraft.current || !entryRef.current) return;
-    if (!saving.current && fingerprint(latest.current.workspace,capturePosition()) === saved.current) { clearOwn(latest.current.workspace,capturePosition()); return; }
+    const currentPosition=position();
+    if (!saving.current && fingerprint(latest.current.workspace,currentPosition) === saved.current) { clearOwn(latest.current.workspace,currentPosition); return; }
     writeDraft(latest.current.workspace, position());
     if (savePaused.current) return;
     if (!timer.current) timer.current = setTimeout(() => { timer.current = null; void flush().catch(() => {}); }, 500);

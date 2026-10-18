@@ -11,7 +11,7 @@ const roots = ['src', 'server', 'scripts', '.github', 'docs/updates',
 const root = process.cwd();
 const dest = resolve(root, 'release', `got-it-${new Date().toISOString().replaceAll(/[:.]/g, '-')}`);
 const files = [];
-const excluded = new Set(["scripts/bookmark-ai-spike", "scripts/bookmark-retrieval-spike"]);
+const excluded = new Set(["scripts/bookmark-ai-spike", "scripts/bookmark-retrieval-spike", "scripts/search-provider-eval", "scripts/search-reading-eval"]);
 async function walk(path) {
   if (excluded.has(relative(root, path).replaceAll("\\", "/"))) return;
   const info = await lstat(path);

@@ -57,10 +57,10 @@ it('same anchor exposes only existing needs and request completion never steals 
  let emit!:(event:InquiryEvent)=>void,finish!:()=>void;
  stream.mockImplementation((_r:InquiryRequest,cb:any)=>{emit=cb;return new Promise<void>(r=>finish=r);});
  await mount();expect(host.querySelector('.anchor-requests')?.textContent).toContain('解释');expect(host.querySelector('.anchor-requests')?.textContent).not.toContain('来源');
- await choose('select[aria-label="历史记录"]','entity');expect(host.querySelector('[role=tab][aria-selected=true]')?.id).toBe('intent-tab-explain');
+ await choose('select[aria-label="历史记录"]','entity');expect(host.querySelector('.inquiry-tabs [role=tab][aria-selected=true]')?.id).toBe('intent-tab-explain');
  await click('.detail-introduction-action');const request=stream.mock.calls[0][0];await click('#intent-tab-explain');
  await act(async()=>{emit({type:'complete',requestId:request.requestId,sequence:1,response:{answer:'完成介绍',mode:'live',providerId:'codex',providerName:'Codex',sources:[],evidenceStatus:'not-applicable'}});finish();});
- expect(host.querySelector('[role=tab][aria-selected=true]')?.id).toBe('intent-tab-explain');expect(host.querySelector('.answer-markdown')).toBeNull();expect(stream).toHaveBeenCalledTimes(1);
+ expect(host.querySelector('.inquiry-tabs [role=tab][aria-selected=true]')?.id).toBe('intent-tab-explain');expect(host.querySelector('.answer-markdown')).toBeNull();expect(stream).toHaveBeenCalledTimes(1);
 });
 it('failure-only regeneration retries the failed configuration and retains history',async()=>{
  w.inquiries[0].lastError='连接失败';w.inquiries[0].messages.push({id:'failure',role:'assistant',content:'',createdAt:'2026',completion:'interrupted',operation:'explain',modelConfig:{model:'gpt-5.6-luna',reasoningEffort:'max'}});
@@ -100,7 +100,7 @@ it('restores legacy empty anchor tabs as category pages without creating request
 });
 it('restores an independent category list after reload',async()=>{
  w.activeInquiryId=null;w.activeTab={intent:'entity'};await mount();
- expect(host.querySelector('[role=tab][aria-selected=true]')?.id).toBe('intent-tab-explain');expect(host.querySelector('.answer-markdown')).toBeNull();expect(stream).not.toHaveBeenCalled();
+ expect(host.querySelector('.inquiry-tabs [role=tab][aria-selected=true]')?.id).toBe('intent-tab-explain');expect(host.querySelector('.answer-markdown')).toBeNull();expect(stream).not.toHaveBeenCalled();
 });
 it('replacing a document preserves preferences, clears search and aborts old requests',async()=>{
  let signal:AbortSignal|undefined;
@@ -299,8 +299,8 @@ it('keeps function identity across keyboard tabs, exact-anchor switches and list
  const base=w.inquiries[0];w.inquiries.push({...base,id:'verify',intent:'verify'},{...base,id:'entity',intent:'entity'});
  await mount();
  for(const [key,id] of [['ArrowRight','verify'],['End','ask'],['Home','explain']] as const){
-  await act(async()=>host.querySelector('[role=tab][aria-selected=true]')!.dispatchEvent(new KeyboardEvent('keydown',{key,bubbles:true})));
-  expect(host.querySelector('[role=tab][aria-selected=true]')?.getAttribute('data-intent')).toBe(id);
+  await act(async()=>host.querySelector('.inquiry-tabs [role=tab][aria-selected=true]')!.dispatchEvent(new KeyboardEvent('keydown',{key,bubbles:true})));
+  expect(host.querySelector('.inquiry-tabs [role=tab][aria-selected=true]')?.getAttribute('data-intent')).toBe(id);
   expect(document.activeElement?.id).toBe('intent-tab-'+id);
  }
  await click('.category-open');
