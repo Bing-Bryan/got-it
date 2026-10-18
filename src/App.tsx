@@ -99,7 +99,10 @@ import {
   type ThreadMessage,
   type Workspace,
 } from "./types";
-import { createInitialWorkspace } from "./sample";
+import { createPlaceholderWorkspace } from "./sample";
+import {WebImportDialog} from "./WebImportDialog";
+import {ReadingStartPage} from "./ReadingStartPage";
+import {initialReadingView,START_VIEW_KEY} from "./lib/reading-start-page";
 import { REFINEMENTS, canCompleteInquiry, type Refinement } from "./lib/learning";
 import { renderMarkdown } from "./lib/markdown";
 import { loadWebMedia } from "./lib/web-media";
@@ -162,11 +165,13 @@ function App() {
   const [pdfDirectoryTarget, setPdfDirectoryTarget] = useState<{documentId:string;item:PdfOutlineItem;nonce:number}|null>(null);
   const [pdfCurrentPage, setPdfCurrentPage] = useState(1);
   const [workspace, setWorkspace] = useState<Workspace>(() => {
-    let loaded = migrateHighlightAnchors((HOSTED?null:loadWorkspace()) ?? createInitialWorkspace());
-    if(HOSTED)loaded={...loaded,document:{id:"hosted-welcome",isDemo:true,importedAt:new Date().toISOString(),filename:"欢迎使用 Got-it",markdown:"# 阅读，从你的材料开始\n\n使用左侧 + 添加 Markdown / PDF、公开网页或 X 链接，也可打开公开样例。\n\n选中文字后，可解释、提问并收藏原句。提问时，选区、有限上下文及追问历史会发送到托管服务与模型服务商；服务端不保存正文或回答。\n\n主动全文译中会将全部可翻译正文分批发送给托管服务与模型服务商；每批使用体验额度，原文保留。\n\n成果只保存在当前浏览器，请定期下载完整备份。",contentHash:"hosted-welcome-v2"}};
+    let loaded = migrateHighlightAnchors((HOSTED?null:loadWorkspace()) ?? createPlaceholderWorkspace());
+
     try { const preferences = JSON.parse(localStorage.getItem("got-it.model-preferences.v1") || "null"); if (preferences) loaded = restoreWorkspace({ ...loaded, ...preferences }) ?? loaded; } catch { /* retain defaults */ }
     return { ...loaded, modelDefaultsVersion: 4, modelPreferences: loaded.modelDefaultsVersion === 4 ? loaded.modelPreferences : Object.fromEntries((["explain", "verify", "entity", "why", "ask"] as const).map(intent => [intent, modelConfig(intent)])), activeProviderId: HOSTED?"deepseek":"codex" };
   });
+  const [readingView,setReadingView]=useState<'start'|'reading'>(()=>initialReadingView(()=>sessionStorage,(performance.getEntriesByType?.('navigation')[0] as PerformanceNavigationTiming|undefined)?.type));
+  const enterReading=useCallback(()=>{setReadingView('reading');try{sessionStorage.setItem(START_VIEW_KEY,'reading');}catch{/* Session view is optional, never a saved-content claim. */}},[]);
   const workspaceRef = useRef(workspace);
   workspaceRef.current = workspace;
   const [documentLoadId, setDocumentLoadId] = useState(0);
@@ -262,7 +267,12 @@ function App() {
     const next = restoreWorkspace(workspaceRef.current) ?? workspaceRef.current;
     workspaceRef.current = next; setWorkspace(next); return next;
   }, []);
-  const library = useReadingLibrary({ workspace, install: installLibraryWorkspace, interrupt: interruptForSwitch, getWorkspace: () => workspaceRef.current, update: (next) => { workspaceRef.current=next;setWorkspace(next); } });
+  const library = useReadingLibrary({ workspace, readingVisible:readingView==='reading', onOpened:enterReading, install: installLibraryWorkspace, interrupt: interruptForSwitch, getWorkspace: () => workspaceRef.current, update: (next) => { workspaceRef.current=next;setWorkspace(next); } });
+  const recoveryPriority=library.blocked||!!library.recovery||library.recoveries.some(r=>r.state==='pending'&&r.hasDifferences!==false);
+  const showStart=(!library.ready||!library.entry||readingView==='start')&&!recoveryPriority;
+  useEffect(()=>{if(recoveryPriority)enterReading();},[recoveryPriority,enterReading]);
+  useLayoutEffect(()=>{if(!showStart)library.rendered();},[showStart,documentLoadId]);
+  async function returnToStart(){if(!library.ready||library.busy)return;if(await library.returnToStart()){setReadingView('start');try{sessionStorage.setItem(START_VIEW_KEY,'start');}catch{}setBookmarksOpen(false);setMobileSidebarOpen(false);setMobilePanelOpen(false);setSelectionDraft(null);setBookmarkDraft(null);window.getSelection()?.removeAllRanges();requestAnimationFrame(()=>document.querySelector<HTMLElement>(".reading-start-page")?.focus({preventScroll:true}));}}
   const documentBookmarks=useDocumentBookmarks(library.entry?.id,bookmarkVersion);
   const activeBookmarkRevision=library.historyId||library.entry?.revisionId;
   const currentBookmarks=documentBookmarks.bookmarks.filter(bookmark=>bookmark.revisionId===activeBookmarkRevision);
@@ -284,10 +294,10 @@ function App() {
   async function openBookmarks(){
     track("bookmarks-all");
     bookmarkPreparing.current=null;setBookmarkTarget(null);
-    try {await library.prepareBookmarks();bookmarkPositionRef.current=capturePosition();setSelectionDraft(null);setBookmarkDraft(null);setInquirySelectionError('');window.getSelection()?.removeAllRanges();setBookmarksOpen(true);setMobileSidebarOpen(false);setMobilePanelOpen(false);}
+    try {await library.prepareBookmarks();bookmarkPositionRef.current=showStart?{...library.initialPosition}:capturePosition();enterReading();setSelectionDraft(null);setBookmarkDraft(null);setInquirySelectionError('');window.getSelection()?.removeAllRanges();setBookmarksOpen(true);setMobileSidebarOpen(false);setMobilePanelOpen(false);}
     catch(e){showToast(e instanceof Error?e.message:"无法打开收藏，请重试。");}
   }
-  function closeBookmarks(){bookmarkPreparing.current=null;setBookmarkTarget(null);setBookmarksOpen(false);requestAnimationFrame(()=>{if(bookmarkPositionRef.current)restorePosition(bookmarkPositionRef.current);const trigger=document.querySelector<HTMLButtonElement>(window.matchMedia('(max-width:780px)').matches?'.drawer-navigation-trigger':'.bookmarks-nav');trigger?.focus();});}
+  function closeBookmarks(){bookmarkPreparing.current=null;setBookmarkTarget(null);setBookmarksOpen(false);requestAnimationFrame(()=>{if(bookmarkPositionRef.current)restorePosition(bookmarkPositionRef.current);const trigger=document.querySelector<HTMLButtonElement>(document.querySelector('.app-frame.start-mode')?'.start-bookmarks':window.matchMedia('(max-width:780px)').matches?'.drawer-navigation-trigger':'.bookmarks-nav');trigger?.focus();});}
   async function locateBookmark(bookmark:ReadingBookmark){
     track("bookmark-locate");
     const attempt={entryId:bookmark.entryId,documentId:bookmark.documentId,nonce:++bookmarkLocateNonce.current,keepList:bookmarksOpen};bookmarkPreparing.current=attempt;
@@ -457,7 +467,7 @@ function App() {
   }, [refreshProviders]);
 
   useEffect(() => {
-    if (HOSTED || !workspace.document.isDemo) return;
+    if (HOSTED || !workspace.document.isDemo || workspace.document.id === "start-placeholder") return;
     const result = saveWorkspace(workspace);
     if (!result.ok) showToast(result.error);
   }, [showToast, workspace]);
@@ -934,7 +944,7 @@ function App() {
 
   return (
     <div
-      className={`app-frame ${bookmarksOpen ? "bookmarks-mode" : ""} ${!sidebar.pinned ? "sidebar-collapsed" : ""} ${sidebar.peek ? "sidebar-peek" : ""} ${!resultPanel.expanded ? "result-collapsed" : ""} ${mobileSidebarOpen ? "sidebar-open" : ""} ${mobilePanelOpen ? "panel-open" : ""}`}
+      className={`app-frame ${showStart ? "start-mode" : ""} ${bookmarksOpen ? "bookmarks-mode" : ""} ${!sidebar.pinned ? "sidebar-collapsed" : ""} ${sidebar.peek ? "sidebar-peek" : ""} ${!resultPanel.expanded ? "result-collapsed" : ""} ${mobileSidebarOpen ? "sidebar-open" : ""} ${mobilePanelOpen ? "panel-open" : ""}`}
       onDragEnter={(event) => {
         event.preventDefault();
         setIsDragging(true);
@@ -958,13 +968,11 @@ function App() {
         onChange={handleFileChange}
       />
 
+      <WebImportDialog library={library}/>
       <div className="sidebar-rail" onMouseEnter={sidebar.reveal} onMouseLeave={sidebar.leave}><button type="button" className="icon-button" aria-label="展开导航" aria-controls="document-navigation" aria-expanded={sidebar.peek} onClick={sidebar.reveal}><PanelLeftOpen size={17} /></button></div>
-      <aside id="document-navigation" ref={sidebar.ref} className="left-sidebar" aria-label="文档导航" inert={(resultPanel.narrow && mobilePanelOpen) || (sidebar.narrow ? !mobileSidebarOpen : !sidebar.pinned && !sidebar.peek)} onMouseEnter={sidebar.cancel} onMouseLeave={sidebar.leave} onBlur={sidebar.leave}>
+      <aside id="document-navigation" ref={sidebar.ref} className="left-sidebar" aria-label="文档导航" aria-hidden={showStart||undefined} inert={showStart||(resultPanel.narrow && mobilePanelOpen) || (sidebar.narrow ? !mobileSidebarOpen : !sidebar.pinned && !sidebar.peek)} onMouseEnter={sidebar.cancel} onMouseLeave={sidebar.leave} onBlur={sidebar.leave}>
         <div className="brand-row">
-          <BrandMark />
-          <div>
-            <strong>got it</strong>
-          </div>
+          <button type="button" className="start-brand" aria-label="回到起始页" title="回到起始页" disabled={!library.ready||library.busy} onClick={()=>void returnToStart()}><BrandMark /><strong>got it</strong></button>
           <div className="desktop-sidebar-controls">
             {<button className="icon-button" type="button" aria-label={sidebar.pinned ? "解除固定导航" : "固定导航"} aria-pressed={sidebar.pinned} title={sidebar.pinned ? "解除固定，移开后收起" : "固定导航"} onClick={e => { sidebar.pin(!sidebar.pinned); if(sidebar.pinned && e.detail>0)e.currentTarget.blur(); }}><Pin size={15} fill={sidebar.pinned ? "currentColor" : "none"} /></button>}
           </div>
@@ -982,7 +990,7 @@ function App() {
 
         <nav className="sidebar-scroll">
           <section className="nav-section">
-            {HOSTED?<details className="hosted-sample-picker" open={workspace.document.isDemo}><summary className="disclosure-summary"><span>公开样例</span><ChevronDown size={13} className="disclosure-chevron" aria-hidden="true"/></summary><HostedSamples onOpen={library.importFile}/></details>:null}
+            {HOSTED?<details className="hosted-sample-picker"><summary className="disclosure-summary"><span>公开样例</span><ChevronDown size={13} className="disclosure-chevron" aria-hidden="true"/></summary><HostedSamples onOpen={library.importFile}/></details>:null}
           {workspace.document.kind === "pdf" && library.entry ? <PdfOutline key={library.entry.id+workspace.document.pdf.resourceId+documentLoadId} entryId={library.entry.id} fileHash={workspace.document.pdf.resourceId} pages={workspace.document.pdf.pages.length} currentPage={pdfCurrentPage} readOnly={library.readOnly} onJump={item=>{bookmarkPreparing.current=null;setBookmarkTarget(null);setBookmarksOpen(false);setPdfDirectoryTarget({documentId:workspace.document.id,item,nonce:Date.now()});setMobileSidebarOpen(false);}}/> : <>
             <div className="section-label">
               <span>{workspace.document.kind === "pdf" ? "PDF 原页" : "文档结构"}</span>
@@ -1012,6 +1020,7 @@ function App() {
         <div className="sidebar-bookmark-footer"><button type="button" className="bookmarks-nav" aria-pressed={bookmarksOpen} disabled={!library.ready||library.busy} onClick={()=>void openBookmarks()}><Bookmark size={16} aria-hidden="true"/>全部收藏</button></div>
       </aside>
 
+      {showStart?<ReadingStartPage library={library} workspace={workspace} onFile={()=>{if(library.list.nativePicker)void library.choose();else fileInputRef.current?.click();}} onContinue={enterReading} onNote={id=>{enterReading();requestAnimationFrame(()=>openAnchor(id));}} onBookmarks={()=>void openBookmarks()} covered={bookmarksOpen}/>:null}
       <main className="reader-column" aria-hidden={bookmarksOpen||undefined} inert={bookmarksOpen||(sidebar.narrow && mobileSidebarOpen) || (resultPanel.narrow && mobilePanelOpen)}>
         <header className="reader-toolbar">
           <div className="toolbar-title">

@@ -52,7 +52,7 @@ export function restorePosition(p: ReadingPosition) {
   if (typeof el.scrollTo === "function") el.scrollTo({left,top,behavior:"instant"});
   else { el.scrollLeft=left;el.scrollTop=top; }
 }
-interface Options { workspace: Workspace; install: (w: Workspace,entryId?:string) => void; interrupt: () => Workspace; update?: (w: Workspace) => void; getWorkspace?: () => Workspace }
+interface Options { workspace: Workspace; install: (w: Workspace,entryId?:string) => void; interrupt: () => Workspace; update?: (w: Workspace) => void; getWorkspace?: () => Workspace; readingVisible?: boolean; onOpened?: () => void }
 export function useReadingLibrary(options: Options) {
   const latest = useRef(options); latest.current = options;
   const entryRef = useRef<LibraryEntry | null>(null);
@@ -80,6 +80,7 @@ export function useReadingLibrary(options: Options) {
   const store = () => storeRef.current ??= new DraftStore(localStorage);
   const [notice, setNotice] = useState("");
   const [webImportOpen, setWebImportOpen] = useState(false);
+  const [webPrefill,setWebPrefill]=useState("");
   const [webImportSuccess, setWebImportSuccess] = useState(0);
   const [webJob, setWebJob] = useState<WebImportJob | null>(null);
   const [webError, setWebError] = useState("");
@@ -195,6 +196,7 @@ export function useReadingLibrary(options: Options) {
   const desiredPosition = useRef<ReadingPosition>({ ratio: 0 });
   const restorePending = useRef(false);
   const fingerprint = readingKey;
+  function position() { return restorePending.current || latest.current.readingVisible === false ? desiredPosition.current : capturePosition(); }
   function remember(e: LibraryEntry) { entryRef.current = e; setEntry(e); }
   function writeDraft(w: Workspace, p: ReadingPosition) {
     const e = entryRef.current; if (!e) return;
@@ -209,7 +211,7 @@ export function useReadingLibrary(options: Options) {
     recoveryRef.current=r; setRecovery(r);
   }
   async function refreshRecoveries() { const records = await api<RecoverySummary[]>("/recoveries"); setRecoveries(records); return records; }
-  function install(e: LibraryEntry, revision = "") {
+  function install(e: LibraryEntry, revision = "", openReading = true) {
     setTranslationRepairCount(0);
     desiredFragment.current = null;
     setTranslationProgress("");
@@ -227,6 +229,7 @@ export function useReadingLibrary(options: Options) {
     latest.current.install(next,e.id); latest.current.workspace = next;
     saved.current = fingerprint(next, desiredPosition.current);
     setStatus(revision ? "正在回看旧版本 · 只读" : savedLabel(next));
+    if(openReading)latest.current.onOpened?.();
   }
   async function refresh() { const result = await api<LibraryList>(); setList(result); return result; }
   async function checkSource() {
@@ -242,7 +245,7 @@ export function useReadingLibrary(options: Options) {
       if (blockedDraft.current) throw new Error("须先保存阅读记录才能离开，请重试保存。");
       if (!e || readonlyRef.current || recoveryRef.current) return;
       const w = explicit ?? latest.current.workspace;
-      const p = restorePending.current ? desiredPosition.current : capturePosition();
+      const p = position();
       const fp = fingerprint(w, p);
       if (saved.current === fp) { clearOwn(w,p); return; }
       const draft = writeDraft(w, p); setStatus("保存中…"); saving.current=true;
@@ -250,7 +253,7 @@ export function useReadingLibrary(options: Options) {
         const next = await api<LibraryEntry>(`/entries/${e.id}/save`, { expectedVersion: e.version, revisionId: e.revisionId, workspace: w, position: p });
         if(HOSTED)void browserStorageStatus(true);
         remember(next); savePaused.current = false; saved.current = fp; setError("");
-        const currentPosition = restorePending.current ? desiredPosition.current : capturePosition();
+        const currentPosition = position();
         const hasNewerChanges = fingerprint(latest.current.workspace, currentPosition) !== fp;
         setStatus(hasNewerChanges ? "保存中…" : savedLabel(w));
         if (hasNewerChanges) {
@@ -262,7 +265,7 @@ export function useReadingLibrary(options: Options) {
         track('save-failed');
         if ((error as {status?:number}).status === 409) {
           const current = latest.current.interrupt(); latest.current.workspace=current;
-          const latestDraft = writeDraft(current, restorePending.current ? desiredPosition.current : capturePosition()) ?? draft;
+          const latestDraft = writeDraft(current, position()) ?? draft;
           if (latestDraft) {
             blockedDraft.current=latestDraft;setBlocked(true);
             try {
@@ -341,7 +344,7 @@ export function useReadingLibrary(options: Options) {
   const [preparingEntry,setPreparingEntry]=useState(false);
   async function ensureEntry():Promise<LibraryEntry>{
     if(entryRef.current)return entryRef.current;
-    if(!HOSTED)throw new Error('请先添加阅读材料。');
+    if(!HOSTED || latest.current.workspace.document.id === 'start-placeholder')throw new Error('请先添加阅读材料。');
     if(ensuringEntry.current)return ensuringEntry.current;
     if(busyRef.current)throw new Error('阅读材料正在切换，请稍后重试。');
     const workspace=latest.current.getWorkspace?.()??latest.current.workspace,documentId=workspace.document.id;
@@ -359,9 +362,9 @@ export function useReadingLibrary(options: Options) {
     const e = await api<LibraryEntry>("/entries", { workspace: { ...w, modelPreferences: preferences.modelPreferences, modelDefaultsVersion: preferences.modelDefaultsVersion, activeProviderId: preferences.activeProviderId }, creationKey: crypto.randomUUID(), selectionId });
     install(await api<LibraryEntry>(`/entries/${e.id}/activate`, {})); markMaterial(w.document.id.startsWith("sample-")?"sample":w.document.kind==="pdf"?"pdf":"markdown"); await refresh(); await checkSource();
   }
-  async function importFile(file: File) {
+  async function importFile(file: File, example = false) {
     const sample=HOSTED?sampleForFile(file):undefined;
-    const annotate=(w:Workspace):Workspace=>sample?{...w,document:{...w.document,id:`sample-${sample.id}-${sample.sha256}`,contentHash:sample.sha256}}:w;
+    const annotate=(w:Workspace):Workspace=>sample?{...w,document:{...w.document,id:`sample-${sample.id}-${sample.sha256}`,contentHash:sample.sha256}}:example?{...w,document:{...w.document,isDemo:true}}:w;
     if (busyRef.current || !ready) return;
     const sequence = ++importSequence.current;
     try { if(HOSTED && file.name.endsWith('.gotit')){await preserve();track('restore');await restoreBrowserBackup(await file.text());track('restore-success');await refresh();await initialize();return;} if(file.name.toLowerCase().endsWith('.pdf')){if(file.size>50*1024*1024)throw new Error('PDF 须不超过 50 MiB。');await transition(async()=>{const selected:SelectedFile=await (await libraryBinary('/pdf?filename='+encodeURIComponent(file.name),new Blob([file],{type:'application/pdf'}))).json();await addWorkspace(annotate(selected.workspace!),selected.selectionId);}, true);return;} const w = await readDocumentFile(file); if (sequence !== importSequence.current) return; await transition(() => addWorkspace(annotate(w)), true); }
@@ -430,7 +433,13 @@ export function useReadingLibrary(options: Options) {
     dismissedRecoveries.current.add(record.id);
     void showRecovery(record.id);
   }, [ready,busy,recovery,historyId,blocked,recoveries,entry?.id]);
-  function showWebImport() { setWebError(""); setWebImportOpen(true); }
+  function showWebImport(url = "") { setWebPrefill(url);setWebError(""); setWebImportOpen(true); }
+  async function returnToStart(){
+    if(busyRef.current) return false;
+    let success=false;
+    await transition(async()=>{await preserve();if(readonlyRef.current && historyId && entryRef.current)install(entryRef.current,"",false);else {desiredPosition.current=position();restorePending.current=true;}success=true;});
+    return success;
+  }
   async function cancelWebImport(close = false) {
     if (busyRef.current) return;
     captureSequence.current++;
@@ -587,9 +596,9 @@ export function useReadingLibrary(options: Options) {
         }
       }
       const records=await refreshRecoveries();
-      const id = result.activeId ?? result.entries[0]?.id;
-      if (id) { install(restored.get(id) ?? await api<LibraryEntry>(`/entries/${id}`)); await checkSource(); }
-      else setStatus(HOSTED?"请打开样例或添加本地文件":"示例文档");
+      const id = result.activeId ?? [...result.entries].sort((a,b)=>b.lastOpenedAt.localeCompare(a.lastOpenedAt))[0]?.id;
+      if (id) { install(restored.get(id) ?? await api<LibraryEntry>(`/entries/${id}`), "", false); await checkSource(); }
+      else setStatus("请添加阅读材料");
       if (records.some(r=>r.state === "pending" && r.hasDifferences !== false)) setStatus("有阅读记录待核对 · 已安全保留");
       if (recovered) setNotice("已恢复上次阅读进度");
       setReady(true);
@@ -603,7 +612,7 @@ export function useReadingLibrary(options: Options) {
   useEffect(() => {
     try { localStorage.setItem(PREFS_KEY, JSON.stringify({ modelPreferences: options.workspace.modelPreferences, activeProviderId: options.workspace.activeProviderId, modelDefaultsVersion: options.workspace.modelDefaultsVersion })); } catch { /* no credentials */ }
     if (!ready || !entryRef.current || readonlyRef.current || recoveryRef.current || blockedDraft.current || busyRef.current) return;
-    const p = restorePending.current ? desiredPosition.current : capturePosition();
+    const p = position();
     if (!saving.current && fingerprint(options.workspace, p) === saved.current) { clearOwn(options.workspace,p); return; }
     writeDraft(options.workspace, p);
     if (savePaused.current) return;
@@ -613,12 +622,13 @@ export function useReadingLibrary(options: Options) {
   }, [options.workspace, ready]);
   useEffect(() => {
     const handler = (event: BeforeUnloadEvent) => {
-      if (entryRef.current && !readonlyRef.current && !recoveryRef.current && !blockedDraft.current && (saving.current || fingerprint(latest.current.workspace, capturePosition()) !== saved.current)) { writeDraft(latest.current.workspace, capturePosition()); event.preventDefault(); }
+      if (entryRef.current && !readonlyRef.current && !recoveryRef.current && !blockedDraft.current && (saving.current || fingerprint(latest.current.workspace, position()) !== saved.current)) { writeDraft(latest.current.workspace, position()); event.preventDefault(); }
     };
     window.addEventListener("beforeunload", handler);
     return () => { window.removeEventListener("beforeunload", handler); if (timer.current) clearTimeout(timer.current); };
   }, []);
   function rendered() {
+    if(latest.current.readingVisible === false || document.querySelector(".app-frame.start-mode"))return;
     if (restorePending.current) { restorePosition(desiredPosition.current); restorePending.current = false; }
     const fragment = desiredFragment.current; desiredFragment.current = null;
     const doc = latest.current.workspace.document;
@@ -630,14 +640,14 @@ export function useReadingLibrary(options: Options) {
     }
   }
   function scrolled() {
-    if (restorePending.current || !ready || busyRef.current || readonlyRef.current || recoveryRef.current || blockedDraft.current || !entryRef.current) return;
+    if (latest.current.readingVisible === false || restorePending.current || !ready || busyRef.current || readonlyRef.current || recoveryRef.current || blockedDraft.current || !entryRef.current) return;
     if (!saving.current && fingerprint(latest.current.workspace,capturePosition()) === saved.current) { clearOwn(latest.current.workspace,capturePosition()); return; }
-    writeDraft(latest.current.workspace, capturePosition());
+    writeDraft(latest.current.workspace, position());
     if (savePaused.current) return;
     if (!timer.current) timer.current = setTimeout(() => { timer.current = null; void flush().catch(() => {}); }, 500);
   }
   useEffect(()=> { if (!notice) return; const id=setTimeout(()=>setNotice(""),4500); return ()=>clearTimeout(id); },[notice]);
-  return { ensureEntry, retryWebMedia, translate, stopTranslation, translationRunning, translationProgress, translationActivity, translationRepairCount, autoTranslate, setAutoTranslation, saveNow:flush, webImportOpen, webImportSuccess, webJob, webError, showWebImport, readWebUrl, readWebArticle, readXArticleFile, confirmWebImport, cancelWebImport, initialPosition: desiredPosition.current, entry, list, ready, busy:busy||preparingEntry, error, importError, clearError: () => { setError(""); setImportError(false); }, status, check, recovery, recoveries, blocked, draftWarning, notice, historyId,
+  return { returnToStart, webPrefill, ensureEntry, retryWebMedia, translate, stopTranslation, translationRunning, translationProgress, translationActivity, translationRepairCount, autoTranslate, setAutoTranslation, saveNow:flush, webImportOpen, webImportSuccess, webJob, webError, showWebImport, readWebUrl, readWebArticle, readXArticleFile, confirmWebImport, cancelWebImport, initialPosition: desiredPosition.current, entry, list, ready, busy:busy||preparingEntry, error, importError, clearError: () => { setError(""); setImportError(false); }, status, check, recovery, recoveries, blocked, draftWarning, notice, historyId,
     readOnly: !!historyId || !!recovery || blocked || busy,
     openBookmark, prepareBookmarks:preserve, open, choose, importFile, checkSource: () => transition(checkSource), acceptUpdate, viewRevision, resolveRecovery, acknowledgeRecovery, showRecovery, closeRecovery,
     retry: () => ready && !blockedDraft.current ? transition(() => flush()) : initialize(),

@@ -24,3 +24,13 @@ it.each(['switch','failure'] as const)('finishes or invalidates pending PDF prep
  if(outcome==='failure'){await act(async()=>late(false));expect(host.querySelector('.bookmarks-view')).not.toBeNull();expect(host.textContent).toContain('无法定位收藏原文');expect(host.querySelectorAll('.bookmark-card')).toHaveLength(1);}
  else {await click('.library-current');const button=[...host.querySelectorAll<HTMLButtonElement>('.library-open')].find(b=>b.textContent?.includes('Other safe.md'))!;await act(async()=>button.click());await tick();expect(host.querySelector('.bookmarks-view')).toBeNull();expect(host.querySelector('.toolbar-title')?.textContent).toContain('Other safe.md');await act(async()=>late(true));expect(host.querySelector('.bookmarks-view')).toBeNull();expect(host.querySelector('.toolbar-title')?.textContent).toContain('Other safe.md');}
 });
+
+it('keeps the saved non-first-screen position when opening all bookmarks from the start page and returning',async()=>{
+ await setup();vi.stubGlobal('matchMedia',vi.fn(()=>({matches:false,addEventListener:vi.fn(),removeEventListener:vi.fn()})));expect(host.querySelector('.app-frame')?.classList.contains('start-mode')).toBe(true);
+ await click('.bookmarks-nav');expect(host.querySelector('.bookmarks-view')).not.toBeNull();
+ await click('.bookmarks-view button[aria-label="返回阅读"]');
+ expect(host.querySelector('.bookmarks-view')).toBeNull();expect(host.querySelector<HTMLElement>('.reader-scroll')!.scrollTop).toBe(3440);
+ expect(stream).not.toHaveBeenCalled();
+});
+
+it('prioritizes a pending recovery over the start page without issuing a model request',async()=>{await setup();const normal=api.getMockImplementation()!;api.mockImplementation((path='',body)=>path==='/recoveries'?Promise.resolve([{id:'recovery',entryId:'other',state:'pending',hasDifferences:true,savedRecordUnavailable:true,filename:'recover.md'}]):normal(path,body));await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));await tick();expect(host.querySelector('.reading-start-page')).toBeNull();expect(host.textContent).toContain('之前的记录已保留');expect(stream).not.toHaveBeenCalled();});

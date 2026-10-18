@@ -3,8 +3,8 @@
   "files": [
     {
       "path": "src/App.tsx",
-      "bytes": 99980,
-      "sha256": "0e0da72f1aa8bb33aeab60366a141e9d50313271988d1eb7ba5955f6b26fb5be"
+      "bytes": 101537,
+      "sha256": "c277a5251a7274e0309e89212e51fc37f0165b7eab200d749271d0f117fd7175"
     },
     {
       "path": "src/BookmarkAction.tsx",
@@ -48,8 +48,8 @@
     },
     {
       "path": "src/HostedControls.tsx",
-      "bytes": 9777,
-      "sha256": "e8f6bd2efd4ea2a211af7be9d4375d05e72c6a5e665dfae27b9fd7692255c4cf"
+      "bytes": 10047,
+      "sha256": "fde497d20dc9b1787b173146e941014e7f62bddf51f9b46f3739e608ced66f9e"
     },
     {
       "path": "src/MarkdownWidthControls.tsx",
@@ -103,13 +103,18 @@
     },
     {
       "path": "src/ReadingLibraryView.tsx",
-      "bytes": 14403,
-      "sha256": "630fbb62c9da7f34d47cf151b4a3cb24c2368edd961e6674cf104a72be8bab59"
+      "bytes": 14473,
+      "sha256": "24df5985ad858b1f7d2b95f49c125a0350324006a23c77752d65c993d00aa870"
     },
     {
       "path": "src/ReadingRecoveryView.tsx",
       "bytes": 9459,
       "sha256": "28c8863eb02bb686317cde37dbf06bc32bf219ba9931a0afb8c445b20b619015"
+    },
+    {
+      "path": "src/ReadingStartPage.tsx",
+      "bytes": 9103,
+      "sha256": "1b4842bcd3d69c0d1af31f7fc8d3d60d394bc618d0f4d6355348a44f4671b27d"
     },
     {
       "path": "src/SelectionActions.tsx",
@@ -148,8 +153,8 @@
     },
     {
       "path": "src/WebImportDialog.tsx",
-      "bytes": 3318,
-      "sha256": "3cbc29ad007b31824d98f7466715ef8b9e46ea483f4690128a83909c6ef1e273"
+      "bytes": 3454,
+      "sha256": "e93117333b6ac79a1655b27c31bbdb863bd556caffd0bcb5236975438a7f43b0"
     },
     {
       "path": "src/WebMediaRetry.test.tsx",
@@ -188,8 +193,8 @@
     },
     {
       "path": "src/bookmark-navigation-ui.test.tsx",
-      "bytes": 8811,
-      "sha256": "c7343aab002579dcf9bb1429e5b79d8f3fb459fdc2b36ff1a9c86033820403a4"
+      "bytes": 10133,
+      "sha256": "0510ab47c6c31052936343edc448e8b58f5ea8a8ae9f8977b7b57764718b7be3"
     },
     {
       "path": "src/bookmark-selection.test.ts",
@@ -223,8 +228,8 @@
     },
     {
       "path": "src/hosted-welcome.test.tsx",
-      "bytes": 3463,
-      "sha256": "e2b85075132c5e1505bfc7702c09e220cc9b1e35e49817c35fb28a54d8ed7830"
+      "bytes": 3413,
+      "sha256": "4fbaa4ef84b4b951fbb54a5bef7ab8697fd76c45b5eb001a872c77ce4d641684"
     },
     {
       "path": "src/lib/abortable.ts",
@@ -617,6 +622,11 @@
       "sha256": "736a0e35b9713da8217226d53bbe370646af9b90c5af61d6e0887908cadbbe7e"
     },
     {
+      "path": "src/lib/reading-start-page.ts",
+      "bytes": 2593,
+      "sha256": "b0b98389f5931b2cfc3b3f23c7122a442210a66171500ed495e681c9d1f6b2b8"
+    },
+    {
       "path": "src/lib/reading-time.test.ts",
       "bytes": 1200,
       "sha256": "6e91c42b8ee6c2bfacc662b3e19fa7c474ff74f6ca7b56d9eb328e10ddd67351"
@@ -793,8 +803,8 @@
     },
     {
       "path": "src/model-tabs-ui.test.tsx",
-      "bytes": 59744,
-      "sha256": "c01d6ca1b6eabef78421d4deda59ba616cc88df3129eaf0ef1e5d42444b49422"
+      "bytes": 59960,
+      "sha256": "c11d437cddb119933eb76b2d8c1ce5dba6fe596f660b8b8fdb75c747c39f0ef3"
     },
     {
       "path": "src/multi-inquiry-ui.test.tsx",
@@ -857,14 +867,24 @@
       "sha256": "b96db93d87ebb4093239795a81ef35ee1c16a6bf60b9c0a9c74c7d7ef9a5efcf"
     },
     {
+      "path": "src/reading-start-page.css",
+      "bytes": 7036,
+      "sha256": "9ea40d2d664c398a677a9fc08f2ccdc0a621a2956fab63d25e521f4b942d4bbf"
+    },
+    {
+      "path": "src/reading-start-page.test.tsx",
+      "bytes": 13055,
+      "sha256": "8836b951db1a4d52af6e634d40f49369f040c766fd9f0ea1d070f51ef618d30a"
+    },
+    {
       "path": "src/request-status.test.tsx",
       "bytes": 1343,
       "sha256": "98ca166a5bc41345a3203dad9c6bfdf8d0eefbf7b73627e62df58f68170fb774"
     },
     {
       "path": "src/sample.ts",
-      "bytes": 3687,
-      "sha256": "f56e04dd4049c8870400f57be7f6d69b5241f57bbefc6f2c5b4a4e17409760b0"
+      "bytes": 4000,
+      "sha256": "16d19781b0facaf2c2b830f89c6bc55bce8df2a82e619320c52e604093cd326a"
     },
     {
       "path": "src/styles.css",
@@ -933,8 +953,8 @@
     },
     {
       "path": "src/useReadingLibrary.ts",
-      "bytes": 50821,
-      "sha256": "c132e53ca89d4002482fa64fb8e086a7ff8b62b10f9b2476604edd8b62623f40"
+      "bytes": 51598,
+      "sha256": "15d015641bfc0a9656af81dcaf403e6718b788d42cfb3dd8e21256d0ea8de0f4"
     },
     {
       "path": "src/useResponsiveDrawer.test.tsx",
@@ -1712,6 +1732,11 @@
       "sha256": "2d60df7e042eb416fa1726f34cf698a8340645135b3349bf9659763ed860d832"
     },
     {
+      "path": "docs/updates/2026-10-18-reading-start-page.md",
+      "bytes": 1123,
+      "sha256": "04fb2e682dc21b4f9172cdbe67831695f5eae900551039990a3b13638d15050b"
+    },
+    {
       "path": "docs/updates/2026-10-18-warm-reading-typography.md",
       "bytes": 755,
       "sha256": "c31e891da75e22e9949d7a1687ea216eff9ac72818c18ba93c0111004b9f62e3"
@@ -1778,13 +1803,13 @@
     },
     {
       "path": "docs/release-results.md",
-      "bytes": 24903,
-      "sha256": "82992642c9357eb5a330549a46620779d0696b6c48df5c04d866a5eccb1389ff"
+      "bytes": 26211,
+      "sha256": "71ad9b5920f4658d0c711baf2a5cfa94d7e378260d481abb2a6ae2af91ad7c5e"
     },
     {
       "path": "docs/ui-guidelines.md",
-      "bytes": 12840,
-      "sha256": "96e6a16eaf2dfc6ed295888c251e1b4f125b024df95b541a555d8cccf654eb25"
+      "bytes": 14229,
+      "sha256": "14a6652d8260c1fb3894e7ed1abd6ed3e9e63e1537d8375f0dc294c0a994ab3e"
     },
     {
       "path": "docs/ui/button-states.html",
@@ -1803,8 +1828,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 24233,
-      "sha256": "fb005cdda8da106cbcbfd6842c07847ad658ffec44cc1e885207eae9265ab59c"
+      "bytes": 24939,
+      "sha256": "c054f09f55e1e3b02af09a0ee3638b45e421b94e90b6426d7091eaafe14128e9"
     },
     {
       "path": "README.en.md",

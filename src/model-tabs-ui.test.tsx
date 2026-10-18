@@ -42,7 +42,8 @@ it('categories list the whole document and highlights open their own results wit
  const base=w.inquiries[0];
  w.inquiries.push({...base,id:'mini',intent:'entity',anchor:{...base.anchor,quote:'MiniMax',start:100,end:107},messages:[{id:'m',role:'assistant',content:'MiniMax介绍',createdAt:'2026'}]});
  w.inquiries.push({...base,id:'other',intent:'entity',anchor:{...base.anchor,quote:'Replika',start:200,end:207}});
- await mount();await click('#intent-tab-explain');
+ const saved=await testLibraryRequest('/entries',{workspace:w,creationKey:'explicit-reading-fixture'}) as {id:string};await testLibraryRequest(`/entries/${saved.id}/activate`,{});
+ await mount();await click('.start-resume button');await click('#intent-tab-explain');
  expect(host.querySelector('.category-items')?.textContent).toContain('MiniMax');expect(host.querySelector('.category-items')?.textContent).toContain('Replika');
  expect(host.querySelector('.answer-markdown')).toBeNull();await click('[data-inquiry-id=mini]');
  expect(host.querySelector('.answer-markdown')?.textContent).toContain('MiniMax介绍');

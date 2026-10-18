@@ -6,7 +6,6 @@ import { Copy, Check, Plus, ChevronDown } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { useReadingLibrary } from "./useReadingLibrary";
 import { ReadingRecoveryView } from "./ReadingRecoveryView";
-import { WebImportDialog } from "./WebImportDialog";
 import { searchLibraryNames } from "./lib/library-name-search";
 type Library = ReturnType<typeof useReadingLibrary>;
 export function ReadingLibraryNavigation({ library, importCopy }: { library: Library; importCopy: () => void }) {
@@ -102,11 +101,10 @@ export function ReadingLibraryNavigation({ library, importCopy }: { library: Lib
         </div> : null}
       </div>
     </div>
-    <WebImportDialog library={library} />
     {library.list.warnings.map((warning,i) => <p key={i} role="alert" className="library-warning">{warning}</p>)}
   </section>;
 }
-export function ReadingLibraryStatus({ library, onImport, hideWebSource = false }: { library: Library; onImport?: () => void; hideWebSource?: boolean }) {
+export function ReadingLibraryStatus({ library, onImport, hideWebSource = false, hideHostedControls = false, startPage = false }: { library: Library; onImport?: () => void; hideWebSource?: boolean; hideHostedControls?:boolean;startPage?:boolean }) {
   const webDoc = library.entry?.workspace?.document.kind === "web" ? library.entry.workspace.document : null;
   const sourceStatus = webDoc ? undefined : library.check?.status;
   const sourceProblem = !!sourceStatus && sourceStatus !== "available";
@@ -114,7 +112,7 @@ export function ReadingLibraryStatus({ library, onImport, hideWebSource = false 
   const saveBlocked = library.blocked || library.status === "阅读进度暂未保存";
   const duplicateImportError = library.webImportOpen && library.webError && library.error === library.webError;
   return <div className="library-state">
-    {HOSTED?<div className="hosted-library-controls"><HostedStorageControls save={()=>library.saveNow()} onRestore={()=>onImport?.()}/>{library.entry?<HostedSampleAttribution hash={library.entry.workspace.document.contentHash}/>:null}</div>:null}
+    {HOSTED&&!hideHostedControls?<div className="hosted-library-controls"><HostedStorageControls save={()=>library.saveNow()} onRestore={()=>onImport?.()}/>{library.entry?<HostedSampleAttribution hash={library.entry.workspace.document.contentHash}/>:null}</div>:null}
     {((library.error && !duplicateImportError) || saveBlocked) && !library.recovery ? <div role="alert" className="library-warning"><span>{library.error}{saveBlocked ? <small>当前内容仍保留，保存成功后才能离开。</small> : null}</span>
       {saveBlocked || !library.ready ? <button type="button" disabled={library.busy} onClick={() => void library.retry()}>{saveBlocked ? "重试保存" : "重新连接"}</button> : library.importError && onImport ? <button type="button" disabled={library.busy} onClick={onImport}>重新选择文件</button> : <button type="button" disabled={library.busy} onClick={library.clearError}>关闭提示</button>}
     </div> : null}
@@ -122,13 +120,13 @@ export function ReadingLibraryStatus({ library, onImport, hideWebSource = false 
     {library.notice ? <p role="status" className="library-recovered">{library.notice}</p> : null}
     {library.recoveries.filter(r=>r.state === 'pending' && r.savedRecordUnavailable).map(r=><div key={r.id} className="library-warning" role="alert"><span>{r.filename}：当前保存记录无法读取，之前的记录已保留。</span><button type="button" disabled={library.busy} onClick={()=>void library.showRecovery(r.id)}>找回阅读记录</button></div>)}
     <ReadingRecoveryView library={library} />
-    {webDoc && !hideWebSource ? <details key={webDoc.id} className="web-source-state"><summary>来源详情</summary><div className="web-source-details"><span>导入于 {new Date(webDoc.importedAt).toLocaleString()}</span><span>{webDoc.web.retrieval?.provider === "fxtwitter" ? X_PUBLIC_SCOPE : webDoc.web.extractorVersion === X_CAPTURE_EXTRACTOR ? X_CAPTURE_SCOPE : "正在阅读本机保存副本"}</span>{webDoc.web.retrieval?.provider === "fxtwitter" ? <a href={webDoc.web.retrieval.url} target="_blank" rel="noopener noreferrer">查看获取接口</a> : null}{webDoc.web.coverage === "public-excerpt" ? <span>仅保存公开部分，付费内容未导入</span> : null}<a href={webDoc.web.originalUrl} target="_blank" rel="noopener noreferrer">打开原网页</a></div></details> : null}
-    {library.entry && (sourceProblem || library.entry.history.length > 0) ? <div className="library-source-state">
+    {webDoc && !hideWebSource && !startPage ? <details key={webDoc.id} className="web-source-state"><summary>来源详情</summary><div className="web-source-details"><span>导入于 {new Date(webDoc.importedAt).toLocaleString()}</span><span>{webDoc.web.retrieval?.provider === "fxtwitter" ? X_PUBLIC_SCOPE : webDoc.web.extractorVersion === X_CAPTURE_EXTRACTOR ? X_CAPTURE_SCOPE : "正在阅读本机保存副本"}</span>{webDoc.web.retrieval?.provider === "fxtwitter" ? <a href={webDoc.web.retrieval.url} target="_blank" rel="noopener noreferrer">查看获取接口</a> : null}{webDoc.web.coverage === "public-excerpt" ? <span>仅保存公开部分，付费内容未导入</span> : null}<a href={webDoc.web.originalUrl} target="_blank" rel="noopener noreferrer">打开原网页</a></div></details> : null}
+    {library.entry && (startPage?cannotRead:(sourceProblem || library.entry.history.length > 0)) ? <div className="library-source-state">
       {sourceProblem ? <span title={library.check?.message}>{sourceStatus === "unlinked" ? "阅读副本 · 未关联原文件" : library.check?.message}</span> : null}
       {cannotRead ? <button type="button" disabled={library.busy || library.readOnly} onClick={() => void library.checkSource()}>重试读取</button> : null}
       {(cannotRead || sourceStatus === "unlinked") && library.list.nativePicker ? <button type="button" disabled={library.busy || library.readOnly} onClick={() => void library.choose(true)}>{library.entry.source ? "重新定位" : "关联原文件"}</button> : null}
       {library.check?.status === "changed" ? <><span>可继续阅读保存版本，或</span><button type="button" disabled={library.busy || library.readOnly} onClick={() => void library.acceptUpdate()}>使用更新后的原文</button></> : null}
-      {library.entry.history.length ? <label>阅读版本 <select aria-label="阅读版本" value={library.historyId} disabled={library.busy || !!library.recovery} onChange={event => void library.viewRevision(event.target.value)}><option value="">当前版本</option>{library.entry.history.map((r,i) => <option value={r.id} key={r.id}>之前的阅读版本 {i+1} · {new Date(r.savedAt).toLocaleString()}</option>)}</select></label> : null}
+      {!startPage&&library.entry.history.length ? <label>阅读版本 <select aria-label="阅读版本" value={library.historyId} disabled={library.busy || !!library.recovery} onChange={event => void library.viewRevision(event.target.value)}><option value="">当前版本</option>{library.entry.history.map((r,i) => <option value={r.id} key={r.id}>之前的阅读版本 {i+1} · {new Date(r.savedAt).toLocaleString()}</option>)}</select></label> : null}
       {library.historyId ? <strong>旧版本只读，可查看原文和知识贴。</strong> : null}
     </div> : null}
   </div>;

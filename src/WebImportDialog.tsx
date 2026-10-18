@@ -9,6 +9,7 @@ export function WebImportDialog({ library }: { library: Library }) {
   const backdropDown = useRef(false);
   const [url, setUrl] = useState("");
   useEffect(() => { setUrl(""); }, [library.webImportSuccess]);
+  useEffect(()=>{if(library.webImportOpen&&library.webPrefill)setUrl(library.webPrefill);},[library.webImportOpen,library.webPrefill]);
   const job = library.webJob;
   const reading = job?.status === "reading";
   const pending = reading || library.busy;

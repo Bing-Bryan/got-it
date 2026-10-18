@@ -92,3 +92,8 @@ export function createInitialWorkspace(): Workspace {
     hasUnexportedChanges: false,
   };
 }
+
+/** Internal empty workspace: never rendered or added to the library. */
+export function createPlaceholderWorkspace(): Workspace {
+  return {...createInitialWorkspace(), document:{id:"start-placeholder",filename:"",markdown:"",contentHash:"start-placeholder",importedAt:new Date().toISOString(),isDemo:true}};
+}
