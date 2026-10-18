@@ -17,7 +17,7 @@ it('limits widths and restores a valid preference',async()=>{
 it('supports keyboard boundaries and restoring the default',async()=>{
  await mount();await press('End');expect(localStorage.getItem(key)).toBe('720');
  await press('Home');expect(localStorage.getItem(key)).toBe('220');
- await press('Enter');expect(localStorage.getItem(key)).toBe('404');
+ await press('Enter');expect(localStorage.getItem(key)).toBe('360');
 });
 it('ignores corrupt storage and remains usable if persistence fails',async()=>{
  localStorage.setItem(key,'broken');await mount();vi.spyOn(Storage.prototype,'setItem').mockImplementation(()=>{throw new Error('blocked');});
@@ -36,10 +36,12 @@ it('requires extra travel and release to collapse, restoring the pre-drag prefer
  await mount();await pointer('pointerdown',1000);await pointer('pointermove',1200);
  expect(collapse).not.toHaveBeenCalled();expect(host.querySelector('aside')?.dataset.collapsePending).toBe('false');
  await pointer('pointermove',1240);expect(collapse).not.toHaveBeenCalled();
- await pointer('pointerup',1240);expect(collapse).toHaveBeenCalledOnce();expect(localStorage.getItem(key)).toBe('404');
+ await pointer('pointerup',1240);expect(collapse).toHaveBeenCalledOnce();expect(localStorage.getItem(key)).toBe('360');
 });
 it('Escape and pointer cancellation restore width without collapsing',async()=>{
  await mount();await pointer('pointerdown',1000);await pointer('pointermove',1240);await press('Escape');await pointer('pointerup',1240);
- expect(collapse).not.toHaveBeenCalled();expect((host.querySelector('.app-frame') as HTMLElement).style.getPropertyValue('--preferred-right-width')).toBe('404px');
+ expect(collapse).not.toHaveBeenCalled();expect((host.querySelector('.app-frame') as HTMLElement).style.getPropertyValue('--preferred-right-width')).toBe('360px');
  await pointer('pointerdown',1000);await pointer('pointermove',1240);await pointer('pointercancel',1240);expect(collapse).not.toHaveBeenCalled();
 });
+
+it('keeps an explicitly stored old default of 404px',async()=>{localStorage.setItem(key,'404');await mount();expect((host.querySelector('.app-frame') as HTMLElement).style.getPropertyValue('--preferred-right-width')).toBe('404px');});

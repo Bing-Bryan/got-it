@@ -1101,7 +1101,7 @@ function App() {
         <div ref={setPdfToolbarHost} className="reader-status-host" />
         {workspace.document.kind !== "pdf" && workspace.document.kind !== "web" ? <div className="markdown-toolbar"><div className="markdown-toolbar-row"><div className="library-save-status" role="status">{saveStatus}{library.busy ? " · 正在处理…" : ""}</div></div></div> : null}
         <div ref={setAdjustmentHost} className="reader-adjustment-layer">
-          {workspace.document.kind !== "pdf" ? <div key={workspace.document.id+":"+documentLoadId} className="reading-adjustment-dock"><MarkdownWidthControls width={markdownWidth.width} onChange={markdownWidth.change}/></div> : null}
+          {workspace.document.kind !== "pdf" ? <div key={workspace.document.id+":"+documentLoadId} className="reading-adjustment-dock"><MarkdownWidthControls width={markdownWidth.width} measuredPercent={markdownWidth.measuredPercent} error={markdownWidth.error} onChange={markdownWidth.change}/></div> : null}
         </div>
         </div>
         <div className="reader-viewport" ref={readerViewportRef}>
@@ -1119,7 +1119,8 @@ function App() {
             data-reading-side={workspace.readingSide ?? "original"}
             data-translation-id={workspace.webTranslation?.id}
             data-translation-version={workspace.webTranslation?.version}
-            style={{ width: `min(100%, max(360px, ${markdownWidth.width}%))` }}
+            data-width-mode={markdownWidth.width === null ? "recommended" : "custom"}
+            style={markdownWidth.width === null ? undefined : { width: `min(100%, max(360px, ${markdownWidth.width}%))` }}
             onMouseUp={handleArticleMouseUp}
             onClick={handleArticleClick}
             dangerouslySetInnerHTML={{ __html: rendered.html }}

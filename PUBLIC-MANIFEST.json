@@ -3,8 +3,8 @@
   "files": [
     {
       "path": "src/App.tsx",
-      "bytes": 99775,
-      "sha256": "675abb8ad56cf417bd61ff541081d229d96136e83b436d905675b5c23711829f"
+      "bytes": 99980,
+      "sha256": "0e0da72f1aa8bb33aeab60366a141e9d50313271988d1eb7ba5955f6b26fb5be"
     },
     {
       "path": "src/BookmarkAction.tsx",
@@ -53,18 +53,18 @@
     },
     {
       "path": "src/MarkdownWidthControls.tsx",
-      "bytes": 2724,
-      "sha256": "e418ac6416dcc9e312aaa29d09a21eaaf2b615b0a68b0a7f866de331995e1a8e"
+      "bytes": 3151,
+      "sha256": "6cea74035d70a53ae26799d4740d880d9d88e0730531a15eb7faa743816e2bcd"
     },
     {
       "path": "src/PanelResizeHandle.test.tsx",
-      "bytes": 4017,
-      "sha256": "ec1d3b8465e75d66a42776b13a37e35bc57a6f7106dacf455e0ebfb07e49bdea"
+      "bytes": 4253,
+      "sha256": "79fedb65cb541c88c0e7e0c0945be93be14f7d5de2723bd2d01c95cb586e4a70"
     },
     {
       "path": "src/PanelResizeHandle.tsx",
       "bytes": 4783,
-      "sha256": "08eb8e2ef6523c47b26bd5fbecddbb0921319b7e93812d4b5c623c87bec20147"
+      "sha256": "63bfb7fd4f9a79749a457444675fc5c3be75471d31aca12e0533ae030505a0c9"
     },
     {
       "path": "src/PdfOutline.tsx",
@@ -833,8 +833,8 @@
     },
     {
       "path": "src/reading-adjustment.test.tsx",
-      "bytes": 5611,
-      "sha256": "8138782398779388422ca6df74a8a00f9e50bb57f271bb8afe6963e59d15e546"
+      "bytes": 6509,
+      "sha256": "fc6970c1aca39f066cd9db6b3beedaaba875cbed28a0119696d6d1be6e4aa4d0"
     },
     {
       "path": "src/reading-document-ui.test.tsx",
@@ -868,8 +868,8 @@
     },
     {
       "path": "src/styles.css",
-      "bytes": 112160,
-      "sha256": "b2254acadd612554c40974d908b64508f50b328295495dff95836f0675a9dea3"
+      "bytes": 112932,
+      "sha256": "950a3b0847784c8fda0f50db1cf9d29ca351e003e1438ff9282988d68a3e73d9"
     },
     {
       "path": "src/test-support/library.ts",
@@ -903,13 +903,13 @@
     },
     {
       "path": "src/useMarkdownWidth.test.tsx",
-      "bytes": 2058,
-      "sha256": "0b89d788089b26c6d992a7ded871c9ee082b181554c8444b2ef5c95673e873d2"
+      "bytes": 3312,
+      "sha256": "52138999e0bcc9079da7f2322a849b0feb85aad6782dcbd099fa0a2b805dd258"
     },
     {
       "path": "src/useMarkdownWidth.ts",
-      "bytes": 2346,
-      "sha256": "a3eae26273dcf50c2944282c30f23fd8894cae9de47949f120342235d79090e5"
+      "bytes": 3438,
+      "sha256": "ab7b36058c97f08770b25391c7e0d62df0e6d6a2ef3bf2b49a6537dd9fc6777a"
     },
     {
       "path": "src/usePdfTranslationSource.ts",
@@ -1553,8 +1553,8 @@
     },
     {
       "path": "scripts/generate-button-showcase.mjs",
-      "bytes": 24173,
-      "sha256": "013027aeb3448bdb245d89bd856c2f2516eedd90400cb25f571e8acdc57fe9e4"
+      "bytes": 24179,
+      "sha256": "5cbf1eb0560170ca48868f4d7267396486fd9989a84fc85573eabd44aa5ae935"
     },
     {
       "path": "scripts/licenses/tessdata-LICENSE",
@@ -1712,6 +1712,11 @@
       "sha256": "2d60df7e042eb416fa1726f34cf698a8340645135b3349bf9659763ed860d832"
     },
     {
+      "path": "docs/updates/2026-10-18-warm-reading-typography.md",
+      "bytes": 755,
+      "sha256": "c31e891da75e22e9949d7a1687ea216eff9ac72818c18ba93c0111004b9f62e3"
+    },
+    {
       "path": "docs/images/reading.png",
       "bytes": 649297,
       "sha256": "6052a6e2dedbf821ccf9477f8dfba51314b4ec8beb834a2d2ff02bc8bd010771"
@@ -1773,18 +1778,18 @@
     },
     {
       "path": "docs/release-results.md",
-      "bytes": 23309,
-      "sha256": "1646d378bcf91b73311811378e51d6e707f650bffe062970613c76240806baea"
+      "bytes": 24903,
+      "sha256": "82992642c9357eb5a330549a46620779d0696b6c48df5c04d866a5eccb1389ff"
     },
     {
       "path": "docs/ui-guidelines.md",
-      "bytes": 11903,
-      "sha256": "bcb3039097f51c0eaec4564813d2cdeb95e577caf5421eb49c70f531b11c224b"
+      "bytes": 12840,
+      "sha256": "96e6a16eaf2dfc6ed295888c251e1b4f125b024df95b541a555d8cccf654eb25"
     },
     {
       "path": "docs/ui/button-states.html",
-      "bytes": 220119,
-      "sha256": "3eecad5522205691fa970a89e80697471b4c480a9c72395c445de8a2deb345eb"
+      "bytes": 220903,
+      "sha256": "1e56f47eb65565be53f4693ae44f4769cf8e21febfe06075127fbc86910ae362"
     },
     {
       "path": "SECURITY.md",

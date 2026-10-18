@@ -10,7 +10,7 @@ const KEY = 'got-it.result-panel-width.v1';
 export const clampPanelWidth = (value: number, maximum = 720) => Math.max(220, Math.min(maximum, Math.round(value)));
 export function PanelResizeHandle({ panel, onStart, onCollapse }: { panel: RefObject<HTMLElement | null>; onStart: () => void; onCollapse?: () => void }) {
   const [preferred, setPreferred] = useState(() => {
-    try { const value = Number(localStorage.getItem(KEY)); return Number.isFinite(value) && value >= 220 && value <= 720 ? value : 404; } catch { return 404; }
+    try { const value = Number(localStorage.getItem(KEY)); return Number.isFinite(value) && value >= 220 && value <= 720 ? value : 360; } catch { return 360; }
   });
   const [bounds, setBounds] = useState({ current: preferred, max: 720 });
   const drag = useRef<{ x: number; width: number; preferred: number; collapse: boolean } | null>(null);
@@ -59,7 +59,7 @@ export function PanelResizeHandle({ panel, onStart, onCollapse }: { panel: RefOb
     onPointerUp={() => finish()} onPointerCancel={() => finish(true)} onLostPointerCapture={() => finish()}
     onKeyDown={event => {
       if (event.key === 'Escape' && drag.current) { event.preventDefault(); event.stopPropagation(); finish(true); return; }
-      const value = event.key === 'ArrowLeft' ? bounds.current + 16 : event.key === 'ArrowRight' ? bounds.current - 16 : event.key === 'Home' ? 220 : event.key === 'End' ? bounds.max : event.key === 'Enter' ? 404 : null;
+      const value = event.key === 'ArrowLeft' ? bounds.current + 16 : event.key === 'ArrowRight' ? bounds.current - 16 : event.key === 'Home' ? 220 : event.key === 'End' ? bounds.max : event.key === 'Enter' ? 360 : null;
       if (value === null) return;
       event.preventDefault(); event.stopPropagation(); onStart();
       const next = clampPanelWidth(value, bounds.max); setPreferred(next); persist(next);

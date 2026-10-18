@@ -47,3 +47,8 @@ it.each(['markdown','pdf'])('%s supports touch toggle, mouse click after hover, 
  await act(async()=>{trigger.blur();pointer(wrapper,'pointerout');});await tick();expect(fields.hidden).toBe(true);
  await act(async()=>{pointer(trigger,'pointerover');pointer(wrapper,'pointerout');root.render(null);});await tick();expect(host.children).toHaveLength(0);
 });
+
+it('shows recommendation honestly and allows explicitly entering the old 80 percent',async()=>{
+ const change=vi.fn();await act(async()=>root.render(<MarkdownWidthControls width={null} measuredPercent={85} onChange={change}/>));const input=host.querySelector<HTMLInputElement>('input[inputmode]')!;expect(input.value).toBe('');expect(input.placeholder).toBe('推荐');expect(host.querySelector('input[type=range]')?.getAttribute('aria-valuetext')).toContain('85%');expect(host.querySelector<HTMLButtonElement>('.markdown-width-reset')!.disabled).toBe(true);
+ await act(async()=>{host.querySelector<HTMLButtonElement>('button')!.click();input.focus();const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')!.set!;setter.call(input,'80');input.dispatchEvent(new Event('input',{bubbles:true}));});await act(async()=>input.blur());expect(change).toHaveBeenCalledWith(80);
+});

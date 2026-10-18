@@ -13,7 +13,7 @@ for(const side of ['导航','知识贴']) for(const selected of [false,true])add
 add(nav,'Codex 模型入口',b(`${icon(Terminal)}<span>Codex</span><span class="connection-dot connected"></span>${icon(ChevronDown,14)}`,'provider-trigger','aria-expanded="false"'));
 add(nav,'Codex 入口 · 已展开',b(`${icon(Terminal)}<span>Codex</span>${icon(ChevronDown,14)}`,'provider-trigger','aria-expanded="true"'),'菜单展开状态');
 for(const [name,I,cls] of [['正文宽度',MoveHorizontal,'markdown-width-trigger'],['PDF 缩放',MoveDiagonal,'pdf-zoom-trigger']])add(nav,name,wrap('reading-adjustment',b(icon(I,18),`reading-adjustment-trigger ${cls}`)));
-for(const [name,cls] of [['恢复正文宽度','markdown-width-reset'],['恢复自动适配','pdf-zoom-reset']])add(nav,name,b(icon(RotateCcw,14),cls,`aria-label="${name}"`));
+for(const [name,cls] of [['恢复推荐正文宽度','markdown-width-reset'],['恢复自动适配','pdf-zoom-reset']])add(nav,name,b(icon(RotateCcw,14),cls,`aria-label="${name}"`));
 for(const label of ['保存与隐私','来源与许可','公开样例','存储详情']) add(lib,label,`<details class="hosted-disclosure"><summary class="disclosure-summary"><span>${label}</span>${icon(ChevronDown,13,{className:"disclosure-chevron"})}</summary><p>说明内容按需展开；真实阅读器中以浮层呈现。</p></details>`,'复用原生详情入口与共享焦点；无禁用业务状态');
 add(lib,'添加阅读材料',b(icon(Plus,18,{strokeWidth:2}),'library-add','aria-label="添加阅读材料" aria-expanded="false"'));
 for(const [label,range] of [['本地文件','MD / PDF'],['网页链接','静态文章 / X']])add(lib,label,wrap('library-add-options',b('<span>'+label+'</span><small>'+range+'</small>','','role="menuitem"')));
