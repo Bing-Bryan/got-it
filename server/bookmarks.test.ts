@@ -60,7 +60,9 @@ async function prepareNativePdf(){
  try{const library=new ReadingLibrary(join(dir,'data')),candidate=await library.uploadPdf('safe.pdf',pdfFixture()),entry=await library.add(candidate.workspace!,randomUUID(),candidate.selectionId);return{dir,library,entry,store:new Bookmarks(library)};}
  catch(error){await rm(dir,{recursive:true,force:true});throw error;}
 }
-beforeAll(async()=>{nativePdf=await prepareNativePdf();});
+// Windows CI cold-started this real PDF fixture in 13.3s; only setup gets 30s.
+// Bookmark assertions retain the normal test timeout and all resource checks.
+beforeAll(async()=>{nativePdf=await prepareNativePdf();},30_000);
 afterAll(async()=>{if(nativePdf)await rm(nativePdf.dir,{recursive:true,force:true});});
 it('validates PDF native resource/page/text and refuses region/forged text without OCR',async()=>{
  const s=nativePdf,entry=s.entry,quote='SYNTHETIC CHART 1';
