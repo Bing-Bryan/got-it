@@ -19,3 +19,16 @@
 @media(max-width:900px){.start-header{padding:12px 20px}.start-header strong{font-size:16px}}
 
 .start-mode>.bookmarks-view{inset:0}.start-mode.bookmarks-mode>.reading-start-page{visibility:hidden;pointer-events:none}.reading-start-page:focus{outline:none}
+
+/* Product identity persists on return; saved notes belong to the resume row. */
+.start-product-intro{display:grid;gap:28px}.start-product-intro--returning{gap:12px}
+.start-sheet--returning{min-height:0;align-content:start}.start-sheet--compact{grid-template-columns:minmax(0,1fr)}
+.start-product-hero{grid-column:1;grid-row:1;padding:40px clamp(24px,5vw,72px) 0}
+.start-sheet--returning>.start-paper{grid-column:1;grid-row:2;padding-top:28px;padding-bottom:0}
+.start-resume-section .start-col{gap:14px}.start-resume-heading{margin:0;font-size:17px;line-height:1.4;font-weight:600}
+.start-resume-section .start-document-title{margin:0;font-size:24px;line-height:1.4;font-weight:600;overflow-wrap:anywhere}
+.start-resume-section .start-excerpt{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;overflow:hidden;max-height:7em}
+.start-resume-notes{grid-column:2;grid-row:2/4;padding-top:28px}
+.start-followup{grid-column:1;grid-row:3;padding:28px clamp(24px,5vw,72px) 56px}
+.start-empty-notes{display:grid;gap:8px}
+@media(max-width:900px){.start-product-intro{gap:24px}.start-product-intro--returning{gap:12px}.start-product-hero{padding:24px 20px 0}.start-sheet--returning>.start-paper{padding:20px 20px 0}.start-resume-section .start-col{gap:12px}.start-resume-section .start-document-title{font-size:20px}.start-resume-section .start-excerpt{-webkit-line-clamp:3;max-height:5.25em}.start-resume-notes{grid-column:1;grid-row:3;padding-top:24px;margin-top:24px}.start-followup{grid-column:1;grid-row:4;padding:24px 20px 32px}.start-sheet--compact>.start-followup{grid-row:3}}

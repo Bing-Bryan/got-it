@@ -113,8 +113,8 @@
     },
     {
       "path": "src/ReadingStartPage.tsx",
-      "bytes": 9103,
-      "sha256": "1b4842bcd3d69c0d1af31f7fc8d3d60d394bc618d0f4d6355348a44f4671b27d"
+      "bytes": 10315,
+      "sha256": "61bfff5e2bba61688d935aca2d375f3c64d6b73be02a021e5ef0c1b0ce80ea05"
     },
     {
       "path": "src/SelectionActions.tsx",
@@ -868,13 +868,13 @@
     },
     {
       "path": "src/reading-start-page.css",
-      "bytes": 7036,
-      "sha256": "9ea40d2d664c398a677a9fc08f2ccdc0a621a2956fab63d25e521f4b942d4bbf"
+      "bytes": 8630,
+      "sha256": "edb3446603e2ab737bc2cbc46de2d633447119cd4bbdea2b4ba342f1cdcea560"
     },
     {
       "path": "src/reading-start-page.test.tsx",
-      "bytes": 13055,
-      "sha256": "8836b951db1a4d52af6e634d40f49369f040c766fd9f0ea1d070f51ef618d30a"
+      "bytes": 14323,
+      "sha256": "5a0168595a5cebd4be948c3064fd5b387057ae47d1e7f62834d0223e01a859b9"
     },
     {
       "path": "src/request-status.test.tsx",
@@ -1733,8 +1733,8 @@
     },
     {
       "path": "docs/updates/2026-10-18-reading-start-page.md",
-      "bytes": 1123,
-      "sha256": "04fb2e682dc21b4f9172cdbe67831695f5eae900551039990a3b13638d15050b"
+      "bytes": 1431,
+      "sha256": "33b3a5f13ed338d2ddadb9178982a2f23ee25ea2b98fe017aa0e487e87ebf639"
     },
     {
       "path": "docs/updates/2026-10-18-warm-reading-typography.md",
@@ -1808,8 +1808,8 @@
     },
     {
       "path": "docs/ui-guidelines.md",
-      "bytes": 14229,
-      "sha256": "14a6652d8260c1fb3894e7ed1abd6ed3e9e63e1537d8375f0dc294c0a994ab3e"
+      "bytes": 14502,
+      "sha256": "70791421c0ae4a046a5a641f60cce4d206a54d5d0143294e215256a02de4204d"
     },
     {
       "path": "docs/ui/button-states.html",
