@@ -156,3 +156,11 @@ PDF 译中改为与网页、Markdown 使用同一个翻译图标整篇切换：�
 体验版已于 2026-10-17 只更新前端 `452e6b6`，服务端 `4fe7c18` 未重启；公网免费检查通过，线上未打开 PDF 译中、未提问，本轮不新增模型或搜索调用。内部归档提交 `7bab7de`，不进入公开历史。
 
 独立公开快照（368 文件）在 macOS / Node 24.14.1 / npm 11.12.1 下完成：干净 `npm ci`（锁文件不变）、147 文件 1051 项测试、`npm run build`、`npm run test:release`、`npm run release:prepare` 全部通过；`npm audit --audit-level=high` 为 0 漏洞；快照再生成的 manifest 与提交内容一致。仅保留既有大构建块提示。公开提交 `6ce6869` 的[三平台 CI](https://github.com/Bing-Bryan/got-it/actions/runs/39050069750)（macOS / Ubuntu / Windows）全部通过。未覆盖：真实翻译运行态、Safari / Firefox、生产站点的 PDF 译中或问答实页。
+
+## 2026-10-18：网页图片暗幕全屏预览
+
+已保存网页图片直接浮在暗色全屏遮罩，初始完整等比适配；移除白色外层、工具栏、可见按钮和说明，保留滚轮/触控板事件缩放、放大拖动、空白/Escape关闭及关闭重开fit。详见[更新说明](updates/2026-10-18-image-viewer.md)。
+
+本轮macOS Chromium真实App桌面/窄屏验证全屏暗幕、长图fit、滚轮放大、图片单击/拖动释放不误关闭、空白/Escape退出和重开fit；相关8项回归、build→test:release、build:hosted与独立复核通过，无模型或搜索调用。真人触控板与Safari实机未覆盖。公开同步只带白名单代码与说明，不带内部历史、OpenSpec、验收记录或阅读库；公开快照检查、远端CI及静态前端部署结果完成后追加。
+
+独立白名单快照369文件在macOS / Node24.14.1上完成干净npm ci（锁文件不变）、147文件1056项全量测试、build、test:release、npm audit（0漏洞）及release:prepare再生成。32项发布/CI边界fixture通过，全清单字节与SHA-256核对通过；仅既有构建提示。公开提交与三平台CI结果以后续运行事实为准，CI不替代其他平台原生界面验收。

@@ -133,13 +133,13 @@
     },
     {
       "path": "src/WebImageViewer.test.tsx",
-      "bytes": 2142,
-      "sha256": "a54e35f40fc95e66c09505932e8df6fa70aa5aadd067859e7c708ba40de5975e"
+      "bytes": 5597,
+      "sha256": "7517ad9dccf347b082aa770322462e44f388706023ee1c4dda242346018b7c48"
     },
     {
       "path": "src/WebImageViewer.tsx",
-      "bytes": 2246,
-      "sha256": "2ed54727db10892eb879d056b75d24f0284a0c030673285cc230735a29b48d2a"
+      "bytes": 8259,
+      "sha256": "44cde858c97c14de38041e70a28de2c893a118efd00330d9ef3873bf7ff228fa"
     },
     {
       "path": "src/WebImportDialog.test.tsx",
@@ -868,8 +868,8 @@
     },
     {
       "path": "src/styles.css",
-      "bytes": 112070,
-      "sha256": "7dac965562e206745baca228b3d3fef6d23396a3c5be37e41f71651b39d0ec68"
+      "bytes": 112160,
+      "sha256": "b2254acadd612554c40974d908b64508f50b328295495dff95836f0675a9dea3"
     },
     {
       "path": "src/test-support/library.ts",
@@ -1553,8 +1553,8 @@
     },
     {
       "path": "scripts/generate-button-showcase.mjs",
-      "bytes": 24166,
-      "sha256": "ebbf36c1e591325ec593a9a369881ae3373c32b13d60587dd316a51a72c479bd"
+      "bytes": 24173,
+      "sha256": "013027aeb3448bdb245d89bd856c2f2516eedd90400cb25f571e8acdc57fe9e4"
     },
     {
       "path": "scripts/licenses/tessdata-LICENSE",
@@ -1702,6 +1702,11 @@
       "sha256": "5141bbcec489bcb506bf0f19596e9d03a885f2c3de2d3990c23ba78f5b3b374e"
     },
     {
+      "path": "docs/updates/2026-10-18-image-viewer.md",
+      "bytes": 630,
+      "sha256": "fbe75ac804a785dcc0e1857a4496c977b484e19bf446e3b6ebe74b1a7138fdbe"
+    },
+    {
       "path": "docs/updates/2026-10-18-pdf-in-place-translation.md",
       "bytes": 4472,
       "sha256": "2d60df7e042eb416fa1726f34cf698a8340645135b3349bf9659763ed860d832"
@@ -1768,18 +1773,18 @@
     },
     {
       "path": "docs/release-results.md",
-      "bytes": 22068,
-      "sha256": "f3d7d56904dc38c7891c390ebcf27ad6e239eb6595b2a107e29eada91c4b5c78"
+      "bytes": 23309,
+      "sha256": "1646d378bcf91b73311811378e51d6e707f650bffe062970613c76240806baea"
     },
     {
       "path": "docs/ui-guidelines.md",
-      "bytes": 11435,
-      "sha256": "b735e98a2cb1b4053258ce7d87a8112cb1c6e8053fa72261fbb2a503bbcd442c"
+      "bytes": 11903,
+      "sha256": "bcb3039097f51c0eaec4564813d2cdeb95e577caf5421eb49c70f531b11c224b"
     },
     {
       "path": "docs/ui/button-states.html",
-      "bytes": 217949,
-      "sha256": "93ab733916c4283e0d0872b24f867c77b1a8760a7404dbb05db934fd2353ff92"
+      "bytes": 220119,
+      "sha256": "3eecad5522205691fa970a89e80697471b4c480a9c72395c445de8a2deb345eb"
     },
     {
       "path": "SECURITY.md",
