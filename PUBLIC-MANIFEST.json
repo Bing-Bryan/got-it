@@ -1758,8 +1758,8 @@
     },
     {
       "path": "docs/images/reading.png",
-      "bytes": 649297,
-      "sha256": "6052a6e2dedbf821ccf9477f8dfba51314b4ec8beb834a2d2ff02bc8bd010771"
+      "bytes": 179514,
+      "sha256": "2d501336d24d04b125fa6867fddb15808ffc143a5e6f96145ee4d8fffc76a9f9"
     },
     {
       "path": "docs/images/explain.png",
@@ -1788,8 +1788,8 @@
     },
     {
       "path": "docs/images/library.png",
-      "bytes": 673101,
-      "sha256": "afe81d30058c200a52be3eab62e1aa279d94d61cce78c3947e5f5afee9b4e56f"
+      "bytes": 222301,
+      "sha256": "3edc646c1d517c5110fb163976ba3faed79cd85880281870475a179f5ad55992"
     },
     {
       "path": "docs/images/web-reading.png",
@@ -1843,13 +1843,13 @@
     },
     {
       "path": "README.md",
-      "bytes": 25015,
-      "sha256": "cfa4c0b3cc671b27ad0950c6a89000cd2af2d6bc558e3496afce1c57f66b76af"
+      "bytes": 24650,
+      "sha256": "66a513df856a9652e315dc84ab01b36268875d34049b463103542284474617f1"
     },
     {
       "path": "README.en.md",
-      "bytes": 21924,
-      "sha256": "cc44e36bdddf4d54740843c9af0171ab1846ffffa867214db5173b7781645701"
+      "bytes": 23210,
+      "sha256": "59e476b315a001af15e3cae582665d6a4d5a94d2a1965e5724969e60a5094f35"
     },
     {
       "path": "package.json",
