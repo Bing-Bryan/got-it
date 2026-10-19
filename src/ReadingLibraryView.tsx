@@ -110,7 +110,7 @@ export function ReadingLibraryStatus({ library, onImport, hideWebSource = false,
   const sourceProblem = !!sourceStatus && sourceStatus !== "available";
   const cannotRead = sourceStatus === "missing" || sourceStatus === "permission" || sourceStatus === "unreadable" || sourceStatus === "reselect";
   const saveBlocked = library.blocked || library.status === "阅读进度暂未保存";
-  const duplicateImportError = library.webImportOpen && library.webError && library.error === library.webError;
+  const duplicateImportError = (library.webImportOpen || library.webImportInline) && library.webError && library.error === library.webError;
   return <div className="library-state">
     {HOSTED&&!hideHostedControls?<div className="hosted-library-controls"><HostedStorageControls save={()=>library.saveNow()} onRestore={()=>onImport?.()}/>{library.entry?<HostedSampleAttribution hash={library.entry.workspace.document.contentHash}/>:null}</div>:null}
     {((library.error && !duplicateImportError) || saveBlocked) && !library.recovery ? <div role="alert" className="library-warning"><span>{library.error}{saveBlocked ? <small>当前内容仍保留，保存成功后才能离开。</small> : null}</span>

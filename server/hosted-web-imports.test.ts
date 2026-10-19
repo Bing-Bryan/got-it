@@ -54,3 +54,21 @@ describe('hosted ephemeral import and signed resource boundary',()=>{
   const result=await jobs.retry('owner','ip',token,{operationId:'retry',ticket},new AbortController().signal);expect(result.documentId).toBe(doc.id);expect(result.media.resourceId).toBe(media.resourceId);expect(Buffer.from(result.resource.base64,'base64').equals(image.bytes)).toBe(true);expect(fetched).toBe(1);expect(jobs.memoryBytes).toBe(0);
  });
 });
+
+it.each([undefined,false,true])('uses the same server-owned proxy policy for article/media extraction and signed retry (opt-in %s)',async allowLocalWebProxy=>{
+ const {tickets}=state(),fixture=await webFixture(),doc=fixture.workspace.document;if(doc.kind!=='web')throw Error();const media=doc.web.media[0],image=fixture.resources.get(media.resourceId!)!;
+ const requests:Array<{url:string;options:Parameters<NonNullable<import('./hosted-web-imports').HostedWebOptions['fetcher']>>[1]}>=[];
+ const {WEB_HTML}=await import('./test-support/web-fixture');
+ const jobs=new HostedWebImports(tickets,{allowLocalWebProxy,fetcher:async(url,options)=>{requests.push({url,options});return url.endsWith('image.png')?{url,type:image.mime,bytes:image.bytes}:{url,type:'text/html',bytes:Buffer.from(WEB_HTML)};}});
+ await jobs.start('owner','ip',token,{url:WEB_URL,operationId:'op'});const result=await ready(jobs);expect(result.status).toBe('ready');const imported=result.preview!.workspace.document;if(imported.kind!=='web')throw Error();const importedMedia=imported.web.media[0];
+ await jobs.retry('owner','ip',token,{operationId:'retry',ticket:result.preview!.retryTickets![importedMedia.id]},new AbortController().signal);
+ expect(requests.map(r=>r.options.maxBytes)).toEqual([WEB_LIMITS.htmlBytes,WEB_LIMITS.imageBytes,WEB_LIMITS.imageBytes]);
+ for(const {options} of requests){
+  if(allowLocalWebProxy){expect(options).not.toHaveProperty('disableProxy');expect(options).not.toHaveProperty('resolver');}
+  else {expect(options.disableProxy).toBe(true);expect(options.resolver).toBeTypeOf('function');}
+  expect(options.signal).toBeInstanceOf(AbortSignal);expect(options.budget).toEqual(expect.objectContaining({requests:expect.any(Number),bytes:expect.any(Number)}));expect(options.validateUrl).toBeTypeOf('function');
+ }
+ // A browser cannot choose or override the server's transport policy.
+ await expect(jobs.start('other','ip',token,{url:WEB_URL,operationId:'bad',allowLocalWebProxy:true})).rejects.toThrow('字段无效');
+ await expect(jobs.retry('owner','ip',token,{operationId:'bad-retry',ticket:result.preview!.retryTickets![importedMedia.id],disableProxy:false},new AbortController().signal)).rejects.toThrow('请求无效');
+});

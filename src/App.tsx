@@ -30,7 +30,8 @@ import type { PdfOutlineItem } from "./lib/pdf-outline";
 import { revealReadingTarget, focusReadingTarget } from "./lib/reading-navigation";
 import { useSidebar } from "./useSidebar";
 import { useResultPanel } from "./useResultPanel";
-import { CompactSources } from "./CompactSources";
+import { AssistantMessage } from "./AssistantMessage";
+export { AssistantMessage } from "./AssistantMessage";
 import { PanelResizeHandle } from "./PanelResizeHandle";
 import { CodexLogin } from "./CodexLogin";
 import { useSaveStatus } from "./useSaveStatus";
@@ -41,11 +42,9 @@ import { migrateHighlightAnchors } from "./lib/anchor-migration";
 import { readingContext, questionContext } from "./lib/reading-context";
 import { anchorGroup, inquiryCategoryStatus, intentHistory, sameAnchor, categoryIntent, rememberInquiry, preferredInquiry } from "./lib/inquiry-tabs";
 import { modelConfig, resolveModelConfig, supportsConfig, type CodexModel, type ModelConfig } from "./lib/model-routing";
-import { VerificationAnswer } from "./VerificationAnswer";
 import { loadModelCatalog } from "./lib/model-catalog";
 import { interruptMessage, PROGRESS_LABELS, readInquiryStream, responseMessage } from "./lib/inquiry-stream";
 import { NEW_INQUIRY_INTENTS } from "./types";
-import { safeSourceUrl } from "./lib/evidence";
 import {
   Bookmark,
   BookMarked,
@@ -55,9 +54,7 @@ import {
   ChevronDown,
   ChevronLeft,
   CircleAlert,
-  ExternalLink,
   FileText,
-  Info,
   Lightbulb,
   Link2,
   LoaderCircle,
@@ -105,7 +102,6 @@ import {WebImportDialog} from "./WebImportDialog";
 import {ReadingStartPage} from "./ReadingStartPage";
 import {initialReadingView,START_VIEW_KEY} from "./lib/reading-start-page";
 import { REFINEMENTS, canCompleteInquiry, type Refinement } from "./lib/learning";
-import { renderMarkdown } from "./lib/markdown";
 import { loadWebMedia } from "./lib/web-media";
 import { WebMediaRetry } from "./WebMediaRetry";
 import { WebImageViewer } from "./WebImageViewer";
@@ -160,7 +156,7 @@ function App() {
   const bookmarkPositionRef=useRef<ReturnType<typeof capturePosition>|null>(null);
   const [bookmarkTarget,setBookmarkTarget]=useState<(ReadingBookmark&{locateNonce:number})|null>(null);
   const bookmarkLocateNonce=useRef(0);
-  const bookmarkPreparing=useRef<{entryId:string;documentId:string;nonce:number;keepList:boolean}|null>(null);
+  const bookmarkPreparing=useRef<{entryId:string;documentId:string;nonce:number;keepList:boolean;fromStart:boolean}|null>(null);
   const bookmarkFocus=useRef<HTMLElement|null>(null);
   const [directoryTarget,setDirectoryTarget]=useState<{id:string;nonce:number}|null>(null);
   const [pdfDirectoryTarget, setPdfDirectoryTarget] = useState<{documentId:string;item:PdfOutlineItem;nonce:number}|null>(null);
@@ -301,7 +297,7 @@ function App() {
   function closeBookmarks(){bookmarkPreparing.current=null;setBookmarkTarget(null);setBookmarksOpen(false);requestAnimationFrame(()=>{if(bookmarkPositionRef.current)restorePosition(bookmarkPositionRef.current);const trigger=document.querySelector<HTMLButtonElement>(document.querySelector('.app-frame.start-mode')?'.start-bookmarks':window.matchMedia('(max-width:780px)').matches?'.drawer-navigation-trigger':'.bookmarks-nav');trigger?.focus();});}
   async function locateBookmark(bookmark:ReadingBookmark){
     track("bookmark-locate");
-    const attempt={entryId:bookmark.entryId,documentId:bookmark.documentId,nonce:++bookmarkLocateNonce.current,keepList:bookmarksOpen};bookmarkPreparing.current=attempt;
+    const attempt={entryId:bookmark.entryId,documentId:bookmark.documentId,nonce:++bookmarkLocateNonce.current,keepList:bookmarksOpen,fromStart:showStart};bookmarkPreparing.current=attempt;
     try{if(!await library.openBookmark(bookmark.id))throw new Error('无法打开对应原文版本，收藏仍保留。请检查阅读库状态后重试。');
     if(bookmarkPreparing.current===attempt)setBookmarkTarget({...bookmark,locateNonce:attempt.nonce});}
     catch(error){if(bookmarkPreparing.current===attempt)bookmarkPreparing.current=null;throw error;}
@@ -314,7 +310,7 @@ function App() {
       library.rendered();
       const ranges=articleRef.current&&bookmarkDomRanges(articleRef.current,bookmarkTarget.anchor);
       const block=ranges?.[0]?.startContainer.parentElement?.closest<HTMLElement>('[data-block-id],[data-bookmark-block-id]');
-      if(ranges&&block&&revealBookmarkRanges(ranges)) {bookmarkFocus.current=block;setBookmarksOpen(false);if(bookmarkSegments(bookmarkTarget.anchor).some(segment=>segment.translation))showToast('已定位对应原文段落（非逐词对齐）。');}
+      if(ranges&&block&&revealBookmarkRanges(ranges)) {if(bookmarkPreparing.current?.fromStart)library.navigationRevealed();bookmarkFocus.current=block;setBookmarksOpen(false);if(bookmarkSegments(bookmarkTarget.anchor).some(segment=>segment.translation))showToast('已定位对应原文段落（非逐词对齐）。');}
       else {showToast('无法定位收藏原文，摘录与上下文仍保留。');setBookmarksOpen(true);}
       bookmarkPreparing.current=null;setBookmarkTarget(null);
   },[bookmarkTarget,documentLoadId,rendered.html]);
@@ -1448,28 +1444,6 @@ function InquiryPanel({
   );
 }
 
-export function AssistantMessage({ message, verification = false, entity = false, failure, history = false }: { message: ThreadMessage; verification?: boolean; entity?: boolean; failure?: string; history?: boolean }) {
-  const isReview = message.operation ? message.operation === "verify" : verification;
-  const isWebExplanation = !isReview && (message.explanationMode === "web" || (message.explanationMode === "auto" && (message.search?.status !== "not-executed" && message.search !== undefined || !!message.sources?.length)));
-  const isIntroduction = message.operation ? message.operation === "entity" : entity;
-  const websites = (message.sources ?? []).filter(source => safeSourceUrl(source.url)).filter((source, index, all) => all.findIndex(other => other.url === source.url) === index).sort((a, b) => Number(b.websiteRole === "official") - Number(a.websiteRole === "official"));
-  const renderedAnswer = useMemo(() => renderMarkdown(message.content), [message.content]);
-  return (
-    <article className="assistant-message" data-message-id={message.id} data-completion={message.completion}>
-      {isReview ? <VerificationAnswer message={message} failure={failure} history={history} /> : <>
-      {message.mode === "demo" ? (
-        <div className="demo-answer-label"><Info size={12} /> 演示回答 · 未调用真实模型</div>
-      ) : null}
-      {message.completion === "provisional" && !message.verification ? <p className="provisional-note" role="status">正在生成，内容尚未完成{message.operation === "verify" || message.operation === "entity" || isWebExplanation ? "；来源与结论尚未核对" : ""}。</p> : null}
-      {message.completion === "interrupted" && !failure ? <p className="no-source-note">本轮中断，未收到最终结果。</p> : null}
-      {message.contextNotice ? <p className="document-context-note">{message.contextNotice}</p> : null}
-      <div className="answer-markdown" dangerouslySetInnerHTML={{ __html: renderedAnswer.html }} />
-      {isWebExplanation ? <CompactSources message={message} answerHtml={renderedAnswer.html} /> : null}
-      {isIntroduction && websites.length > 0 ? <nav className="website-links" aria-label="相关网站"><small>相关网站</small>{websites.map(source => <a key={source.id} href={safeSourceUrl(source.url)} target="_blank" rel="noopener noreferrer"><ExternalLink size={13} aria-hidden="true" /><span>{source.title}<small>{new URL(source.url).hostname}</small></span>{source.websiteRole === "official" ? <em>官网</em> : null}</a>)}</nav> : null}
-      </>}
-    </article>
-  );
-}
 
 export function RequestStatus({ startedAt, hasText, progress }: { startedAt: string; hasText: boolean; progress?: string }) {
   const started = new Date(startedAt).getTime();

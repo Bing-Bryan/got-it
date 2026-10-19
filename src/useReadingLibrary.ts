@@ -40,7 +40,18 @@ export function capturePosition(): ReadingPosition {
   const top = el.getBoundingClientRect().top;
   const block = [...el.querySelectorAll<HTMLElement>("[data-block-id]")].find(n => n.getBoundingClientRect().bottom > top);
   const pdf = el.querySelector<HTMLElement>(".pdf-reader");
-  return { ...(pdf?{pdfPage:Number(block?.closest<HTMLElement>("[data-pdf-page]")?.dataset.pdfPage??1),pdfZoom:0,pdfLeft:0}:{}), ratio: el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight), ...(block ? { blockId: block.dataset.blockId, offset: block.getBoundingClientRect().top - top } : {}) };
+  // The summary uses the same most-visible page as the PDF toolbar. Keep the
+  // first visible block/offset below as the exact scroll anchor across page edges.
+  let pdfPage=Number(block?.closest<HTMLElement>("[data-pdf-page]")?.dataset.pdfPage??1);
+  if(pdf){
+    const bounds=el.getBoundingClientRect(),toolbar=pdf.querySelector<HTMLElement>('.pdf-toolbar')?.getBoundingClientRect();
+    const visibleTop=Math.max(bounds.top,toolbar?.bottom??bounds.top);let largest=0;
+    for(const page of pdf.querySelectorAll<HTMLElement>('[data-pdf-page]')){
+      const rect=page.getBoundingClientRect(),visible=Math.max(0,Math.min(rect.bottom,bounds.bottom)-Math.max(rect.top,visibleTop));
+      if(visible>largest){largest=visible;pdfPage=Number(page.dataset.pdfPage);}
+    }
+  }
+  return { ...(pdf?{pdfPage,pdfZoom:0,pdfLeft:0}:{}), ratio: el.scrollTop / Math.max(1, el.scrollHeight - el.clientHeight), ...(block ? { blockId: block.dataset.blockId, offset: block.getBoundingClientRect().top - top } : {}) };
 }
 export function restorePosition(p: ReadingPosition) {
   const el = document.querySelector<HTMLElement>(".reader-scroll"); if (!el) return;
@@ -100,6 +111,7 @@ export function useReadingLibrary(options: Options) {
   const store = () => storeRef.current ??= new DraftStore(localStorage);
   const [notice, setNotice] = useState("");
   const [webImportOpen, setWebImportOpen] = useState(false);
+  const [webImportInline,setWebImportInline] = useState(false);
   const [webPrefill,setWebPrefill]=useState("");
   const [webImportSuccess, setWebImportSuccess] = useState(0);
   const [webJob, setWebJob] = useState<WebImportJob | null>(null);
@@ -399,6 +411,8 @@ export function useReadingLibrary(options: Options) {
     const sample=HOSTED?sampleForFile(file):undefined;
     const annotate=(w:Workspace):Workspace=>sample?{...w,document:{...w.document,id:`sample-${sample.id}-${sample.sha256}`,contentHash:sample.sha256}}:example?{...w,document:{...w.document,isDemo:true}}:w;
     if (busyRef.current || !ready) return;
+    // A file drop is a new material intent even while the homepage URL request is in flight.
+    if(webImportInline && webJob?.status==='reading')void cancelWebImport(true);
     const sequence = ++importSequence.current;
     try { if(HOSTED && file.name.endsWith('.gotit')){await preserve();track('restore');await restoreBrowserBackup(await file.text());track('restore-success');await refresh();await initialize();return;} if(file.name.toLowerCase().endsWith('.pdf')){if(file.size>50*1024*1024)throw new Error('PDF 须不超过 50 MiB。');await transition(async()=>{const selected:SelectedFile=await (await libraryBinary('/pdf?filename='+encodeURIComponent(file.name),new Blob([file],{type:'application/pdf'}))).json();await addWorkspace(annotate(selected.workspace!),selected.selectionId);}, true);return;} const w = await readDocumentFile(file); if (sequence !== importSequence.current) return; await transition(() => addWorkspace(annotate(w)), true); }
     catch (e) { if(HOSTED&&file.name.endsWith('.gotit'))track('restore-failed'); if (sequence === importSequence.current) { setImportError(true); setError(message(e)); } }
@@ -466,7 +480,7 @@ export function useReadingLibrary(options: Options) {
     dismissedRecoveries.current.add(record.id);
     void showRecovery(record.id);
   }, [ready,busy,recovery,historyId,blocked,recoveries,entry?.id]);
-  function showWebImport(url = "") { setWebPrefill(url);setWebError(""); setWebImportOpen(true); }
+  function showWebImport(url = "") { setWebImportInline(false);setWebPrefill(url);setWebError(""); setWebImportOpen(true); }
   async function returnToStart(){
     if(busyRef.current) return false;
     let success=false;
@@ -491,15 +505,16 @@ export function useReadingLibrary(options: Options) {
     setWebJob(result);
     if (result.status === "failed" || result.status === "expired") setWebError(result.error || result.progress);
   }
-  async function readWebUrl(input: string, autoOpen = false, capture?: XArticleCapture) {
+  async function readWebUrl(input: string, autoOpen = false, capture?: XArticleCapture, presentation: 'dialog'|'inline' = 'dialog') {
     if (!ready || busyRef.current) return;
     captureSequence.current++;
+    setWebImportInline(presentation==='inline');setWebImportOpen(presentation==='dialog');
     const safe = safeWebUrl(input.trim()), url = safe ? normalizeXArticleUrl(safe) ?? safe : undefined;
     if (!url) { setWebError("请输入无登录凭据的公开 HTTP(S) 文章链接，不支持本机或私网地址。"); return; }
     const previous = webOperation.current;
     if (webPoll.current) clearTimeout(webPoll.current);
     const operation = { operationId: crypto.randomUUID(), creationKey: crypto.randomUUID(), url, autoOpen, autoStarted: false, capture };
-    webOperation.current = operation; setWebError(""); setWebImportOpen(true);
+    webOperation.current = operation; setWebError("");
     setWebJob({ operationId: operation.operationId, status: "reading", progress: "正在读取文章…" });
     if (previous) void api(`/web-imports/${previous.operationId}/cancel`, {}).catch(() => {});
     try { receiveWebJob(await api<WebImportJob>(capture ? "/x-article-imports" : "/web-imports", { ...(capture ? {capture} : {url}), operationId: operation.operationId }), operation.operationId); }
@@ -567,7 +582,7 @@ export function useReadingLibrary(options: Options) {
       await readWebUrl(capture.url, true, capture);
     } catch (error) { if(sequence !== captureSequence.current)return; setWebError(error instanceof SyntaxError ? "文章文件不是有效 JSON，请重新捕获。" : message(error)); }
   }
-  async function readWebArticle(input: string) {
+  async function readWebArticle(input: string,presentation:'dialog'|'inline'='dialog') {
     captureSequence.current++;
     const operation = webOperation.current;
     const doc = webJob?.preview?.workspace.document;
@@ -577,7 +592,7 @@ export function useReadingLibrary(options: Options) {
       await confirmWebImport();
       return;
     }
-    await readWebUrl(input, true);
+    await readWebUrl(input, true,undefined,presentation);
   }
   useEffect(() => {
     const operation = webOperation.current;
@@ -676,6 +691,13 @@ export function useReadingLibrary(options: Options) {
     }
     startFontReflow();
   }
+  /** An explicit jump supersedes the saved-position font anchor. Keep any late font correction at the new destination. */
+  function navigationRevealed() {
+    fontReflow.current?.cleanup();
+    fontReflow.current = null;
+    lastRenderedPosition.current = capturePosition();
+    startFontReflow();
+  }
   function startFontReflow() {
     const doc = latest.current.workspace.document;
     const e = entryRef.current;
@@ -744,9 +766,9 @@ export function useReadingLibrary(options: Options) {
   }
   useEffect(()=> { if (!notice) return; const id=setTimeout(()=>setNotice(""),4500); return ()=>clearTimeout(id); },[notice]);
   useEffect(()=>()=>{fontReflow.current?.cleanup();fontReflow.current=null;},[]);
-  return { returnToStart, webPrefill, ensureEntry, retryWebMedia, translate, stopTranslation, translationRunning, translationProgress, translationActivity, translationRepairCount, autoTranslate, setAutoTranslation, saveNow:flush, webImportOpen, webImportSuccess, webJob, webError, showWebImport, readWebUrl, readWebArticle, readXArticleFile, confirmWebImport, cancelWebImport, initialPosition: desiredPosition.current, entry, list, ready, busy:busy||preparingEntry, error, importError, clearError: () => { setError(""); setImportError(false); }, status, check, recovery, recoveries, blocked, draftWarning, notice, historyId,
+  return { returnToStart, webPrefill, ensureEntry, retryWebMedia, translate, stopTranslation, translationRunning, translationProgress, translationActivity, translationRepairCount, autoTranslate, setAutoTranslation, saveNow:flush, webImportOpen, webImportInline, webImportSuccess, webJob, webError, showWebImport, readWebUrl, readWebArticle, readXArticleFile, confirmWebImport, cancelWebImport, initialPosition: desiredPosition.current, entry, list, ready, busy:busy||preparingEntry, error, importError, clearError: () => { setError(""); setImportError(false); }, status, check, recovery, recoveries, blocked, draftWarning, notice, historyId,
     readOnly: !!historyId || !!recovery || blocked || busy,
     openBookmark, prepareBookmarks:preserve, open, choose, importFile, checkSource: () => transition(checkSource), acceptUpdate, viewRevision, resolveRecovery, acknowledgeRecovery, showRecovery, closeRecovery,
     retry: () => ready && !blockedDraft.current ? transition(() => flush()) : initialize(),
-    rendered, scrolled };
+    rendered, scrolled, navigationRevealed };
 }

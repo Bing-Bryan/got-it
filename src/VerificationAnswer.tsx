@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo,type ReactNode } from "react";
 import type { ThreadMessage } from "./types";
 import { SourceCard } from "./SourceCard";
 import { safeSourceUrl, SEARCH_LABELS } from "./lib/evidence";
@@ -31,18 +31,19 @@ export function verificationBrief(message: ThreadMessage, failure?: string) {
   return { complete, conclusion: summary || (sources.length ? "有参考资料。" : "本次没有定位到对应出处。"), limitation: reason && reason !== summary ? reason : "" };
 }
 
+/** Shared visual content; callers still derive truthfulness from verificationBrief. */
+export function VerificationSummary({conclusion,limitation,children}:{conclusion:string;limitation?:string;children?:ReactNode}){return <section className="verification-summary verification-brief" aria-label="来源查找结果" aria-live="polite"><p className="verification-conclusion">{conclusion}</p>{limitation?<p className="verification-limitation">{limitation}</p>:null}{children}</section>;}
+
 export function VerificationAnswer({ message, failure, history = false }: { message: ThreadMessage; failure?: string; history?: boolean }) {
   const brief = verificationBrief(message, failure);
   const v = message.verification;
   const original = useMemo(() => renderMarkdown(message.content), [message.content]);
   const streaming = !failure && message.search?.status !== "failed" && message.completion === "provisional" && !v;
   return <>
-    <section className="verification-summary verification-brief" aria-label="来源查找结果" aria-live="polite">
-      <p className="verification-conclusion">{brief.conclusion}</p>
-      {brief.limitation ? <p className="verification-limitation">{brief.limitation}</p> : null}
+    <VerificationSummary conclusion={brief.conclusion} limitation={brief.limitation}>
       {streaming ? <div className="answer-markdown" dangerouslySetInnerHTML={{ __html: original.html }} /> : null}
       {!v && !streaming && !history && message.content.trim() ? <details className="verification-record"><summary>原有回答（未核对）</summary><div className="answer-markdown" dangerouslySetInnerHTML={{ __html: original.html }} /></details> : null}
-    </section>
+    </VerificationSummary>
     {message.sources?.length || history ? <section className="source-section compact-sources" aria-label="来源列表">
       {message.sources?.map(source => <SourceCard key={source.id} source={source} />)}
       {history ? <div className="verification-record">

@@ -16,7 +16,7 @@ it('keeps storage scope and backup failures discoverable without claiming a back
   vi.mocked(browserStorageStatus).mockResolvedValue({persistent:true,usage:2097152});
   await act(async()=>{details.open=true;await new Promise(resolve=>setTimeout(resolve,0));});
   expect(browserStorageStatus).toHaveBeenCalledTimes(2);expect(host.textContent).toContain('已获持久存储');expect(host.textContent).toContain('2.0 MB');
-  expect(host.textContent).toContain('保存在当前浏览器');expect(host.querySelector<HTMLDetailsElement>('.hosted-storage-details')?.open).toBe(false);expect(host.textContent).toContain('清除网站数据可能丢失成果');expect(host.textContent).not.toContain('Safari');expect(host.querySelectorAll('.hosted-backup-actions .secondary-action')).toHaveLength(2);expect(host.textContent).toContain('不会跨设备或浏览器同步');
+  expect(host.textContent).toContain('发送与隐私');expect(host.textContent).toContain('主动全文译中');expect(host.textContent).toContain('保存在当前浏览器');expect(host.querySelector<HTMLDetailsElement>('.hosted-storage-details')?.open).toBe(false);expect(host.textContent).toContain('清除网站数据可能丢失成果');expect(host.textContent).not.toContain('Safari');expect(host.querySelectorAll('.hosted-backup-actions .secondary-action')).toHaveLength(2);expect(host.textContent).toContain('不会跨设备或浏览器同步');
   await act(async()=>host.querySelector('button')!.click());
   expect(host.querySelector('[role=alert]')?.textContent).toBe('空间不足');expect(browserBackup).not.toHaveBeenCalled();
   await act(async()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})));

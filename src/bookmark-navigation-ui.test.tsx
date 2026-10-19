@@ -34,3 +34,19 @@ it('keeps the saved non-first-screen position when opening all bookmarks from th
 });
 
 it('prioritizes a pending recovery over the start page without issuing a model request',async()=>{await setup();const normal=api.getMockImplementation()!;api.mockImplementation((path='',body)=>path==='/recoveries'?Promise.resolve([{id:'recovery',entryId:'other',state:'pending',hasDifferences:true,savedRecordUnavailable:true,filename:'recover.md'}]):normal(path,body));await act(async()=>root.unmount());root=createRoot(host);await act(async()=>root.render(<App/>));await tick();expect(host.querySelector('.reading-start-page')).toBeNull();expect(host.textContent).toContain('之前的记录已保留');expect(stream).not.toHaveBeenCalled();});
+
+it('keeps the homepage drawer bookmark jump after late font readiness',async()=>{
+ let finishFonts!:()=>void;
+ Object.defineProperty(document,'fonts',{configurable:true,value:{status:'loading',ready:new Promise<void>(resolve=>{finishFonts=resolve;}),addEventListener:vi.fn(),removeEventListener:vi.fn()}});
+ try {
+  await setup();
+  vi.spyOn(HTMLElement.prototype,'getBoundingClientRect').mockImplementation(function(this:HTMLElement){const top=2100-(host.querySelector<HTMLElement>('.reader-scroll')?.scrollTop??0);return this.matches('[data-block-id]')?rect(top,top+20):rect(100,800);});
+  await click('.start-nav-button');await click('.start-tabs [data-tab=bookmarks]');await click('.start-bookmark-row');
+  expect(host.querySelector('.start-library-dialog')).toBeNull();
+  const scroll=host.querySelector<HTMLElement>('.reader-scroll')!;
+  expect(scroll.scrollTop).toBe(1660);
+  Object.defineProperty(document.fonts,'status',{value:'loaded'});
+  await act(async()=>{finishFonts();await new Promise(resolve=>setTimeout(resolve,50));});
+  expect(scroll.scrollTop).toBe(1660);expect(stream).not.toHaveBeenCalled();
+ } finally {Reflect.deleteProperty(document,'fonts');}
+});

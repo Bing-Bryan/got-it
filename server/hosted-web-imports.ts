@@ -19,11 +19,12 @@ export function hostedOperationId(value:unknown):string{if(typeof value!=='strin
 function sameToken(a:string,b:string){return a.length===b.length&&timingSafeEqual(Buffer.from(a),Buffer.from(b));}
 interface HostedJob {owner:string;token:string;controller:AbortController;job:WebImportJob;expires:number;bytes:number;inputHash:string;data?:ExtractedWeb;retryTickets?:Record<string,string>;}
 export type HostedImportJob=WebImportJob;
-export interface HostedWebOptions {extractor?:typeof extractWeb;captureExtractor?:typeof extractXArticle;clock?:()=>number;deadlineMs?:number;memoryLimit?:number;fetcher?:typeof fetchWeb;}
+export interface HostedWebOptions {extractor?:typeof extractWeb;captureExtractor?:typeof extractXArticle;clock?:()=>number;deadlineMs?:number;memoryLimit?:number;fetcher?:typeof fetchWeb;allowLocalWebProxy?:boolean;}
 export class HostedWebImports{
  private jobs=new Map<string,HostedJob>();private activeReservations=new Map<HostedJob,number>();private clock:()=>number;private extractor:typeof extractWeb;private captureExtractor:typeof extractXArticle;
  private networkDay='';private browsers=new Map<string,number>();private ips=new Map<string,number>();private retryActive=new Map<string,string>();
  constructor(private tickets:HostedResourceTickets,private options:HostedWebOptions={}){this.clock=options.clock??Date.now;this.extractor=options.extractor??extractWeb;this.captureExtractor=options.captureExtractor??extractXArticle;}
+ private networkPolicy():Pick<Parameters<typeof fetchWeb>[1],'disableProxy'|'resolver'>{return this.options.allowLocalWebProxy?{}:{disableProxy:true,resolver:host=>lookup(host,{all:true})};}
  get memoryBytes(){return [...this.jobs.values()].reduce((n,j)=>n+j.bytes,0)+[...this.activeReservations.values()].reduce((n,v)=>n+v,0)+this.retryActive.size*RETRY_RESERVE;}
  private key(owner:string,op:string){return owner+':'+hostedOperationId(op);}
  private cleanup(){for(const [key,j]of this.jobs)if(j.expires<=this.clock()){j.controller.abort();this.jobs.delete(key);}}
@@ -46,7 +47,7 @@ export class HostedWebImports{
  }
  private async read(j:HostedJob,url:string,capture:ReturnType<typeof parseXArticleCapture>|undefined){
   const signal=AbortSignal.any([j.controller.signal,AbortSignal.timeout(Math.min(this.options.deadlineMs??WEB_LIMITS.jobMs,WEB_LIMITS.jobMs))]);
-  const fetcher=(raw:string,maxBytes:number,budget:WebBudget)=> (this.options.fetcher??fetchWeb)(raw,{signal,maxBytes,budget,disableProxy:true,resolver:host=>lookup(host,{all:true}),validateUrl:maxBytes===WEB_LIMITS.htmlBytes?articleUrl:mediaUrl});
+  const fetcher=(raw:string,maxBytes:number,budget:WebBudget)=> (this.options.fetcher??fetchWeb)(raw,{signal,maxBytes,budget,...this.networkPolicy(),validateUrl:maxBytes===WEB_LIMITS.htmlBytes?articleUrl:mediaUrl});
   try{
    const args={signal,fetcher,progress:(progress:string)=>{if(j.job.status==='reading')j.job.progress=progress;}};
    const extracting=capture?this.captureExtractor(capture,args):this.extractor(url,args);
@@ -72,7 +73,7 @@ export class HostedWebImports{
   this.admit(owner,ip);this.retryActive.set(key,token);
   try{
    const signal=AbortSignal.any([parent,AbortSignal.timeout(30_000)]),validate=(url:string)=>{if(ticket.extractorVersion.startsWith('x-')&&!safeXImageSourceUrl(url))throw new HostedError('图片超出原公开来源范围',403);return mediaUrl(url);};
-   const fetched=await bounded((this.options.fetcher??fetchWeb)(validate(ticket.sourceUrl).href,{signal,maxBytes:WEB_LIMITS.imageBytes,budget:{requests:0,bytes:0},disableProxy:true,resolver:host=>lookup(host,{all:true}),validateUrl:validate}),signal);validate(fetched.url);signal.throwIfAborted();
+   const fetched=await bounded((this.options.fetcher??fetchWeb)(validate(ticket.sourceUrl).href,{signal,maxBytes:WEB_LIMITS.imageBytes,budget:{requests:0,bytes:0},...this.networkPolicy(),validateUrl:validate}),signal);validate(fetched.url);signal.throwIfAborted();
    const image=await validateStaticImage(fetched.bytes);signal.throwIfAborted();if(fetched.type.split(';')[0].trim()!==image.mime)throw new HostedError('图片格式与响应类型不一致',502);
    const id=createHash('sha256').update(image.bytes).digest('hex');return {documentId:ticket.documentId,contentVersion:ticket.contentVersion,media:{id:ticket.mediaId,kind:'image',status:'saved',resourceId:id,mime:image.mime,bytes:image.bytes.length,width:image.width,height:image.height,sourceUrl:ticket.sourceUrl},resource:{id,type:image.mime,base64:image.bytes.toString('base64')}};
   }finally{this.retryActive.delete(key);}

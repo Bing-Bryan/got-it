@@ -173,7 +173,7 @@
 }
 
 @layer controls {
-  /* Warm only the default neutral surfaces; shared selected/open/hover/focus states retain meaning. */
+  /* Share neutral default surfaces; shared selected/open/hover/focus states retain meaning. */
   :is(.provider-trigger,.document-bookmarks-trigger,.reading-adjustment-trigger,.library-add,.bookmarks-nav,.bookmark-back,.pdf-module-error button):not([aria-expanded=true]):not([aria-pressed=true]):not([aria-selected=true]) {
     --control-bg:var(--reading-card); --control-border:var(--reading-line-strong);
   }

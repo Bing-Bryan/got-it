@@ -6,6 +6,7 @@ import {createHostedRunner,hostedModelBaseUrl} from './hosted-model';
 import {createBochaSearch} from './hosted-search';
 import {createHostedVerificationRunner} from './hosted-verification';
 import {HostedWebImports} from './hosted-web-imports';
+import {hostedLocalWebProxyEnabled} from './hosted-local-web-proxy';
 import {HostedResourceTickets} from './hosted-resource-tickets';
 import {HostedTranslations,createHostedTranslationModel} from './hosted-translations';
 import {HostedStatistics} from './hosted-statistics';
@@ -20,6 +21,7 @@ if(process.argv.includes('--init-budget')){
 }else{
   const origin=process.env.HOSTED_ORIGIN;
   if(!origin||new URL(origin).origin!==origin)throw new Error('HOSTED_ORIGIN must be an exact frontend origin');
+  const allowLocalWebProxy=hostedLocalWebProxyEnabled();
   const statisticsPath=process.env.HOSTED_STATISTICS_PATH;
   if(!statisticsPath||!absolutePath(statisticsPath)||statisticsPath===path)throw new Error('HOSTED_STATISTICS_PATH must be a separate absolute durable path');
   const dailyLimit=Number(process.env.HOSTED_DAILY_BUDGET_USD||3);
@@ -35,7 +37,7 @@ if(process.argv.includes('--init-budget')){
   const searchConfigured=adapterPolicy.searchEnabled&&!!process.env.BOCHA_API_KEY&&Number.isFinite(searchCostUsd)&&searchCostUsd>0&&searchCostUsd<=3;
   const verificationRunner=runner&&searchConfigured?createHostedVerificationRunner(process.env.DEEPSEEK_API_KEY!,createBochaSearch(process.env.BOCHA_API_KEY!,process.env.BOCHA_API_ORIGIN)):undefined;
   const stateDir=join(dirname(path),'hosted-private-state');
-  const webImports=new HostedWebImports(new HostedResourceTickets(stateDir));
+  const webImports=new HostedWebImports(new HostedResourceTickets(stateDir),{allowLocalWebProxy});
   const translations=adapterPolicy.translationsEnabled&&process.env.DEEPSEEK_API_KEY?new HostedTranslations(budget,createHostedTranslationModel(process.env.DEEPSEEK_API_KEY)):undefined;
   const app=createHostedApp({origin,budget,statistics,runner,verificationRunner,searchCostUsd,webImports,translations,images:process.env.HOSTED_ENABLE_IMAGES==='1',apiId:process.env.HOSTED_API_ID,candidateId:process.env.HOSTED_CANDIDATE_ID,fixtureMode:process.env.NODE_ENV==='test'&&adapterPolicy.fixtureModel?'loopback-fixture':undefined});
   const port=Number(process.env.HOSTED_PORT||8788);
