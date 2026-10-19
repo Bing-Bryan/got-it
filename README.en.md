@@ -14,7 +14,7 @@ AI normally runs only after you choose an action or send a question. If you prev
 
 ## A complete reading journey
 
-The existing **October 18, 2026** screenshots and image references are retained as historical views. They use safe synthetic material, and the controlled reading response is not an output from this round of real sampling. The current homepage uses real reading snapshots and more compact teaching dialogs; consult the running app for current details. Older visuals remain in the [historical update](docs/updates/2026-10-14-brand-and-reading-showcase.md).
+Both images below are approved screenshots captured from the running app on **October 19, 2026**. The homepage shows the current imports and real reading examples; the reading view shows an excerpt from the publicly available companion AI report and an actual saved response. The UI has not been redrawn, and capturing these images made no new model calls. Existing image files are retained; older visuals remain in the [historical update](docs/updates/2026-10-14-brand-and-reading-showcase.md).
 
 ### 1. Keep every format in one library
 
@@ -26,13 +26,13 @@ Markdown files, PDFs, and imported web articles coexist in the local library. In
 
 > The current brand is lowercase `got it` (`got-it` when hyphenated). See the [brand and reading showcase update](docs/updates/2026-10-14-brand-and-reading-showcase.md). The public repository is [Bing-Bryan/got-it](https://github.com/Bing-Bryan/got-it); existing `Got-it` data directories keep their original spelling.
 
-![Current hosted start page: library and bookmarks, introduction and imports, demo cards](docs/images/library.png)
+![Current homepage: central imports and three real reading examples](docs/images/homepage-2026-10-19.png)
 
 ### 2. Read beside the original
 
 Use the outline on the left, read in the center, and revisit cards linked to selected passages on the right. Markdown keeps headings, lists, and tables; PDF retains its original page layout; imported web articles keep readable text, links, code, and required static images.
 
-![Warm reading area, cropped: synthetic original text and an explicitly controlled card](docs/images/reading.png)
+![Public report reading: a real saved CAGR explanation beside the original passage](docs/images/reading-2026-10-19.png)
 
 Reading uses warm paper and system fonts. Markdown/web originals and translations use a recommended width, while existing manual width preferences are preserved and can be reset explicitly. Each sidebar can be pinned or collapsed, and the card panel can be resized. PDF page colors stay unchanged; zoom or reset to automatic fitting. Sidebars become drawers on narrow screens. PDF module or rendering failures show a local error while keeping navigation; reloading first saves, and a failed save does not silently leave the page.
 
