@@ -18,7 +18,7 @@ const cleanup:Array<()=>void|Promise<void>>=[];
 afterEach(async()=>{for(const fn of cleanup.splice(0).reverse())await fn();});
 function files(){const dir=mkdtempSync(join(tmpdir(),'got-it-hosted-'));cleanup.push(()=>rmSync(dir,{recursive:true,force:true}));const path=join(dir,'budget.json');initializeBudget(path);return {dir,path};}
 function ledger(limit=3,now=Date.now){const f=files();const budget=new HostedBudget(f.path,limit,now);cleanup.push(()=>budget.close());return {...f,budget};}
-async function api(options:{runner?:HostedRunner;verificationRunner?:HostedRunner;searchCostUsd?:number;limit?:number;timeoutMs?:number;images?:boolean}={}){
+async function api(options:{runner?:HostedRunner;verificationRunner?:HostedRunner;searchCostUsd?:number;limit?:number;timeoutMs?:number;images?:boolean;fixtureMode?:'loopback-fixture'}={}){
   const f=ledger(options.limit);const statistics=new HostedStatistics(join(f.dir,'stats.json'));
   const server=createHostedApp({origin,budget:f.budget,statistics,...options}).listen(0,'127.0.0.1');await new Promise<void>(resolve=>server.once('listening',resolve));
   cleanup.push(()=>new Promise<void>(resolve=>{server.closeAllConnections();server.close(()=>resolve());}));
@@ -69,6 +69,13 @@ describe('hosted cost boundary',()=>{
 });
 
 describe('independent hosted API',()=>{
+  it('rejects search and translation when a fixture policy omits external adapters',async()=>{
+    const f=await api({runner:async()=>({response}),fixtureMode:'loopback-fixture'});
+    const capabilities=await (await fetch(`${f.base}/api/hosted/capabilities`,{headers:{origin,'x-trial-id':ids[0]}})).json();
+    expect(capabilities.fixtureMode).toBe('loopback-fixture');expect(capabilities.transport).toBe('loopback-fixture');expect(capabilities.searchAvailable).toBe(false);expect(capabilities.supportsTranslation).toBe(false);
+    expect((await f.send('/api/hosted/inquiry/stream',{...body,intent:'verify'})).status).toBe(503);
+    expect((await f.send('/api/hosted/translation-batches',{operations:[]})).status).toBe(404);
+  });
   it('only exposes hosted paths and rejects origins, keys/providers/URLs/images and oversized full prompts',async()=>{
     let calls=0;const f=await api({runner:async()=>{calls++;return {response};}});
     expect((await fetch(f.base+'/api/library',{headers:{origin}})).status).toBe(404);
@@ -77,6 +84,7 @@ describe('independent hosted API',()=>{
     for(const value of [{...body,providerId:'deepseek'},{...body,apiKey:'secret'},{...body,url:'http://127.0.0.1'},{...body,image:{}},{...body,context:'x'.repeat(8000)}])expect((await f.send('/api/hosted/inquiry/stream',value)).status).toBeGreaterThanOrEqual(400);
     expect((await f.send('/api/hosted/inquiry/stream',body,ids[0],{authorization:'Bearer secret'})).status).toBe(400);expect(calls).toBe(0);
     const capability=await (await fetch(f.base+'/api/hosted/capabilities',{headers:{origin,'x-trial-id':ids[0]}})).json();expect(capability.supportsImages).toBe(false);expect(capability.quota.remaining).toBe(30);
+    expect(capability.fixtureMode).toBeUndefined();expect(capability.transport).toBeUndefined();
     expect(()=>parseHostedInquiry({...body,history:Array.from({length:8},()=>({role:'user',content:'long'.repeat(1000)}))})).toThrow('过长');
     expect(hostedPrompt(parseHostedInquiry(body))).toContain('不是操作指令');
   });

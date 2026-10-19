@@ -52,6 +52,26 @@ export function restorePosition(p: ReadingPosition) {
   if (typeof el.scrollTo === "function") el.scrollTo({left,top,behavior:"instant"});
   else { el.scrollLeft=left;el.scrollTop=top; }
 }
+/**
+ * Resolve when the browser has finished its first font pass, or after a bounded
+ * wait if a font request never settles. The fallback is already readable via
+ * font-display: swap, so a timeout must not block reading.
+ */
+export function readingFontReady(timeoutMs = 2500): Promise<void> {
+  const fonts = typeof document !== "undefined" ? document.fonts : undefined;
+  if (!fonts?.ready) return Promise.resolve();
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    fonts.ready.then(finish, finish);
+  });
+}
 interface Options { workspace: Workspace; install: (w: Workspace,entryId?:string) => void; interrupt: () => Workspace; update?: (w: Workspace) => void; getWorkspace?: () => Workspace; readingVisible?: boolean; onOpened?: () => void }
 export function useReadingLibrary(options: Options) {
   const latest = useRef(options); latest.current = options;
@@ -196,6 +216,9 @@ export function useReadingLibrary(options: Options) {
   const desiredPosition = useRef<ReadingPosition>({ ratio: 0 });
   const restorePending = useRef(false);
   const lastRenderedPosition = useRef<ReadingPosition | null>(null);
+  const fontReflow = useRef<{docId: string; anchor: ReadingPosition; cleanup: () => void} | null>(null);
+  const fontRestoring = useRef(false);
+  const fontUserScrolled = useRef(false);
   const fingerprint = readingKey;
   function position() {
     if (restorePending.current || latest.current.readingVisible === false) return desiredPosition.current;
@@ -219,6 +242,10 @@ export function useReadingLibrary(options: Options) {
   function install(e: LibraryEntry, revision = "", openReading = true) {
     setTranslationRepairCount(0);
     lastRenderedPosition.current = null;
+    fontReflow.current?.cleanup();
+    fontReflow.current = null;
+    fontRestoring.current = false;
+    fontUserScrolled.current = false;
     desiredFragment.current = null;
     setTranslationProgress("");
     reportTranslationActivity(null);
@@ -647,9 +674,68 @@ export function useReadingLibrary(options: Options) {
       if (target) target.scrollIntoView({ block: "start" });
       else setNotice("链接中的章节未匹配，已打开保存正文。");
     }
+    startFontReflow();
+  }
+  function startFontReflow() {
+    const doc = latest.current.workspace.document;
+    const e = entryRef.current;
+    if (!e || doc.kind === "pdf" || !document.fonts?.ready) return;
+    if (fontReflow.current?.docId === e.id) return;
+    fontReflow.current?.cleanup();
+    const anchor = capturePosition();
+    fontUserScrolled.current = false;
+    const cleanups: Array<() => void> = [];
+    const cleanup = () => { for (const fn of cleanups.splice(0)) fn(); };
+    const onUser = () => {
+      fontUserScrolled.current = true;
+      if (fontReflow.current) { fontReflow.current.cleanup(); fontReflow.current = null; }
+    };
+    const options: AddEventListenerOptions = { capture: true, passive: true };
+    const events: Array<keyof DocumentEventMap> = ["wheel", "pointerdown", "touchstart", "keydown"];
+    for (const name of events) {
+      document.addEventListener(name, onUser, options);
+      cleanups.push(() => document.removeEventListener(name, onUser, options));
+    }
+    const job = { docId: e.id, anchor, cleanup };
+    fontReflow.current = job;
+    const finish = () => {
+      if (fontReflow.current !== job || latest.current.readingVisible === false || entryRef.current?.id !== job.docId || fontUserScrolled.current) {
+        if (fontReflow.current === job) fontReflow.current = null;
+        cleanup();
+        return;
+      }
+      if (document.fonts?.status === "loading") {
+        if (fontReflow.current === job) fontReflow.current = null;
+        cleanup();
+        return;
+      }
+      cleanup();
+      fontReflow.current = null;
+      fontRestoring.current = true;
+      restorePosition(job.anchor);
+      setTimeout(() => {
+        fontRestoring.current = false;
+        if (entryRef.current?.id === job.docId) lastRenderedPosition.current = capturePosition();
+      }, 0);
+    };
+    void (async () => {
+      await readingFontReady();
+      if (fontReflow.current !== job) return;
+      if (document.fonts?.status === "loading") {
+        await new Promise<void>(resolve => {
+          if (document.fonts?.status !== "loading") return resolve();
+          const onLate = () => { if (document.fonts?.status !== "loading") resolve(); };
+          const timer = setTimeout(resolve, 10_000);
+          cleanups.push(() => { document.fonts?.removeEventListener("loadingdone", onLate); clearTimeout(timer); });
+          document.fonts?.addEventListener?.("loadingdone", onLate);
+        });
+        if (fontReflow.current !== job) return;
+      }
+      finish();
+    })();
   }
   function scrolled() {
-    if (latest.current.readingVisible === false || restorePending.current || !ready || busyRef.current || readonlyRef.current || recoveryRef.current || blockedDraft.current || !entryRef.current) return;
+    if (latest.current.readingVisible === false || restorePending.current || fontReflow.current || fontRestoring.current || !ready || busyRef.current || readonlyRef.current || recoveryRef.current || blockedDraft.current || !entryRef.current) return;
     const currentPosition=position();
     if (!saving.current && fingerprint(latest.current.workspace,currentPosition) === saved.current) { clearOwn(latest.current.workspace,currentPosition); return; }
     writeDraft(latest.current.workspace, position());
@@ -657,6 +743,7 @@ export function useReadingLibrary(options: Options) {
     if (!timer.current) timer.current = setTimeout(() => { timer.current = null; void flush().catch(() => {}); }, 500);
   }
   useEffect(()=> { if (!notice) return; const id=setTimeout(()=>setNotice(""),4500); return ()=>clearTimeout(id); },[notice]);
+  useEffect(()=>()=>{fontReflow.current?.cleanup();fontReflow.current=null;},[]);
   return { returnToStart, webPrefill, ensureEntry, retryWebMedia, translate, stopTranslation, translationRunning, translationProgress, translationActivity, translationRepairCount, autoTranslate, setAutoTranslation, saveNow:flush, webImportOpen, webImportSuccess, webJob, webError, showWebImport, readWebUrl, readWebArticle, readXArticleFile, confirmWebImport, cancelWebImport, initialPosition: desiredPosition.current, entry, list, ready, busy:busy||preparingEntry, error, importError, clearError: () => { setError(""); setImportError(false); }, status, check, recovery, recoveries, blocked, draftWarning, notice, historyId,
     readOnly: !!historyId || !!recovery || blocked || busy,
     openBookmark, prepareBookmarks:preserve, open, choose, importFile, checkSource: () => transition(checkSource), acceptUpdate, viewRevision, resolveRecovery, acknowledgeRecovery, showRecovery, closeRecovery,

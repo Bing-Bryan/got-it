@@ -63,8 +63,35 @@ export function parseHostedInquiry(value:unknown,options:{images?:boolean}={}):H
   return request;
 }
 export type HostedRunner=(request:HostedInquiry,signal:AbortSignal,onDelta:(delta:string)=>void,onProgress?:(progress:'search-started'|'search-completed'|'checking-sources')=>void)=>Promise<{response:InquiryResponse;usage?:{prompt_tokens:number;completion_tokens:number}}>;
-export function createHostedJsonModel(apiKey:string,limits={input:MAX_INPUT_TOKENS,output:MAX_OUTPUT_TOKENS}) {
-  const client=new OpenAI({apiKey,baseURL:'https://api.deepseek.com',maxRetries:0,timeout:60_000});
+export function hostedModelBaseUrl(environment=process.env):string {
+  const configured=environment.HOSTED_MODEL_BASE_URL;
+  if(!configured)return 'https://api.deepseek.com';
+  if(environment.NODE_ENV!=='test')throw new Error('HOSTED_MODEL_BASE_URL is available only in NODE_ENV=test');
+  let url:URL;
+  try{url=new URL(configured);}catch{throw new Error('HOSTED_MODEL_BASE_URL must be a loopback HTTP URL in test mode');}
+  const numericLoopback=url.hostname==='127.0.0.1'||url.hostname==='[::1]';
+  const validPort=/^\d+$/.test(url.port)&&Number(url.port)>0&&Number(url.port)<=65535;
+  if(url.protocol!=='http:'||!numericLoopback||!validPort||url.pathname!=='/'||url.username||url.password||url.search||url.hash)throw new Error('HOSTED_MODEL_BASE_URL must be a numeric loopback HTTP URL with an explicit port in test mode');
+  return url.toString().replace(/\/$/,'');
+}
+
+/** A test fixture must not turn a loopback URL into an outbound redirect. */
+export function createHostedModelFixtureFetch(baseURL:string,fetchImplementation:typeof fetch=fetch):typeof fetch {
+  const allowedOrigin=new URL(baseURL).origin;
+  return async(input,init)=>{
+    const requestUrl=input instanceof Request?input.url:String(input);
+    if(new URL(requestUrl).origin!==allowedOrigin)throw new Error('Hosted model fixture request left its loopback origin');
+    const response=await fetchImplementation(input,{...init,redirect:'manual'});
+    if(response.status>=300&&response.status<400){
+      await response.body?.cancel();
+      throw new Error('Hosted model fixture redirects are not allowed');
+    }
+    return response;
+  };
+}
+
+export function createHostedJsonModel(apiKey:string,limits={input:MAX_INPUT_TOKENS,output:MAX_OUTPUT_TOKENS},baseURL='https://api.deepseek.com') {
+  const client=new OpenAI({apiKey,baseURL,maxRetries:0,timeout:60_000,...(baseURL==='https://api.deepseek.com'?{}:{fetch:createHostedModelFixtureFetch(baseURL)})});
   return async(prompt:string,signal:AbortSignal,onDelta:(delta:string)=>void,image?:HostedImage)=>{
     signal.throwIfAborted();
     if(Buffer.byteLength(prompt,'utf8')+128>limits.input)throw new HostedError('模型上下文超过限制',413,'input_limit');
@@ -86,8 +113,8 @@ export function createHostedJsonModel(apiKey:string,limits={input:MAX_INPUT_TOKE
     return {data:parsed as Record<string,unknown>,usage};
   };
 }
-export function createHostedRunner(apiKey:string):HostedRunner {
-  const model=createHostedJsonModel(apiKey);
+export function createHostedRunner(apiKey:string,baseURL='https://api.deepseek.com'):HostedRunner {
+  const model=createHostedJsonModel(apiKey,undefined,baseURL);
   return async(request,signal,onDelta)=>{
     if(usesHostedSearch(request))throw new HostedError('联网请求必须使用真实搜索服务',503,'search_unavailable');
     const {data,usage}=await model(hostedPrompt(request),signal,onDelta,request.hostedImage);

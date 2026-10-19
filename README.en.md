@@ -163,6 +163,8 @@ npm audit --audit-level=high
 
 `build` includes TypeScript checking. `test:release` uses temporary data to verify the built page, static assets, local service, and API boundaries without model calls. See the [release checklist](docs/release-checklist.md), [recorded release results](docs/release-results.md), and [security notes](SECURITY.md).
 
+For maintainers, the internal source repository contains `deploy/hosted-operations.md` with hosted candidate, preview, and rehearsal commands; this internal operations guide is outside the public snapshot allowlist. Local rehearsal does not verify production deployment or rollback.
+
 Maintainers use `npm run release:prepare` to create an allowlisted public snapshot, then sync it to the separate public repository. Do not push the internal development repository directly. Review screenshots and text separately before publishing.
 
 ## License

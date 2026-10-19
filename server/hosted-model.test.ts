@@ -1,13 +1,46 @@
 import {crc32} from 'node:zlib';
+import {createServer} from 'node:http';
 import {describe,expect,it,vi} from 'vitest';
 const mock=vi.hoisted(()=>({chunks:[] as unknown[],calls:[] as unknown[],options:[] as unknown[]}));
 vi.mock('openai',()=>({default:class{constructor(options:unknown){mock.options.push(options);}chat={completions:{create:async(body:unknown)=>{mock.calls.push(body);return(async function*(){for(const chunk of mock.chunks)yield chunk;})();}}};}}));
-import {createHostedRunner,imageTokenReserve,parseHostedInquiry} from './hosted-model';
+import {createHostedRunner,hostedModelBaseUrl,createHostedModelFixtureFetch,imageTokenReserve,parseHostedInquiry} from './hosted-model';
 import {createHostedVerificationRunner,hostedVerificationPrompt,hostedWebExplanationPrompt} from './hosted-verification';
 import {REGION_NO_TEXT_CONTEXT} from '../src/lib/pdf-data';
 const request=()=>parseHostedInquiry({requestId:'request-1',intent:'explain',quote:'概念',context:'原文明确内容',question:'解释一下',history:[]});
 const chunk=(content:string,finish_reason:string|null=null)=>({choices:[{delta:{content},finish_reason}]});
 const usage={choices:[],usage:{prompt_tokens:1000,completion_tokens:100}};
+it('allows only a loopback HTTP model fixture in explicit test mode',()=>{
+  expect(hostedModelBaseUrl({NODE_ENV:'production'})).toBe('https://api.deepseek.com');
+  expect(hostedModelBaseUrl({NODE_ENV:'test',HOSTED_MODEL_BASE_URL:'http://127.0.0.1:4999'})).toBe('http://127.0.0.1:4999');
+  for(const env of [
+    {NODE_ENV:'production',HOSTED_MODEL_BASE_URL:'http://127.0.0.1:4999'},
+    {NODE_ENV:'test',HOSTED_MODEL_BASE_URL:'https://127.0.0.1:4999'},
+    {NODE_ENV:'test',HOSTED_MODEL_BASE_URL:'http://example.com'},
+    {NODE_ENV:'test',HOSTED_MODEL_BASE_URL:'http://localhost:4999'},
+    {NODE_ENV:'test',HOSTED_MODEL_BASE_URL:'http://127.0.0.2:4999'},
+    {NODE_ENV:'test',HOSTED_MODEL_BASE_URL:'http://user:password@localhost:4999'},
+    {NODE_ENV:'test',HOSTED_MODEL_BASE_URL:'http://127.0.0.1:4999?redirect=https://example.com'},
+    {NODE_ENV:'test',HOSTED_MODEL_BASE_URL:'http://127.0.0.1:4999/#fragment'},
+    {NODE_ENV:'test',HOSTED_MODEL_BASE_URL:'http://127.0.0.1/v1'},
+  ])expect(()=>hostedModelBaseUrl(env)).toThrow();
+});
+it('does not follow a loopback fixture redirect to another host/port',async()=>{
+  let redirectedRequests=0;
+  const destination=createServer((_req,res)=>{redirectedRequests++;res.end('unexpected');});
+  await new Promise<void>(resolve=>destination.listen(0,'127.0.0.1',resolve));
+  const destinationPort=(destination.address() as import('node:net').AddressInfo).port;
+  const fixture=createServer((_req,res)=>{res.statusCode=302;res.setHeader('Location',`http://127.0.0.1:${destinationPort}/capture`);res.end();});
+  await new Promise<void>(resolve=>fixture.listen(0,'127.0.0.1',resolve));
+  const fixturePort=(fixture.address() as import('node:net').AddressInfo).port;
+  try {
+    const fixtureFetch=createHostedModelFixtureFetch(`http://127.0.0.1:${fixturePort}`);
+    await expect(fixtureFetch(`http://127.0.0.1:${fixturePort}/chat/completions`,{method:'POST',body:'synthetic prompt'})).rejects.toThrow('redirects are not allowed');
+    expect(redirectedRequests).toBe(0);
+  } finally {
+    await new Promise<void>(resolve=>fixture.close(()=>resolve()));
+    await new Promise<void>(resolve=>destination.close(()=>resolve()));
+  }
+});
 describe('DeepSeek adapter controlled stream',()=>{
   it('uses the fixed endpoint/model, caps output, disables reasoning/retries and streams only decoded answer',async()=>{
     mock.chunks=[chunk('{"answer":"这是一段'),chunk('解释。","sources":[],"evidenceStatus":"not-applicable"}','stop'),usage];

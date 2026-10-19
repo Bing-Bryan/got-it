@@ -1,0 +1,12 @@
+/*
+ * Self-hosted reading fonts. The @font-face rules come from the Fontsource
+ * variable packages imported in main.tsx; this file only defines the stack.
+ * Chinese is split by unicode-range, so the browser fetches only the slices
+ * needed by the current page. If loading fails, the next family in the stack
+ * is a system serif, never the UI sans.
+ */
+:root {
+  --reading-font: "Source Serif 4 Variable", "Noto Serif SC Variable",
+    "Source Serif 4", "Noto Serif SC", "Source Han Serif SC",
+    "Songti SC", "STSong", Georgia, serif;
+}

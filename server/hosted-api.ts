@@ -9,7 +9,7 @@ import type {HostedTranslations} from './hosted-translations';
 import {WebError} from './web-fetch';
 import type {HostedStatistics} from './hosted-statistics';
 
-export interface HostedOptions {origin:string;budget:HostedBudget;runner?:HostedRunner;verificationRunner?:HostedRunner;searchCostUsd?:number;webImports?:HostedWebImports;translations?:HostedTranslations;statistics?:HostedStatistics;timeoutMs?:number;images?:boolean;}
+export interface HostedOptions {origin:string;budget:HostedBudget;runner?:HostedRunner;verificationRunner?:HostedRunner;searchCostUsd?:number;webImports?:HostedWebImports;translations?:HostedTranslations;statistics?:HostedStatistics;timeoutMs?:number;images?:boolean;apiId?:string;candidateId?:string;fixtureMode?:'loopback-fixture';}
 export function createHostedApp(options:HostedOptions) {
   const app=express();
   const verificationAvailable=!!options.verificationRunner&&Number.isFinite(options.searchCostUsd)&&options.searchCostUsd!>0;
@@ -58,7 +58,7 @@ export function createHostedApp(options:HostedOptions) {
     app.post('/api/hosted/translation-batches',async(req,res,next)=>{try{res.json(await withDisconnect(res,signal=>options.translations!.batch(identity(req),ip(req),operationToken(req),req.body,signal)));}catch(e){next(e);}});
     app.post('/api/hosted/translation-batches/:op/cancel',(req,res,next)=>{try{emptyBody(req);res.json(options.translations!.cancel(identity(req),String(req.params.op),operationToken(req)));}catch(e){next(e);}});
   }
-  app.get('/api/hosted/capabilities',(req,res,next)=>{try{res.json({model:HOSTED_MODEL,providerId:'deepseek',supportsImages:imagesEnabled,supportsWebImport:!!options.webImports,supportsXCapture:!!options.webImports,supportsWebMediaRetry:!!options.webImports,supportsTranslation:!!options.translations,supportsWebSearch:verificationAvailable,searchAvailable:verificationAvailable,searchProvider:'bocha',available:!!options.runner,quota:options.budget.status(identity(req),ip(req))});}catch(e){next(e);}});
+  app.get('/api/hosted/capabilities',(req,res,next)=>{try{res.json({apiId:options.apiId||'unversioned',candidateId:options.candidateId||null,...(options.fixtureMode?{fixtureMode:options.fixtureMode,transport:options.fixtureMode}:{}),model:HOSTED_MODEL,providerId:'deepseek',supportsImages:imagesEnabled,supportsWebImport:!!options.webImports,supportsXCapture:!!options.webImports,supportsWebMediaRetry:!!options.webImports,supportsTranslation:!!options.translations,supportsWebSearch:verificationAvailable,searchAvailable:verificationAvailable,searchProvider:'bocha',available:!!options.runner,quota:options.budget.status(identity(req),ip(req))});}catch(e){next(e);}});
   app.post('/api/hosted/inquiry/stream',async(req,res,next)=>{
     let settle:ReturnType<HostedBudget['reserve']>|undefined;
     let budget:ReturnType<typeof requestDeadline>|undefined;

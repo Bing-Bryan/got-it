@@ -161,6 +161,8 @@ npm audit --audit-level=high
 
 `build` 包含 TypeScript 检查；`test:release` 使用临时数据目录验证构建页面、静态资源、本地服务和 API 边界，不调用模型。更多信息见 [发布检查清单](docs/release-checklist.md)、[发布验证结果](docs/release-results.md) 和 [安全说明](SECURITY.md)。
 
+托管成品单独通过 `npm run build:hosted` 构建。冻结与校验候选后，使用独立暂存运行时预装目标平台依赖，再从同源预览验收；免费冒烟 `npm run test:hosted-release` 不调用模型。维护者可在本地源码仓库查阅 `deploy/hosted-operations.md` 获取可复制命令与配对发布演练流程（该内部操作文档不在公开快照白名单中）。本机验收不代表生产发布或线上回退已验证。
+
 维护者使用 `npm run release:prepare` 生成公开白名单快照，再同步到独立的公开仓库。不要直接推送内部开发仓库；发布前需单独检查截图和文本是否适合公开。
 
 ## 许可证
