@@ -76,7 +76,7 @@ app.use(async(req,res)=>{
  if(frozenManifest&&!frozenManifest.files.some(x=>x.path===path.posix.join('frontend',rel))){res.status(404).end();return;}
  let st;try{st=await fs.stat(file);}catch{res.status(404).type('text/plain').send('Not found');return;}
  if(!st.isFile()){res.status(404).end();return;}
- const ext=path.extname(file).toLowerCase(),mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.json':'application/json','.wasm':'application/wasm','.png':'image/png','.jpg':'image/jpeg','.woff2':'font/woff2','.pdf':'application/pdf'}[ext];
+ const ext=path.extname(file).toLowerCase(),mime={'.html':'text/html; charset=utf-8','.md':'text/markdown; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.json':'application/json','.wasm':'application/wasm','.png':'image/png','.jpg':'image/jpeg','.woff2':'font/woff2','.pdf':'application/pdf'}[ext];
  if(!mime){res.status(415).type('text/plain').send('Unsupported resource type');return;}
  res.setHeader('Content-Type',mime);res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Cache-Control','no-store');res.setHeader('X-Got-It-Candidate-Id',frozenManifest.candidateId);res.sendFile(file);
 });

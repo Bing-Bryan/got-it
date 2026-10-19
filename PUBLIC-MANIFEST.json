@@ -1768,13 +1768,13 @@
     },
     {
       "path": "scripts/hosted-preview.mjs",
-      "bytes": 9218,
-      "sha256": "05ab6c0a6e25621df7dfea96d3de6c071b8b276aa438b1f8ed2e0bc23083986e"
+      "bytes": 9255,
+      "sha256": "60698d59eb38df8665212ff924136eaefb03f3547ba23008186577c8ee5bab87"
     },
     {
       "path": "scripts/hosted-release-smoke.mjs",
-      "bytes": 10014,
-      "sha256": "859541567c426c0b5555369ec3a7b9798cd8a5d8ce8458af2f78be4ffd43e03a"
+      "bytes": 10350,
+      "sha256": "7aa8919e049a371dd1b3e6c08b36c79e6e36f2b0f330bac7f4b802daf49383aa"
     },
     {
       "path": "scripts/licenses/tessdata-LICENSE",
