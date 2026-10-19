@@ -118,8 +118,8 @@
     },
     {
       "path": "src/ReadingStartPage.tsx",
-      "bytes": 15351,
-      "sha256": "c1748fdb69df255dc7bd9e131498772d6839ee40481957846502202f55a07783"
+      "bytes": 16306,
+      "sha256": "40b34c4c3b2fc96f1ab1c7235fa7588ce57e3eb02b6d1432f6ba4df40ddd56e0"
     },
     {
       "path": "src/SelectionActions.tsx",
@@ -888,13 +888,13 @@
     },
     {
       "path": "src/reading-start-page.css",
-      "bytes": 24832,
-      "sha256": "559085d12277dac594253a1fd61bcd8a2779ce043e5d71fdd0e64f555f058592"
+      "bytes": 30968,
+      "sha256": "aa6cd3923eefb6945f435061350ab658148956626080d1b9c92ed3852f87e0f3"
     },
     {
       "path": "src/reading-start-page.test.tsx",
-      "bytes": 28535,
-      "sha256": "053b4df256ee6c66b5e7b0e92c543a5574fa5fd29e7bb16270f41ded884703c6"
+      "bytes": 29542,
+      "sha256": "bf85cbd30f38a102d644c1bb308ccfdbb1fcd8e578927204da9856e4f8b7a0d5"
     },
     {
       "path": "src/request-status.test.tsx",
@@ -1878,8 +1878,8 @@
     },
     {
       "path": "docs/ui-guidelines.md",
-      "bytes": 16927,
-      "sha256": "e3ff33c0a7e05101cbec5b9e53b9c775cca2fc44df48d2f1e4f3807d6dc0ed7a"
+      "bytes": 18427,
+      "sha256": "3542f4f450d98bd77c65bbb4f66822701337752c516794a8d2edaa23ea17ae80"
     },
     {
       "path": "docs/ui/button-states.html",

@@ -141,6 +141,14 @@ MD/Web原文与译文使用#faf9f6纸面、#232429系统sans正文，桌面18px/
 
 PDF模块或组件失败时只替换阅读区，保留导航；提示区分模块加载与其他运行时错误。恢复操作先完成保存保护，失败可见且不得重载。PDF原页不着色。
 
+## Landing 视觉刷新（2026-10-19）
+
+起始页从暖米色收敛为中性暖白，保留纸张感但去掉明显黄味。作用域 token：纸面`#fbfbf8`、侧栏`#f2f2ee`、卡片`#ffffff`、线`#e2e2dc`/`#d0d0c8`、墨色`#1b1c19`、正文`#2d2e2a`、辅助`#5f6057`/`#6e6f66`。强调紫`#5058d4`、选区紫、警告琥珀和错误红保持语义；阅读区仍用`#faf9f6`纸面和`#232429`正文，不能跟随起始页 token 改变。顶部只用一层低透明度紫色柔光与中性渐变，不加纸张纹理。
+
+首访入场按标题、三行理解方式、添加区和页边知识贴错开淡入/上移，0.28–0.58s、无循环；回访只做0.3s级淡入。hover/按下/选中使用0.16–0.18s过渡，主按钮上浮1px、选中知识贴上浮1px并保留ring。`prefers-reduced-motion: reduce`下不播放动画、不保留位移，内容保持可见。动效只服务注意力和对应关系，不能延迟导入、返回或保存。
+
+顶栏 GitHub 源链接指向`https://github.com/Bing-Bryan/got-it`，新标签打开，`rel="noreferrer noopener"`，可访问名称为“在 GitHub 查看 got it 源码”。视觉上与本地 Codex/托管保存控件同高32px、同9px圆角、同浅紫hover与focus轮廓；≤560px只留32×32图标，名称保留在`aria-label`。外链不经过阅读库、模型或搜索，不改变起始页的保存/恢复边界。实页、reduced-motion、键盘和窄屏证据保存在本地验收记录；公开规则不依赖本地路径。
+
 ## 思源衬线阅读字体（2026-10-19）
 
 阅读正文、文章标题、表格、知识贴回答正文、起始页标题/介绍/摘录/知识贴正文和续读文章标题使用自托管的`Source Serif 4 Variable`与`Noto Serif SC Variable`，通过`--reading-font`应用。UI控件、知识贴标题行、输入框、代码块、PDF原页和原位译文保持原字体；代码的`pre`/`code`显式等宽，文章内嵌控件（如图片重试）通过`--interface-font`显式使用界面字体。字体按需加载：`font-display: swap`、unicode-range分片、失败回退系统衬线，不访问第三方字体服务。字体包与OFL许可在[public/fonts/licenses](../public/fonts/licenses/README.md)。

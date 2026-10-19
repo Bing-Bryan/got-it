@@ -34,7 +34,16 @@ export function ReadingStartPage({library,workspace,onFile,onContinue,onNote,onB
  async function locate(bookmark:ReadingBookmark){if(!onLocateBookmark)return;setLocating(bookmark.id);setLocateError('');try{await onLocateBookmark(bookmark);}catch(e){setLocateError(e instanceof Error?e.message:'无法定位原文，收藏仍保留。');}finally{setLocating('');}}
  const samples=HOSTED?<HostedSamples compact onOpen={library.importFile}/>:<div className="start-local-sample"><button type="button" disabled={disabled} onClick={()=>void library.importFile(new File([SAMPLE_MARKDOWN],'陪伴类AI产品分析·示例.md',{type:'text/markdown'}),true)}>陪伴类 AI 产品分析报告 · 示例</button><small>内置示例 · 数据仅作练习材料</small></div>;
  return <main className="reading-start-page" tabIndex={-1} inert={covered} aria-hidden={covered||undefined} aria-label="起始页">
-  <header className="start-header" ref={header}><button type="button" className="start-home-brand" aria-label="回到起始页" onClick={()=>document.querySelector<HTMLElement>('.reading-start-page')?.focus()}><img src={brandIcon} alt=""/><strong>got it</strong></button><div className="start-header-actions">{HOSTED?<HostedStorageControls save={()=>library.saveNow()} onRestore={onFile}/>:connectionControl}</div></header>
+  <header className="start-header" ref={header}>
+   <button type="button" className="start-home-brand" aria-label="回到起始页" onClick={()=>document.querySelector<HTMLElement>('.reading-start-page')?.focus()}><img src={brandIcon} alt=""/><strong>got it</strong></button>
+   <div className="start-header-actions">
+    <a className="start-header-link" href="https://github.com/Bing-Bryan/got-it" target="_blank" rel="noreferrer noopener" aria-label="在 GitHub 查看 got it 源码" title="在 GitHub 查看 got it 源码">
+     <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" focusable="false"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+     <span>GitHub</span>
+    </a>
+    {HOSTED?<HostedStorageControls save={()=>library.saveNow()} onRestore={onFile}/>:connectionControl}
+   </div>
+  </header>
   {!library.ready?<div className="start-loading"><p role="status">{library.error?'阅读库暂时无法打开':'正在打开阅读库…'}</p><ReadingLibraryStatus startPage hideHostedControls library={library} onImport={onFile}/></div>:
    <div className={`start-layout ${entry?'start-layout--returning':'start-layout--empty'}`}>
     <section className="start-center" aria-label="开始阅读"><div className="start-center-content">
