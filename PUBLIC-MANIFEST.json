@@ -128,8 +128,8 @@
     },
     {
       "path": "src/ReadingStartPage.tsx",
-      "bytes": 17647,
-      "sha256": "d737c4a54d24a2ff122c9831765b0cb3808f817b93976fbbc6229e4fe357df0c"
+      "bytes": 17641,
+      "sha256": "8374d3b2c8be8a3fd496e5fef885af388a1f466dd4cc413452ffc2abe9897360"
     },
     {
       "path": "src/SelectionActions.tsx",
@@ -923,8 +923,8 @@
     },
     {
       "path": "src/reading-start-page.test.tsx",
-      "bytes": 42778,
-      "sha256": "bff9037771ad791315eae16d38b013c416e14f0fe649756ca57746c99ca5fcdb"
+      "bytes": 42769,
+      "sha256": "4bc0eb266aa711d88e25472aedb8020faee682232115531dff4f5342787339d1"
     },
     {
       "path": "src/request-status.test.tsx",
@@ -1923,8 +1923,8 @@
     },
     {
       "path": "docs/ui-guidelines.md",
-      "bytes": 23802,
-      "sha256": "796bf63f65b3ec55f5020bf3c8f6e86716eb0c980f75bdd4d5e6333aed69d290"
+      "bytes": 23796,
+      "sha256": "694aae0c0125b5b7688ab3cca758b1a4b11d4f19255f3982eaa429aba701cf1a"
     },
     {
       "path": "docs/ui/button-states.html",
