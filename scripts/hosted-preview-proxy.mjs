@@ -6,6 +6,7 @@ export function proxyHostedRequest(req, res, apiPort) {
     ...req.headers,
     // The loopback API trusts this header only after the proxy replaces any client value.
     'x-forwarded-for': req.socket.remoteAddress || '127.0.0.1',
+    'x-gotit-client-ip': req.socket.remoteAddress || '127.0.0.1',
   };
   const upstream = httpRequest({
     host: '127.0.0.1',

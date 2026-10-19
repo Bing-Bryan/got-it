@@ -1,3 +1,6 @@
+import {randomUUID} from 'node:crypto';
+const transportIds=new Map<string,string>();
+function transportId(body:unknown){const key=JSON.stringify(body && typeof body==='object' ? [(body as any).operationId,(body as any).requestId] : body);let id=transportIds.get(key);if(!id){id=`${Date.now()}_${randomUUID()}`;transportIds.set(key,id);}return id;}
 import {crc32} from 'node:zlib';
 import {afterEach,describe,expect,it} from 'vitest';
 import {spawnSync} from 'node:child_process';
@@ -7,6 +10,7 @@ import {join} from 'node:path';
 import type {AddressInfo} from 'node:net';
 import {HostedBudget,HostedError,initializeBudget,MAX_REQUEST_USD} from './hosted-budget';
 import {createHostedApp} from './hosted-api';
+import {HostedAdmission} from './hosted-admission';
 import {hostedPrompt,parseHostedInquiry,type HostedRunner} from './hosted-model';
 import {FEATURE_KEYS,HostedStatistics} from './hosted-statistics';
 
@@ -18,13 +22,16 @@ const cleanup:Array<()=>void|Promise<void>>=[];
 afterEach(async()=>{for(const fn of cleanup.splice(0).reverse())await fn();});
 function files(){const dir=mkdtempSync(join(tmpdir(),'got-it-hosted-'));cleanup.push(()=>rmSync(dir,{recursive:true,force:true}));const path=join(dir,'budget.json');initializeBudget(path);return {dir,path};}
 function ledger(limit=3,now=Date.now){const f=files();const budget=new HostedBudget(f.path,limit,now);cleanup.push(()=>budget.close());return {...f,budget};}
-async function api(options:{runner?:HostedRunner;verificationRunner?:HostedRunner;searchCostUsd?:number;limit?:number;timeoutMs?:number;images?:boolean;fixtureMode?:'loopback-fixture'}={}){
+const generation='11111111-1111-4111-8111-111111111111';
+const clientIp='203.0.113.10';
+async function api(options:{runner?:HostedRunner;verificationRunner?:HostedRunner;searchCostUsd?:number;limit?:number;timeoutMs?:number;images?:boolean;fixtureMode?:'loopback-fixture';admission?:HostedAdmission}={}){
   const f=ledger(options.limit);const statistics=new HostedStatistics(join(f.dir,'stats.json'));
-  const server=createHostedApp({origin,budget:f.budget,statistics,...options}).listen(0,'127.0.0.1');await new Promise<void>(resolve=>server.once('listening',resolve));
+  const {admission:given,...rest}=options;const admission=given??new HostedAdmission({generation,trustedProxy:true,initialTokens:'capacity'});
+  const server=createHostedApp({origin,budget:f.budget,statistics,trustedProxy:true,...rest,admission}).listen(0,'127.0.0.1');await new Promise<void>(resolve=>server.once('listening',resolve));
   cleanup.push(()=>new Promise<void>(resolve=>{server.closeAllConnections();server.close(()=>resolve());}));
   const base=`http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  const send=(path:string,value:unknown=body,id=ids[0],extra:Record<string,string>={})=>fetch(base+path,{method:'POST',headers:{origin,'content-type':'application/json','x-trial-id':id,...extra},body:JSON.stringify(value)});
-  return {...f,send,base};
+  const send=(path:string,value:unknown=body,id=ids[0],extra:Record<string,string>={})=>fetch(base+path,{method:'POST',headers:{origin,'content-type':'application/json','x-trial-id':id,'x-hosted-generation':generation,'x-hosted-operation-id':transportId(value),'x-gotit-client-ip':clientIp,...extra},body:JSON.stringify(value)});
+  return {...f,send,base,admission,generation};
 }
 
 describe('hosted budget process lock',()=>{
@@ -109,7 +116,7 @@ describe('independent hosted API',()=>{
     const f=await api({runner,verificationRunner,searchCostUsd:.015,limit:.02});
     const first=await f.send('/api/hosted/inquiry/stream',{...body,intent:'verify'});expect(await first.text()).toContain('complete');
     const denied=await f.send('/api/hosted/inquiry/stream',{...body,intent:'verify'},ids[1]);expect(denied.status).toBe(429);expect(searchCalls).toBe(1);expect(modelCalls).toBe(0);
-    const state=JSON.parse(readFileSync(f.path,'utf8'));expect(Object.values(state.days as Record<string,{charged:number}>)[0].charged).toBeGreaterThanOrEqual(.015);
+    const state=JSON.parse(readFileSync(f.path,'utf8'));const day=Object.values(state.days as Record<string,{confirmed:number;reserved:number}>)[0];expect(day.confirmed+day.reserved).toBeGreaterThanOrEqual(.015);
     f.budget.close();const restored=new HostedBudget(f.path,.02);expect(()=>restored.reserve('fresh','new-ip',.015)).toThrow('今日体验额度已用完');restored.close();
   });
   it('retains search reservation after failure and reports search failure without model fallback',async()=>{
@@ -120,8 +127,8 @@ describe('independent hosted API',()=>{
     let normal=0,searches=0;const runner:HostedRunner=async()=>{normal++;return {response};};
     const verificationRunner:HostedRunner=async(req)=>{expect(req.intent).toBe('explain');expect(req.explanationMode).toBe('web');searches++;return {response:{...response,search:{status:'executed',completedSearches:1,failedSearches:0}}};};
     const f=await api({runner,verificationRunner,searchCostUsd:.015,limit:.03});
-    const web=await f.send('/api/hosted/inquiry/stream',{...body,intent:'explain',explanationMode:'web'});expect(await web.text()).toContain('"status":"executed"');expect(searches).toBe(1);expect(normal).toBe(0);
-    const local=await f.send('/api/hosted/inquiry/stream',{...body,intent:'explain',explanationMode:'local'});expect(await local.text()).toContain('"type":"complete"');expect(normal).toBe(1);expect(searches).toBe(1);
+    const web=await f.send('/api/hosted/inquiry/stream',{...body,requestId:'web-explain',intent:'explain',explanationMode:'web'});expect(await web.text()).toContain('"status":"executed"');expect(searches).toBe(1);expect(normal).toBe(0);
+    const local=await f.send('/api/hosted/inquiry/stream',{...body,requestId:'local-explain',intent:'explain',explanationMode:'local'});expect(await local.text()).toContain('"type":"complete"');expect(normal).toBe(1);expect(searches).toBe(1);
     const unconfigured=await api({runner});expect((await unconfigured.send('/api/hosted/inquiry/stream',{...body,intent:'explain',explanationMode:'web'})).status).toBe(503);expect(normal).toBe(1);
     const failed=await api({runner,searchCostUsd:.01,verificationRunner:async()=>{throw new HostedError('搜索失败',502,'search_failed');}});
     const failure=await(await failed.send('/api/hosted/inquiry/stream',{...body,intent:'explain',explanationMode:'web'})).text();expect(failure).toContain('"status":"failed"');expect(failure).not.toContain('"type":"complete"');expect(normal).toBe(1);
@@ -134,7 +141,7 @@ describe('independent hosted API',()=>{
   });
   it('cancels the upstream when the client disconnects',async()=>{
     let aborted=false;const f=await api({runner:async(_r,signal)=>new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>{aborted=true;reject(signal.reason);},{once:true}))});
-    const controller=new AbortController();const result=await fetch(f.base+'/api/hosted/inquiry/stream',{method:'POST',headers:{origin,'x-trial-id':ids[0],'content-type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
+    const controller=new AbortController();const result=await fetch(f.base+'/api/hosted/inquiry/stream',{method:'POST',headers:{origin,'x-trial-id':ids[0],'x-hosted-generation':generation,'x-hosted-operation-id':transportId(body),'x-gotit-client-ip':clientIp,'content-type':'application/json'},body:JSON.stringify(body),signal:controller.signal});
     await result.body!.getReader().read();controller.abort();await new Promise(r=>setTimeout(r,30));expect(aborted).toBe(true);
   });
 });
@@ -167,7 +174,7 @@ describe('hosted selected-region image transport',()=>{
     let seen:unknown;const failing:HostedRunner=async request=>{seen=request.hostedImage;throw new HostedError('controlled failure',502,'model_failed');};
     const charged=async(value:unknown)=>{const f=await api({runner:failing,images:true});await (await f.send('/api/hosted/inquiry/stream',value)).text();return JSON.parse(readFileSync(f.path,'utf8'));};
     const text=await charged(body);const image=await charged({...body,image:{data:pngHeader(1912,580)}});
-    const sum=(l:{days:Record<string,{charged:number}>})=>Object.values(l.days).reduce((s,d)=>s+d.charged,0);
+    const sum=(l:{days:Record<string,{confirmed:number;reserved:number}>})=>Object.values(l.days).reduce((s,d)=>s+d.confirmed+d.reserved,0);
     expect(sum(image)).toBeGreaterThan(sum(text));expect(seen).toMatchObject({width:1912,height:580});
   });
   it('rejects an empty region search before reserving any budget or quota',async()=>{

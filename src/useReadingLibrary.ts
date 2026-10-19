@@ -3,7 +3,7 @@ import { documentTranslationSource } from "./lib/document-translation";
 import { loadPdfTranslationSource } from "./lib/pdf-translation-loader";
 import { confidentlyChinese } from "./lib/translation-policy";
 import {HOSTED} from './lib/runtime-mode';
-import {track,markMaterial} from './lib/hosted-usage';
+import {confirmSavedAnswers,markMaterial,noteCount,track} from './lib/hosted-usage';
 import {browserStorageStatus,restoreBrowserBackup} from './lib/browser-library';
 import {normalizeXArticleUrl} from "./lib/x-article-url";
 import {X_CAPTURE_MAX_BYTES, type XArticleCapture} from "./lib/x-article-capture";
@@ -34,6 +34,7 @@ const PREFS_KEY = "got-it.model-preferences.v1";
 function savedLabel(w: Workspace) { if(HOSTED)return "已保存到当前浏览器"; if(w.document.kind==='web'&&w.document.web.extractorVersion==='x-fxtwitter-public-v1'){const missing=w.document.web.media.filter(m=>m.status!=='saved').length;if(missing)return `正文已保存到本机，${missing}张图片未保存`;}return w.document.kind === "web" && w.document.web.media.some(m => m.status !== "saved") ? "已保存，部分内容未导入" : "已保存到本机"; }
 const emptyList: LibraryList = { entries: [], activeId: null, warnings: [], nativePicker: true };
 const message = (e: unknown) => e instanceof TypeError && /fetch|network|load/i.test(e.message) ? HOSTED?"无法连接体验服务，请检查网络后重试。":"无法连接本机阅读服务，请确认服务正在运行后重试。" : e instanceof Error ? e.message : "本机阅读操作失败，请重试。";
+const staleGeneration = (e: unknown) => { const code = (e as { code?: string })?.code; return code === "operation_stale" || code === "upgrade_required"; };
 export function capturePosition(): ReadingPosition {
   const el = document.querySelector<HTMLElement>(".reader-scroll");
   if (!el) return { ratio: 0 };
@@ -147,6 +148,7 @@ export function useReadingLibrary(options: Options) {
     // Stopped while the PDF text layer was still being read locally: nothing was sent, nothing to mark.
     if(operation.readingPdf){setTranslationProgress("已停止，尚未发送任何正文");return;}
     setTranslationProgress(`${activity ? translationCount(activity.completed, activity.total) + "；" : ""}翻译已中断，可主动续译`);
+    noteCount('translation_cancelled');
     const state=latest.current.workspace.webTranslation;
     if(state) updateTranslation({...state,batchEpoch:(state.batchEpoch??0)+1,status:"interrupted",updatedAt:new Date().toISOString()});
     void api(`/entries/${operation.entryId}/translation-batches/${operation.id}/cancel`,{}).catch(()=>{});
@@ -179,9 +181,10 @@ export function useReadingLibrary(options: Options) {
     setTranslationRepairCount(0);
     const requestConfig=translationModelConfig(HOSTED);
     state=state ?? {version:TRANSLATION_CONTRACT_VERSION,id:crypto.randomUUID(),target:"zh",documentId:doc.id,sourceVersion:sourceVersion,status:"partial",modelConfig:requestConfig,units:{},updatedAt:new Date().toISOString()};
-    const operation:{id:string;roundId:string;entryId:string;cancelled:boolean}={id:crypto.randomUUID(),roundId:crypto.randomUUID(),entryId:e.id,cancelled:false};translationOperation.current=operation;setTranslationRunning(true);
+    const operation:{id:string;roundId:string;entryId:string;cancelled:boolean;roundToken?:string}={id:crypto.randomUUID(),roundId:crypto.randomUUID(),entryId:e.id,cancelled:false};translationOperation.current=operation;setTranslationRunning(true);
     reportTranslationActivity({phase:"preparing",completed:Object.keys(state.units).length,total:source.units.length,startedAt,phaseStartedAt:Date.now()});
     setTranslationProgress("");
+    noteCount('translation_started');
     const deadline=Date.now()+TRANSLATION_LIMITS.roundMs;
     try {
       const remaining=source.units.filter(unit=>state!.units[unit.id]===undefined);
@@ -196,8 +199,9 @@ export function useReadingLibrary(options: Options) {
         operation.id=`${state.id}-${Array.from(new Uint8Array(digest)).map(byte=>byte.toString(16).padStart(2,"0")).join("").slice(0,32)}`;
         if(operation.cancelled || translationOperation.current!==operation)return;
         reportTranslationActivity({phase:"waiting",completed:Object.keys(state.units).length,total:source.units.length,startedAt,phaseStartedAt:Date.now()});
-        const result=await api<{repairCount?:number;operationId:string;translationId:string;sourceVersion:string;modelConfig:WebTranslationState['modelConfig'];providerId?:WebTranslationState['providerId'];units:Record<string,string>}>(`/entries/${e.id}/translation-batches`,{qualityVersion:TRANSLATION_QUALITY_VERSION,operationId:operation.id,roundId:operation.roundId,revisionId:e.revisionId,sourceVersion:sourceVersion,translationId:state.id,unitIds:batch.map(u=>u.id),modelConfig:requestConfig});
+        const result=await api<{repairCount?:number;operationId:string;translationId:string;sourceVersion:string;modelConfig:WebTranslationState['modelConfig'];providerId?:WebTranslationState['providerId'];units:Record<string,string>;roundToken?:string}>(`/entries/${e.id}/translation-batches`,{qualityVersion:TRANSLATION_QUALITY_VERSION,operationId:operation.id,roundId:operation.roundId,revisionId:e.revisionId,sourceVersion:sourceVersion,translationId:state.id,unitIds:batch.map(u=>u.id),modelConfig:requestConfig,...(operation.roundToken?{roundToken:operation.roundToken}:{})});
         if(operation.cancelled || translationOperation.current!==operation || latest.current.workspace.document.id!==doc.id) return;
+        if(result.roundToken)operation.roundToken=result.roundToken;
         if(!isTranslationModelConfig(result.modelConfig,HOSTED)||(HOSTED&&result.providerId!=='deepseek') || result.operationId!==operation.id || result.translationId!==state.id || result.sourceVersion!==sourceVersion || Object.keys(result.units).length!==batch.length || batch.some(u=>typeof result.units[u.id]!=="string"))throw new Error("翻译结果与正文批次不匹配。");
         const candidate={...state,modelConfig:result.modelConfig,...(result.providerId?{providerId:result.providerId}:{}),modelConfigsUsed:unionTranslationModels(translationModelsUsed(state),result.modelConfig),units:{...state.units,...result.units},status:remaining.length?"partial" as const:"complete" as const,updatedAt:new Date().toISOString(),error:undefined};
         const checked=copyWebTranslation(candidate,doc.id,sourceVersion,source);
@@ -206,16 +210,27 @@ export function useReadingLibrary(options: Options) {
         if(Number.isInteger(result.repairCount)&&result.repairCount!>0&&result.repairCount!<=batch.length)setTranslationRepairCount(count=>count+result.repairCount!);
         reportTranslationActivity({phase:"saving",completed:Object.keys(state.units).length,total:source.units.length,startedAt,phaseStartedAt:Date.now()});
         const next=updateTranslation(state);await flush(next);
+        noteCount('translation_batch_success');
+        if(state.status==='complete')noteCount('translation_complete');
         if (readonlyRef.current || recoveryRef.current || blockedDraft.current || entryRef.current?.id!==e.id) throw new Error("翻译成果须先核对恢复记录，尚未确认保存。");
       }
-      if(!operation.cancelled && !remaining.length && state.status !== "complete") { reportTranslationActivity({phase:"saving",completed:Object.keys(state.units).length,total:source.units.length,startedAt,phaseStartedAt:Date.now()}); state={...state,status:"complete",error:undefined,updatedAt:new Date().toISOString()};await flush(updateTranslation(state)); }
+      if(!operation.cancelled && !remaining.length && state.status !== "complete") { reportTranslationActivity({phase:"saving",completed:Object.keys(state.units).length,total:source.units.length,startedAt,phaseStartedAt:Date.now()}); state={...state,status:"complete",error:undefined,updatedAt:new Date().toISOString()};await flush(updateTranslation(state)); noteCount('translation_complete'); }
       if(!operation.cancelled)setTranslationProgress(state.status==="complete"?(doc.kind==="web"&&doc.web.coverage==="public-excerpt"?"已保存公开正文译中已保存":pdfImagePages?`有文字的页面已译完并保存；${pdfImagePages} 页为图片，暂不能翻译`:"全文译中已保存"):"部分译文已保存，可主动续译");
     } catch(error) {
       if(operation.cancelled || translationOperation.current!==operation)return;
+      const code=(error as {code?:string}).code;
+      if(code==='busy'||code==='rate_limited'||code==='global_quota_exhausted'||code==='quota_exhausted'){
+        if(Object.keys(state.units).length)noteCount('translation_partial');
+        updateTranslation({...state,status:"interrupted",error:message(error),updatedAt:new Date().toISOString()});
+        setTranslationProgress(`${translationCount(Object.keys(state.units).length,source.units.length)}；${message(error)} 已完成部分已保留，请稍后主动续译。`);
+        return;
+      }
       if (readonlyRef.current || recoveryRef.current || blockedDraft.current || entryRef.current?.id!==e.id) { setTranslationProgress(`${translationCount(Object.keys(state.units).length,source.units.length)}；翻译成果待核对，尚未确认保存；已收到部分已保留。`);return; }
       // A batch the service reported as failed gets a fresh operation id on resume (the hosted service refuses
       // ids that already failed); a lost response keeps its id so a completed result can be reused without a new charge.
       const rejected=typeof (error as {status?:unknown})?.status==="number";
+      noteCount('translation_failed');
+      if(Object.keys(state.units).length)noteCount('translation_partial');
       updateTranslation({...state,...(rejected?{batchEpoch:(state.batchEpoch??0)+1}:{}),status:"failed",error:message(error),updatedAt:new Date().toISOString()});setTranslationProgress(`${translationCount(Object.keys(state.units).length,source.units.length)}；${message(error)}`);
       if(!savePaused.current)void flush().catch(()=>{});
     } finally { if(translationOperation.current===operation){translationOperation.current=null;setTranslationRunning(false);reportTranslationActivity(null);} }
@@ -298,6 +313,7 @@ export function useReadingLibrary(options: Options) {
         const next = await api<LibraryEntry>(`/entries/${e.id}/save`, { expectedVersion: e.version, revisionId: e.revisionId, workspace: w, position: p });
         if(HOSTED)void browserStorageStatus(true);
         remember(next); savePaused.current = false; saved.current = fp; setError("");
+        confirmSavedAnswers(w.inquiries.flatMap(inquiry => inquiry.messages.flatMap(message => message.completion === 'complete' && message.requestId ? [message.requestId] : [])));
         const currentPosition = position();
         const hasNewerChanges = fingerprint(latest.current.workspace, currentPosition) !== fp;
         setStatus(hasNewerChanges ? "保存中…" : savedLabel(w));
@@ -411,11 +427,29 @@ export function useReadingLibrary(options: Options) {
     const sample=HOSTED?sampleForFile(file):undefined;
     const annotate=(w:Workspace):Workspace=>sample?{...w,document:{...w.document,id:`sample-${sample.id}-${sample.sha256}`,contentHash:sample.sha256}}:example?{...w,document:{...w.document,isDemo:true}}:w;
     if (busyRef.current || !ready) return;
-    // A file drop is a new material intent even while the homepage URL request is in flight.
     if(webImportInline && webJob?.status==='reading')void cancelWebImport(true);
     const sequence = ++importSequence.current;
-    try { if(HOSTED && file.name.endsWith('.gotit')){await preserve();track('restore');await restoreBrowserBackup(await file.text());track('restore-success');await refresh();await initialize();return;} if(file.name.toLowerCase().endsWith('.pdf')){if(file.size>50*1024*1024)throw new Error('PDF 须不超过 50 MiB。');await transition(async()=>{const selected:SelectedFile=await (await libraryBinary('/pdf?filename='+encodeURIComponent(file.name),new Blob([file],{type:'application/pdf'}))).json();await addWorkspace(annotate(selected.workspace!),selected.selectionId);}, true);return;} const w = await readDocumentFile(file); if (sequence !== importSequence.current) return; await transition(() => addWorkspace(annotate(w)), true); }
-    catch (e) { if(HOSTED&&file.name.endsWith('.gotit'))track('restore-failed'); if (sequence === importSequence.current) { setImportError(true); setError(message(e)); } }
+    const restoring=HOSTED&&file.name.endsWith('.gotit');
+    const material=sample||example?'sample':file.name.toLowerCase().endsWith('.pdf')?'pdf':'markdown';
+    let reported=false;
+    if(!restoring)noteCount('import_started',material);
+    const add=async(w:Workspace,selectionId?:string)=>{
+      try { await addWorkspace(annotate(w),selectionId); reported=true;noteCount('import_success',material); }
+      catch(e){reported=true;noteCount('import_failed',material);throw e;}
+    };
+    try {
+      if(restoring){await preserve();track('restore');await restoreBrowserBackup(await file.text());track('restore-success');await refresh();await initialize();return;}
+      if(file.name.toLowerCase().endsWith('.pdf')){
+        if(file.size>50*1024*1024)throw new Error('PDF 须不超过 50 MiB。');
+        await transition(async()=>{try { const selected:SelectedFile=await (await libraryBinary('/pdf?filename='+encodeURIComponent(file.name),new Blob([file],{type:'application/pdf'}))).json();await add(selected.workspace!,selected.selectionId); } catch(e){if(!reported){reported=true;noteCount('import_failed',material);}throw e;}},true);return;
+      }
+      const w=await readDocumentFile(file);
+      if(sequence!==importSequence.current){noteCount('import_cancelled',material);return;}
+      await transition(()=>add(w),true);
+    } catch(e){
+      if(restoring)track('restore-failed');else if(!reported)noteCount('import_failed',material);
+      if(sequence===importSequence.current){setImportError(true);setError(message(e));}
+    }
   }
   async function choose(relink = false) {
     await transition(async () => {
@@ -495,6 +529,7 @@ export function useReadingLibrary(options: Options) {
     if (webPoll.current) { clearTimeout(webPoll.current); webPoll.current = null; }
     setWebJob(null); setWebError(""); if (close) setWebImportOpen(false);
     if (operation) {
+      noteCount('import_cancelled', operation.capture ? 'x' : 'web');
       try { await api(`/web-imports/${operation.operationId}/cancel`, {}); }
       catch { if (!close && !webOperation.current) setWebError("读取已停止，本机临时资源清理未确认；可重新读取，旧结果不会加入。"); }
     }
@@ -503,7 +538,7 @@ export function useReadingLibrary(options: Options) {
     if (webOperation.current?.operationId !== operationId) return;
     if (result.operationId !== operationId) throw new Error("读取结果不匹配，请重新读取。");
     setWebJob(result);
-    if (result.status === "failed" || result.status === "expired") setWebError(result.error || result.progress);
+    if (result.status === "failed" || result.status === "expired") { setWebError(result.error || result.progress); noteCount('import_failed', webOperation.current.capture ? 'x' : 'web'); }
   }
   async function readWebUrl(input: string, autoOpen = false, capture?: XArticleCapture, presentation: 'dialog'|'inline' = 'dialog') {
     if (!ready || busyRef.current) return;
@@ -515,17 +550,29 @@ export function useReadingLibrary(options: Options) {
     if (webPoll.current) clearTimeout(webPoll.current);
     const operation = { operationId: crypto.randomUUID(), creationKey: crypto.randomUUID(), url, autoOpen, autoStarted: false, capture };
     webOperation.current = operation; setWebError("");
+    noteCount('import_started', capture ? 'x' : 'web');
     setWebJob({ operationId: operation.operationId, status: "reading", progress: "正在读取文章…" });
     if (previous) void api(`/web-imports/${previous.operationId}/cancel`, {}).catch(() => {});
-    try { receiveWebJob(await api<WebImportJob>(capture ? "/x-article-imports" : "/web-imports", { ...(capture ? {capture} : {url}), operationId: operation.operationId }), operation.operationId); }
-    catch (e) { if (webOperation.current === operation) { setWebError(message(e)); setWebJob({ operationId: operation.operationId, status: "failed", progress: "读取失败" }); } }
+    try {
+      const send = () => api<WebImportJob>(capture ? "/x-article-imports" : "/web-imports", { ...(capture ? {capture} : {url}), operationId: operation.operationId });
+      let result: WebImportJob;
+      try { result = await send(); }
+      catch (error) {
+        // A deploy clears the in-memory generation. The rejected request never
+        // started work, so retrying once with the refreshed generation is safe.
+        if (!staleGeneration(error) || webOperation.current !== operation) throw error;
+        result = await send();
+      }
+      receiveWebJob(result, operation.operationId);
+    }
+    catch (e) { if (webOperation.current === operation) { setWebError(message(e)); setWebJob({ operationId: operation.operationId, status: "failed", progress: "读取失败" }); noteCount('import_failed', capture ? 'x' : 'web'); } }
   }
   useEffect(() => {
     if (webJob?.status !== "reading") return;
     const operationId = webJob.operationId;
     webPoll.current = setTimeout(async () => {
       try { receiveWebJob(await api<WebImportJob>(`/web-imports/${operationId}`), operationId); }
-      catch (e) { if (webOperation.current?.operationId === operationId) { setWebError(message(e)); setWebJob({ operationId, status: "failed", progress: "读取失败" }); } }
+      catch (e) { if (webOperation.current?.operationId === operationId) { setWebError(message(e)); setWebJob({ operationId, status: "failed", progress: "读取失败" }); noteCount('import_failed', webOperation.current.capture ? 'x' : 'web'); } }
     }, 450);
     return () => { if (webPoll.current) clearTimeout(webPoll.current); };
   }, [webJob]);
@@ -536,21 +583,24 @@ export function useReadingLibrary(options: Options) {
     if (webPoll.current) clearTimeout(webPoll.current);
     if (operation) void api(`/web-imports/${operation.operationId}/cancel`, {}).catch(() => {});
   }, []);
-  async function confirmWebImport(allowPartial = false) {
+  type WebConfirmOutcome = "opened" | "stale" | "failed" | "inactive";
+  async function confirmWebImport(allowPartial = false): Promise<WebConfirmOutcome> {
     const operation = webOperation.current, job = webJob;
-    if (!operation || !job || !["ready", "existing"].includes(job.status) || job.operationId !== operation.operationId) return;
+    if (!operation || !job || !["ready", "existing"].includes(job.status) || job.operationId !== operation.operationId) return "inactive";
+    let outcome: WebConfirmOutcome = "failed";
     await transition(async () => {
       setWebError("");
+      let opened = false;
       try {
         let checked: WebImportJob;
         const invalidateCandidate = () => { if (webOperation.current === operation) { webOperation.current = null; setWebJob(null); } };
         try { checked = await api<WebImportJob>(`/web-imports/${operation.operationId}`); }
         catch (error) {
           // This GET has no entry/resource lookup: 404 means the temporary job is gone.
-          if ((error as { status?: number })?.status === 404) invalidateCandidate();
+          if ((error as { status?: number })?.status === 404 || (error as { code?: string })?.code === "web_job_missing") { invalidateCandidate(); outcome = "stale"; }
           throw error;
         }
-        if (["expired", "cancelled"].includes(checked.status)) { invalidateCandidate(); throw new Error(operation.capture ? "捕获作业已失效，请重新选择 X 文章文件。" : "读取作业已失效，请点击“阅读文章”重新读取。"); }
+        if (["expired", "cancelled"].includes(checked.status)) { invalidateCandidate(); outcome = "stale"; throw new Error(operation.capture ? "捕获作业已失效，请重新选择 X 文章文件。" : "读取作业已失效，请点击“阅读文章”重新读取。"); }
         if (webOperation.current !== operation || checked.operationId !== operation.operationId || !["ready", "existing"].includes(checked.status)) throw new Error("预览已失效，请重新读取。");
         if (!checked.entryId && (!checked.preview || checked.preview.candidateId !== job.preview?.candidateId)) throw new Error("预览已失效，请重新读取。");
         if (checked.entryId) await api<LibraryEntry>(`/entries/${checked.entryId}`);
@@ -558,13 +608,17 @@ export function useReadingLibrary(options: Options) {
         if (recoveryRef.current || blockedDraft.current || savePaused.current) throw new Error("当前阅读成果尚未完成保存或核对，文章尚未打开。请先处理当前阅读记录后重试。");
         const e = checked.entryId ? await api<LibraryEntry & {webImportCreated?:boolean}>(`/entries/${checked.entryId}`) : await api<LibraryEntry & {webImportCreated?:boolean}>(`/web-imports/${operation.operationId}/confirm`, { candidateId: checked.preview!.candidateId, creationKey: operation.creationKey, allowPartial });
         install(await api<LibraryEntry>(`/entries/${e.id}/activate`, {}));
+        opened = true;
+        outcome = "opened";
+        noteCount(checked.entryId ? 'import_existing' : 'import_success', operation.capture ? 'x' : 'web');
         setWebImportSuccess(sequence => sequence + 1);
         try { desiredFragment.current = decodeURIComponent(new URL(operation.url).hash.slice(1)) || null; } catch { desiredFragment.current = null; }
         webOperation.current = null; setWebJob(null); setWebImportOpen(false);
         await refresh(); await checkSource();
         if (e.webImportCreated === true && autoTranslate) { const text=e.workspace.document.kind === "web" ? buildTranslationSource(e.workspace.document.markdown,e.workspace.document.web).units.map(u=>u.text).join(" ") : ""; if(confidentlyEnglish(text)) setTimeout(()=>{ if(entryRef.current?.id===e.id)void translate(); },0); }
-      } catch (e) { setWebError(message(e)); throw e; }
+      } catch (e) { if (!opened) noteCount('import_failed', operation.capture ? 'x' : 'web'); setWebError(message(e)); throw e; }
     });
+    return outcome;
   }
   async function readXArticleFile(file: Pick<File, "size" | "text">) {
     if (!ready || busyRef.current) return;
@@ -578,7 +632,11 @@ export function useReadingLibrary(options: Options) {
       if (!capture || capture.format !== "got-it-x-article" || capture.version !== 1 || typeof capture.url !== "string") throw new Error("请选择 got-it 书签生成的 X 文章文件。");
       const operation = webOperation.current;
       const doc = webJob?.preview?.workspace.document;
-      if (operation?.capture && capture.url === operation.url && webJob && ["ready", "existing"].includes(webJob.status) && !(doc?.kind === "web" && doc.web.media.some(m=>m.status!=="saved"))) { await confirmWebImport(); return; }
+      if (operation?.capture && capture.url === operation.url && webJob && ["ready", "existing"].includes(webJob.status) && !(doc?.kind === "web" && doc.web.media.some(m=>m.status!=="saved"))) {
+        const outcome = await confirmWebImport();
+        if (outcome === "stale") await readWebUrl(capture.url, true, capture);
+        return;
+      }
       await readWebUrl(capture.url, true, capture);
     } catch (error) { if(sequence !== captureSequence.current)return; setWebError(error instanceof SyntaxError ? "文章文件不是有效 JSON，请重新捕获。" : message(error)); }
   }
@@ -589,7 +647,12 @@ export function useReadingLibrary(options: Options) {
     const missing = doc?.kind === "web" && doc.web.extractorVersion !== "x-fxtwitter-public-v1" && doc.web.media.some(media => media.status !== "saved");
     // Saving retries keep the same candidate and idempotency key; extraction failures start afresh.
     if (operation && (normalizeXArticleUrl(input.trim()) ?? safeWebUrl(input.trim())) === operation.url && !missing && webJob && ["ready", "existing"].includes(webJob.status)) {
-      await confirmWebImport();
+      const outcome = await confirmWebImport();
+      if (outcome === "stale") {
+        // The preview belonged to an earlier API process. Start a fresh read
+        // in the same retry instead of asking the user to click a second time.
+        await readWebUrl(input, true, undefined, presentation);
+      }
       return;
     }
     await readWebUrl(input, true,undefined,presentation);

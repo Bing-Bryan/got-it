@@ -10,6 +10,8 @@ import {hostedLocalWebProxyEnabled} from './hosted-local-web-proxy';
 import {HostedResourceTickets} from './hosted-resource-tickets';
 import {HostedTranslations,createHostedTranslationModel} from './hosted-translations';
 import {HostedStatistics} from './hosted-statistics';
+import {HostedAdmission} from './hosted-admission';
+import {HostedAlerts} from './hosted-alerts';
 import {hostedExternalAdapterPolicy} from './hosted-external-adapters';
 
 // Files MUST live on a durable, private volume. No silent in-memory fallback.
@@ -27,6 +29,9 @@ if(process.argv.includes('--init-budget')){
   const dailyLimit=Number(process.env.HOSTED_DAILY_BUDGET_USD||3);
   const budget=new HostedBudget(path,dailyLimit);
   const statistics=new HostedStatistics(statisticsPath);
+  const alerts=new HostedAlerts(budget,{url:process.env.HOSTED_ALERT_WEBHOOK_URL,authorization:process.env.HOSTED_ALERT_WEBHOOK_AUTHORIZATION,format:process.env.HOSTED_ALERT_WEBHOOK_FORMAT,signingSecret:process.env.HOSTED_ALERT_WEBHOOK_SIGNING_SECRET,appId:process.env.HOSTED_ALERT_FEISHU_APP_ID,appSecret:process.env.HOSTED_ALERT_FEISHU_APP_SECRET,recipientOpenId:process.env.HOSTED_ALERT_FEISHU_RECIPIENT_OPEN_ID});
+  alerts.start();
+  const admission=new HostedAdmission({trustedProxy:process.env.HOSTED_TRUSTED_PROXY==='loopback'});
   const adapterPolicy=hostedExternalAdapterPolicy(process.env);
   const modelBaseUrl=hostedModelBaseUrl(process.env);
   const runner=process.env.DEEPSEEK_API_KEY?createHostedRunner(process.env.DEEPSEEK_API_KEY,modelBaseUrl):undefined;
@@ -39,14 +44,14 @@ if(process.argv.includes('--init-budget')){
   const stateDir=join(dirname(path),'hosted-private-state');
   const webImports=new HostedWebImports(new HostedResourceTickets(stateDir),{allowLocalWebProxy});
   const translations=adapterPolicy.translationsEnabled&&process.env.DEEPSEEK_API_KEY?new HostedTranslations(budget,createHostedTranslationModel(process.env.DEEPSEEK_API_KEY)):undefined;
-  const app=createHostedApp({origin,budget,statistics,runner,verificationRunner,searchCostUsd,webImports,translations,images:process.env.HOSTED_ENABLE_IMAGES==='1',apiId:process.env.HOSTED_API_ID,candidateId:process.env.HOSTED_CANDIDATE_ID,fixtureMode:process.env.NODE_ENV==='test'&&adapterPolicy.fixtureModel?'loopback-fixture':undefined});
+  const app=createHostedApp({origin,budget,statistics,admission,alerts,opsToken:process.env.HOSTED_OPS_TOKEN,trustedProxy:process.env.HOSTED_TRUSTED_PROXY==='loopback',runner,verificationRunner,searchCostUsd,webImports,translations,images:process.env.HOSTED_ENABLE_IMAGES==='1',apiId:process.env.HOSTED_API_ID,candidateId:process.env.HOSTED_CANDIDATE_ID,fixtureMode:process.env.NODE_ENV==='test'&&adapterPolicy.fixtureModel?'loopback-fixture':undefined});
   const port=Number(process.env.HOSTED_PORT||8788);
   const server=app.listen(port,'127.0.0.1',()=>console.info(`Hosted API listening on loopback port ${port}; model ${runner?'configured':'unavailable'}`));
   // Do not release the process lock while upstream calls may still be running.
   // Every exit path, including the forced timeout, releases the lock; reservations are
   // persisted before upstream calls, so an abandoned call can only over-count.
-  process.on('exit',()=>{try{budget.close();}catch{/* best effort on exit */}});
+  process.on('exit',()=>{statistics.close();try{budget.close();}catch{/* best effort on exit */}});
   let stopping=false;
-  const stop=()=>{if(stopping)return;stopping=true;server.close(()=>process.exit(0));server.closeIdleConnections();setTimeout(()=>process.exit(1),65_000).unref();};
+  const stop=()=>{if(stopping)return;stopping=true;statistics.close();server.close(()=>process.exit(0));server.closeIdleConnections();setTimeout(()=>process.exit(1),65_000).unref();};
   process.on('SIGINT',stop);process.on('SIGTERM',stop);
 }

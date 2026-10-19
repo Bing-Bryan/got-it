@@ -3,7 +3,7 @@ import {InquiryStreamError} from './lib/inquiry-stream';
 import {loadSampleImages} from './lib/browser-library';
 import {HOSTED,hostedCapabilities} from './lib/runtime-mode';
 import {HostedSettings,HostedSamples,HostedSendDisclosure} from './HostedControls';
-import {installUsage,track,markMaterial} from './lib/hosted-usage';
+import {installUsage,track,markMaterial,noteAiStarted} from './lib/hosted-usage';
 import {revealBookmarkRanges} from './lib/bookmark-navigation';
 import { selectionContext,selectionRequestError } from './lib/inquiry-selection';
 import { DocumentBookmarks } from './DocumentBookmarks';
@@ -279,7 +279,7 @@ function App() {
     const current=bookmarkDraftRef.current;
     if(current&&bookmarkSelectionOperation.current?.draft===current&&bookmarkSelectionOperation.current.operationId===request.operationId&&library.entry&&bookmarkPosition({entryId:library.entry.id,revisionId:library.entry.revisionId,anchor:current.anchor})===bookmarkPosition(request)){setBookmarkDraft(null);setSelectionDraft(null);setInquirySelectionError('');window.getSelection()?.removeAllRanges();}
   }
-  useEffect(()=>{if(HOSTED&&library.entry)markMaterial(workspace.document.id.startsWith('sample-')?'sample':workspace.document.kind==='pdf'?'pdf':'markdown');},[library.entry?.id,workspace.document.id]);
+  useEffect(()=>{if(HOSTED&&library.entry){const doc=workspace.document;markMaterial(doc.id.startsWith('sample-')?'sample':doc.kind==='pdf'?'pdf':doc.kind==='web'?doc.web.extractorVersion.startsWith('x-')?'x':'web':'markdown');}},[library.entry?.id,workspace.document.id]);
   const saveStatus = useSaveStatus(library.status, workspace.document.id + ":" + documentLoadId);
 
   const [sampleImages,setSampleImages]=useState<Record<string,string>>({});
@@ -567,6 +567,7 @@ function App() {
       if(request.history?.length){const rounds=request.history.filter(m=>m.role==='user').length;track(rounds>=6?'follow-up-6plus':'follow-up-2to5');}
       track(request.intent==='verify'?'verify':request.readingScope==='document'?'document-ask':request.history?.length?'follow-up':request.intent==='ask'?'ask':'explain');
       const requestId = newId("request"), messageId = newId("message"), controller = new AbortController();
+      noteAiStarted(requestId);
       const operation = request.operation ?? (request.intent === "why" ? "explain" : request.intent);
       const imageAnchor=workspaceRef.current.inquiries.find(i=>i.id===inquiryId)?.anchor.pdf;
       const image=request.image ?? (imageAnchor?.kind==="region" && library.entry ? {entryId:library.entry.id,fileHash:imageAnchor.fileHash,cropId:imageAnchor.cropId!} : undefined);

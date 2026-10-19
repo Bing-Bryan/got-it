@@ -55,14 +55,39 @@ describe.each(['dialog','inline'] as const)('one-action web reading in %s',prese
  it('keeps one candidate/key for save retry and blocks dismissal during commit',async()=>{
   complete();completeDispatch();await mount();let fail=true;const normal=request.getMockImplementation()!;request.mockImplementation((p,b)=>{if(String(p).endsWith('/confirm')&&fail){fail=false;throw Error('disk save failed');}return normal(p,b);});await act(async()=>control.readWebArticle('https://claude.dev/article',presentation));expect(control.webError).toContain('disk save failed');expect(control.webImportSuccess).toBe(0);expect(current.document.isDemo).toBe(true);let commit!:(e:LibraryEntry)=>void;request.mockImplementation((p,b)=>String(p).endsWith('/confirm')?new Promise(r=>commit=r):normal(p,b));let retry!:Promise<void>;await act(async()=>{retry=control.readWebArticle('https://claude.dev/article',presentation);});expect(control.busy).toBe(true);await act(async()=>control.cancelWebImport(true));expect(control.webImportOpen).toBe(presentation==='dialog');await act(async()=>{commit(entry);await retry;});expect(current.document.kind).toBe('web');const confirms=request.mock.calls.filter(([p])=>String(p).endsWith('/confirm'));expect(confirms).toHaveLength(2);expect(confirms[0][1].creationKey).toBe(confirms[1][1].creationKey);expect(request.mock.calls.filter(([p])=>p==='/web-imports')).toHaveLength(1);
  });
- it.each(['missing','expired','cancelled'])('starts afresh only after the saved candidate job is definitely %s',async reason=>{
+ it.each(['missing','expired','cancelled'])('recovers a definitely %s candidate in one retry',async reason=>{
   complete();completeDispatch();await mount();let fail=true;const normal=request.getMockImplementation()!;
   request.mockImplementation((p,b)=>{if(String(p).endsWith('/confirm')&&fail){fail=false;throw Error('response lost');}return normal(p,b);});
   await act(async()=>control.readWebArticle('https://claude.dev/article',presentation));expect(control.webJob?.status).toBe('ready');
-  request.mockImplementation((p,b)=>{if(String(p).startsWith('/web-imports/')&&!String(p).endsWith('/cancel')){if(reason==='missing')throw Object.assign(Error('job missing'),{status:404});return {...job,status:reason};}if(p==='/web-imports'){job={operationId:b!.operationId,status:'existing',progress:'已保存',entryId:entry.id};return job;}return dispatch(p,b);});
-  await act(async()=>control.readWebArticle('https://claude.dev/article',presentation));expect(control.webJob).toBeNull();expect(current.document.isDemo).toBe(true);
-  request.mockImplementation((p,b)=>{if(p==='/web-imports'){job={operationId:b!.operationId,status:'existing',progress:'已保存',entryId:entry.id};return job;}return dispatch(p,b);});
-  await act(async()=>control.readWebArticle('https://claude.dev/article',presentation));expect(current.document.kind).toBe('web');expect(request.mock.calls.filter(([p])=>p==='/web-imports')).toHaveLength(2);expect(request.mock.calls.filter(([p])=>String(p).endsWith('/confirm'))).toHaveLength(1);
+  await act(async()=>new Promise(r=>setTimeout(r,20)));expect(control.busy).toBe(false);
+  let stale=true;
+  request.mockImplementation((p,b)=>{if(String(p).startsWith('/web-imports/')&&!String(p).endsWith('/cancel')){if(stale){stale=false;if(reason==='missing')throw Object.assign(Error('job missing'),{status:404});return {...job,status:reason};}return job;}if(p==='/web-imports'){job={operationId:b!.operationId,status:'existing',progress:'已保存',entryId:entry.id};return job;}return dispatch(p,b);});
+  await act(async()=>control.readWebArticle('https://claude.dev/article',presentation));
+  await act(async()=>new Promise(r=>setTimeout(r,20)));
+  expect(current.document.kind).toBe('web');expect(control.webError).toBe('');
+  expect(request.mock.calls.filter(([p])=>p==='/web-imports')).toHaveLength(2);
+  expect(request.mock.calls.filter(([p])=>String(p).endsWith('/confirm'))).toHaveLength(1);
+ });
+ it('recovers a stale ready preview and stale generation in one retry after a deploy',async()=>{
+  complete();completeDispatch();await mount();await act(async()=>control.readWebUrl('https://claude.dev/article'));expect(control.webJob?.status).toBe('ready');
+  let staleConfirm=true,stalePost=true;
+  request.mockImplementation((p,b)=>{
+   if(p==='/web-imports'){
+    if(stalePost){stalePost=false;throw Object.assign(Error('服务已重启'),{status:409,code:'operation_stale'});}
+    job={operationId:b!.operationId,status:'ready',progress:'正文已读取',preview:{candidateId:'candidate',workspace:entry.workspace}};return job;
+   }
+   if(String(p).startsWith('/web-imports/')&&!String(p).endsWith('/cancel')){
+    if(staleConfirm){staleConfirm=false;throw Object.assign(Error('读取作业不存在、已过期或服务已重启'),{status:404,code:'web_job_missing'});}
+    return job;
+   }
+   return dispatch(p,b);
+  });
+  await act(async()=>control.readWebArticle('https://claude.dev/article',presentation));
+  await act(async()=>new Promise(r=>setTimeout(r,30)));
+  expect(current.document.kind).toBe('web');
+  expect(request.mock.calls.filter(([p])=>p==='/web-imports')).toHaveLength(3);
+  expect(request.mock.calls.filter(([p])=>String(p).endsWith('/confirm'))).toHaveLength(1);
+  expect(control.webError).toBe('');
  });
  it('opens a duplicate directly without confirm or automatic model requests',async()=>{
   complete();await mount();request.mockImplementation((p,b)=>{if(p==='/web-imports'){job={operationId:b!.operationId,status:'existing',progress:'已保存',entryId:entry.id};return job;}return dispatch(p,b);});await act(async()=>control.readWebArticle('https://claude.dev/article',presentation));expect(current.document.kind).toBe('web');expect(control.webImportSuccess).toBe(1);expect(request.mock.calls.some(([p])=>String(p).endsWith('/confirm')||String(p).includes('translation-batches'))).toBe(false);

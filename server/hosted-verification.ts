@@ -93,7 +93,7 @@ export function normalizeHostedWebExplanation(data:unknown,candidates:ReadCandid
 }
 export function createHostedVerificationRunner(apiKey:string,search:HostedSearch,reader:SourceReader=readPublicPage):HostedRunner{
  const model=createHostedJsonModel(apiKey);
- return async(request,signal,onDelta,onProgress)=>{
+ return async(request,signal,onDelta,onProgress,track)=>{
   const webExplanation=request.intent==='explain'&&request.explanationMode==='web';
   signal.throwIfAborted();onProgress?.('search-started');
   // Server constructs one bounded query; the client cannot submit URLs or API options.
@@ -107,7 +107,8 @@ export function createHostedVerificationRunner(apiKey:string,search:HostedSearch
    const child=AbortSignal.any([total,AbortSignal.timeout(READ_LIMITS.pageMs)]);
    try{
     if(/\.pdf$/i.test(new URL(c.url).pathname))throw new ReadError('unsupported','PDF来源暂不可直接读取');
-    const page=await abortable(reader(c.url,child),child);signal.throwIfAborted();pages.set(c.url,page);return {...c,text:page.text,status:'read' as const};
+    const reading=reader(c.url,child);track?.(reading);
+    const page=await abortable(reading,child);signal.throwIfAborted();pages.set(c.url,page);return {...c,text:page.text,status:'read' as const};
    }catch(error){signal.throwIfAborted();const status=error instanceof ReadError?error.kind:'unavailable';errors.set(c.url,status);return {...c,text:'',status};}
   }));
   signal.throwIfAborted();const prompt=webExplanation?hostedWebExplanationPrompt(request,candidates):hostedVerificationPrompt(request,candidates);

@@ -47,3 +47,33 @@ it('reports unsupported content only after identity validation, while unsafe URL
  for(const data of[{markdown:'| A |\n| --- |\n| [unsafe](javascript:alert(1)) |'},{markdown:123},{markdown:'safe',extra:'unexpected'}]){const v=articleEntities();atomic(v,'MARKDOWN',data);try{adaptXPublicPost(v,source);throw Error('unexpected acceptance');}catch(e){expect((e as any).code).toBe('x_public_structure');}}
 });
 it('counts a safely parsed table with real cell text as complete public article body, but rejects empty/system-only content',()=>{for(const [markdown,accepted] of [['| Heading | Value |\n| --- | --- |\n| Name | Safe text |',true],['| | |\n| --- | --- |\n| | |',false]] as const){const v=articleEntities();v.status.article.content.blocks=[];atomic(v,'MARKDOWN',{markdown});if(accepted)expect(adaptXPublicPost(v,source).nodes[0].type).toBe('table');else expect(()=>adaptXPublicPost(v,source)).toThrow();}for(const [type,data] of [['TWEET',{tweetId:'456'}],['DIVIDER',{}]] as const){const v=articleEntities();v.status.article.content.blocks=[];atomic(v,type,data);expect(()=>adaptXPublicPost(v,source)).toThrow();}});
+it('keeps inline emoji text and blank spacers while downgrading an unlinkable relative source annotation',async()=>{
+ const v=articleEntities();
+ v.status.article.content.blocks=[
+  {key:'emoji-heading',type:'header-two',text:'⚠️ 注意',data:{},inlineStyleRanges:[],entityRanges:[{key:0,offset:0,length:2}]},
+  {key:'empty-heading',type:'header-two',text:'',data:{},inlineStyleRanges:[],entityRanges:[]},
+  {key:'emoji-body',type:'unstyled',text:'💡 本质一句话',data:{},inlineStyleRanges:[],entityRanges:[{key:1,offset:0,length:1}]},
+  {key:'blank',type:'unstyled',text:'',data:{},inlineStyleRanges:[],entityRanges:[]},
+  {key:'source',type:'unstyled',text:'产品图片来源。',data:{},inlineStyleRanges:[],entityRanges:[{key:2,offset:2,length:4}]},
+  {key:'safe-link',type:'unstyled',text:'阅读原文',data:{},inlineStyleRanges:[],entityRanges:[{key:3,offset:0,length:4}]},
+ ];
+ v.status.article.content.entityMap=[
+  {key:'0',value:{type:'TWEMOJI',data:{url:'https://abs.twimg.com/emoji/v2/svg/26a0.svg'}}},
+  {key:'1',value:{type:'TWEMOJI',data:{url:'https://abs.twimg.com/emoji/v2/svg/1f4a1.svg'}}},
+  {key:'2',value:{type:'LINK',data:{url:'.ai/图片来源.md'}}},
+  {key:'3',value:{type:'LINK',data:{url:'https://example.org/source'}}},
+ ];
+ const r=await extractXArticle(adaptXPublicPost(v,source),{signal:new AbortController().signal});if(r.workspace.document.kind!=='web')throw Error();
+ const markdown=r.workspace.document.markdown;
+ expect(markdown).toContain('⚠️ 注意');
+ expect(markdown).toContain('💡 本质一句话');
+ expect(markdown).toContain('产品图片来源。');
+ expect(markdown).toContain('[阅读原文](<https://example.org/source>)');
+ expect(markdown).not.toContain('.ai/图片来源.md');
+});
+it('still rejects explicit unsafe or credentialed entity links and an all-blank article body',()=>{
+ for(const url of['javascript:alert(1)','https://user:pass@example.org/source','http://127.0.0.1/source']){
+  const v=articleEntities();v.status.article.content.blocks=[{key:'link',type:'unstyled',text:'阅读原文',data:{},inlineStyleRanges:[],entityRanges:[{key:0,offset:0,length:4}]}];v.status.article.content.entityMap=[{key:'0',value:{type:'LINK',data:{url}}}];expect(()=>adaptXPublicPost(v,source)).toThrow();
+ }
+ const blank=articleEntities();blank.status.article.content.blocks=[{key:'empty-heading',type:'header-two',text:'',data:{},inlineStyleRanges:[],entityRanges:[]},{key:'blank',type:'unstyled',text:'',data:{},inlineStyleRanges:[],entityRanges:[]}];blank.status.article.content.entityMap=[];expect(()=>adaptXPublicPost(blank,source)).toThrow();
+});

@@ -21,7 +21,7 @@ export function parseHostedTranslation(input:unknown):TranslationInput{
  if(chars>TRANSLATION_LIMITS.inputChars)throw new HostedError('翻译批次超过输入上限',413,'translation_budget');
  return input as unknown as TranslationInput;
 }
-export function hostedTranslationPrompt(units:TranslationUnit[],repair=false){return WEB_TRANSLATION_INSTRUCTIONS+(repair?'上次这些项未通过排版校验。仅重新翻译所列项，严格保留structure.tokens、pairs和parents，不要输出其他项。\n':'')+JSON.stringify(units.map(u=>({id:u.id,text:u.text,structure:translationStructure(u)})));}
+export function hostedTranslationPrompt(units:TranslationUnit[],repair=false){return WEB_TRANSLATION_INSTRUCTIONS+'托管接口的完整返回格式必须是 {"translations":{"原id":"中文译文"}}。根对象只能有 translations 一个字段；不要把原id直接放在根对象。\n'+(repair?'上次这些项未通过排版校验。仅重新翻译所列项，严格保留structure.tokens、pairs和parents，不要输出其他项。\n':'')+JSON.stringify(units.map(u=>({id:u.id,text:u.text,structure:translationStructure(u)})));}
 export type HostedTranslationModel=ReturnType<typeof createHostedJsonModel>;
 interface Active {token:string;hash:string;controller:AbortController;promise:Promise<TranslationBatchResult>;created:number;}
 interface Terminal {token:string;hash?:string;payloadHash?:string;status:'completed'|'cancelled'|'failed';created:number;result?:TranslationBatchResult}
@@ -31,8 +31,10 @@ export class HostedTranslations{
  private key(owner:string,op:string){return owner+':'+hostedOperationId(op);}
  private cleanup(){for(const [key,v]of this.terminal)if(this.clock()-v.created>TRANSLATION_LIMITS.roundMs)this.terminal.delete(key);for(const[key,time]of this.rounds)if(this.clock()-time>TRANSLATION_LIMITS.roundMs*2)this.rounds.delete(key);}
  cancel(owner:string,op:string,token:string){hostedOperationToken(token);this.cleanup();const key=this.key(owner,op),job=this.active.get(key),end=this.terminal.get(key);if(job&&!same(job.token,token)||end&&!same(end.token,token))throw new HostedError('翻译操作不属于当前请求',403,'operation_unauthorized');job?.controller.abort(new Error('用户停止翻译'));if(this.terminal.size>=256)this.terminal.delete(this.terminal.keys().next().value!);this.terminal.set(key,{token,status:'cancelled',created:this.clock()});return {cancelled:true};}
- async batch(owner:string,ip:string,token:string,input:unknown,parent:AbortSignal):Promise<TranslationBatchResult>{
-  hostedOperationToken(token);this.cleanup();const r=parseHostedTranslation(input),key=this.key(owner,r.operationId),hash=createHash('sha256').update(JSON.stringify(r)).digest('hex'),payloadHash=createHash('sha256').update(JSON.stringify({...r,roundId:undefined})).digest('hex'),existing=this.active.get(key),end=this.terminal.get(key);
+ private seen(owner:string,token:string,input:unknown){hostedOperationToken(token);this.cleanup();const r=parseHostedTranslation(input),key=this.key(owner,r.operationId),hash=createHash('sha256').update(JSON.stringify(r)).digest('hex'),payloadHash=createHash('sha256').update(JSON.stringify({...r,roundId:undefined})).digest('hex');return {r,key,hash,payloadHash,existing:this.active.get(key),end:this.terminal.get(key)};}
+ replay(owner:string,token:string,input:unknown){const seen=this.seen(owner,token,input);return seen.end?.status==='completed'&&seen.end.result&&seen.end.payloadHash===seen.payloadHash?{...seen.end.result,repairCount:0}:undefined;}
+ async batch(owner:string,ip:string,token:string,input:unknown,parent:AbortSignal,track?:<T>(work:Promise<T>)=>Promise<T>):Promise<TranslationBatchResult>{
+  const {r,key,hash,payloadHash,existing,end}=this.seen(owner,token,input);
   if(end){
    // A lost response may be retried with the same batch. The operation token is memory-only in the browser,
    // so a reload presents a new one; ownership (the trial id, already this owner's credential) and the exact
@@ -51,7 +53,7 @@ export class HostedTranslations{
     const run=async(units:TranslationUnit[],repair=false)=>{
      deadline.check();const prompt=hostedTranslationPrompt(units,repair),inputTokens=Buffer.byteLength(prompt,'utf8')+128;if(inputTokens>HOSTED_TRANSLATION_LIMITS.input)throw new HostedError('翻译批次完整上下文超限，请缩小批次',413,'translation_budget');
      const settle=this.budget.reserve(owner,ip,0,{input:inputTokens,output:HOSTED_TRANSLATION_LIMITS.output});
-     try{const result=await deadline.wait(this.model(prompt,deadline.signal,()=>{}));deadline.check();settle(result.usage);if(!record(result.data)||Object.keys(result.data).some(k=>k!=='translations')||!record(result.data.translations))throw new HostedError('翻译结构化输出无效，已有译文保留',502,'translation_invalid');return Object.entries(result.data.translations).map(([id,text])=>({id,text}));}
+     try{const pending=this.model(prompt,deadline.signal,()=>{});track?.(pending);const result=await deadline.wait(pending);deadline.check();settle(result.usage);if(!record(result.data)||Object.keys(result.data).some(k=>k!=='translations')||!record(result.data.translations))throw Object.assign(new HostedError('翻译结构化输出无效，已有译文保留',502,'translation_invalid'),{schemaDiagnostic:{branch:'translation-envelope',rootType:Array.isArray(result.data)?'array':typeof result.data,translationsType:record(result.data)?Array.isArray(result.data.translations)?'array':typeof result.data.translations:'absent'}});return Object.entries(result.data.translations).map(([id,text])=>({id,text}));}
      finally{settle();}
     };
     let rows=await run(r.units),repairCount=0;const failed=placeholderRepairUnits(r.units,rows);

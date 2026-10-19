@@ -29,10 +29,15 @@ describe('hosted stateless translation and cost protection',()=>{
   let finish!:(v:Awaited<ReturnType<HostedTranslationModel>>)=>void;const model=vi.fn<HostedTranslationModel>(async()=>new Promise(r=>finish=r));const {jobs,path}=setup(3,model);
   const first=jobs.batch('owner','ip',token,input(),new AbortController().signal);const dup=jobs.batch('owner','ip',token,input(),new AbortController().signal);
   await expect(jobs.batch('owner','ip','d'.repeat(64),input(),new AbortController().signal)).rejects.toMatchObject({status:403});jobs.cancel('owner','operation',token);await expect(first).rejects.toMatchObject({code:'translation_cancelled'});await expect(dup).rejects.toMatchObject({code:'translation_cancelled'});expect(model).toHaveBeenCalledTimes(1);finish({data:{translations:{unit:'迟到的译文。'}},usage:{prompt_tokens:100,completion_tokens:30}});
-  expect(Object.values(JSON.parse(readFileSync(path,'utf8')).days as Record<string,{charged:number}>)[0].charged).toBeGreaterThan(.0096);
+  expect(Object.values(JSON.parse(readFileSync(path,'utf8')).days as Record<string,{confirmed:number;reserved:number}>).reduce((sum,day)=>sum+day.confirmed+day.reserved,0)).toBeGreaterThan(.0096);
   jobs.cancel('owner','before-start',token);await expect(jobs.batch('owner','ip',token,input('before-start'),new AbortController().signal)).rejects.toMatchObject({code:'translation_cancelled'});expect(model).toHaveBeenCalledTimes(1);
  });
  it('times out the complete main-and-repair batch and does not return a partial success',async()=>{
   const {jobs}=setup(3,async()=>new Promise(()=>{}),10);await expect(jobs.batch('owner','ip',token,input(),new AbortController().signal)).rejects.toMatchObject({status:408});
  });
+});
+
+it('makes the hosted wrapper explicit and rejects bare root maps without exposing model content',async()=>{
+ const {jobs}=setup(3,async(prompt)=>{expect(prompt).toContain('{"translations":{"原id":"中文译文"}}');return {data:{unit:'PRIVATE_MODEL_TEXT'},usage:{prompt_tokens:100,completion_tokens:30}};});
+ try{await jobs.batch('owner','ip',token,input(),new AbortController().signal);throw Error('expected failure');}catch(error){expect(error).toMatchObject({code:'translation_invalid',schemaDiagnostic:{branch:'translation-envelope',rootType:'object',translationsType:'undefined'}});expect(JSON.stringify((error as any).schemaDiagnostic)).not.toContain('PRIVATE_MODEL_TEXT');}
 });

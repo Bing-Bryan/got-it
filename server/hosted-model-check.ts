@@ -14,7 +14,8 @@ if(!budgetPath||!reportPath||!imagePath||!existsSync(imagePath))throw new Error(
 const budget=new HostedBudget(resolve(budgetPath),.15);
 const browserReserve=2*MAX_REQUEST_USD;
 const day=new Date().toISOString().slice(0,10);
-const previous=JSON.parse(readFileSync(budgetPath,'utf8')).days[day]?.charged||0;
+const occupancy=(entry:{confirmed?:number;reserved?:number}|undefined)=>(entry?.confirmed||0)+(entry?.reserved||0);
+const previous=occupancy(JSON.parse(readFileSync(budgetPath,'utf8')).days[day]);
 // 6 Flash cases + 3 Pro references. Each Pro reserves 4 Flash units ($.0168),
 // greater than its 8k/1.5k maximum of $.0165. Reservations are never refunded.
 const planned=(6+3*4)*MAX_REQUEST_USD;
@@ -60,7 +61,7 @@ try{
   }
  }
 }finally{
- const charged=JSON.parse(readFileSync(budgetPath,'utf8')).days[day]?.charged||0;
- const report={date:day,classification:'real-paid-model-validation',hardTotalUsd:.15,conservativeReservedUsd:charged,browserCallsReservedUsd:browserReserve,imagesInAppEnabled:false,results};
- writeFileSync(reportPath,JSON.stringify(report,null,2)+'\n',{mode:0o600});budget.close();console.info(JSON.stringify({reportPath,conservativeReservedUsd:charged,browserCallsReservedUsd:browserReserve}));
+ const occupied=occupancy(JSON.parse(readFileSync(budgetPath,'utf8')).days[day]);
+ const report={date:day,classification:'real-paid-model-validation',hardTotalUsd:.15,conservativeReservedUsd:occupied,browserCallsReservedUsd:browserReserve,imagesInAppEnabled:false,results};
+ writeFileSync(reportPath,JSON.stringify(report,null,2)+'\n',{mode:0o600});budget.close();console.info(JSON.stringify({reportPath,conservativeReservedUsd:occupied,browserCallsReservedUsd:browserReserve}));
 }

@@ -1,5 +1,5 @@
 import {expect,it,vi} from 'vitest';
-vi.mock('./runtime-mode',()=>({HOSTED:true,trialId:()=> '123e4567-e89b-42d3-a456-426614174000'}));
+vi.mock('./runtime-mode',()=>({HOSTED:true,trialId:()=> '123e4567-e89b-42d3-a456-426614174000',hostedGeneration:async()=>'11111111-1111-4111-8111-111111111111',clearHostedGeneration:()=>{}}));
 const binary=vi.hoisted(()=>vi.fn());
 vi.mock('./library-client',()=>({libraryBinary:binary}));
 import {readInquiryStream} from './inquiry-stream';

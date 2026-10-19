@@ -15,13 +15,24 @@ it('requires nonempty independent fragments around unchanged inline code and nev
 it('isolates the new quality epoch from old disk results without classifying old caches as corrupt',async()=>{const{l,e,request}=await setup(),{TranslationCache}=await import('./web-translation-cache'),{translationModelConfig}=await import('../src/lib/web-translation'),{TRANSLATION_CONTRACT_VERSION,TRANSLATION_QUALITY_VERSION}=await import('../src/lib/web-translation'),config=translationModelConfig();const oldKey=[e.id,TRANSLATION_CONTRACT_VERSION,1,e.revisionId,request.sourceVersion,request.translationId,JSON.stringify(request.unitIds),JSON.stringify(config)].join('|'),old={operationId:request.operationId,translationId:request.translationId,sourceVersion:request.sourceVersion,modelConfig:config,units:Object.fromEntries(request.unitIds.map(id=>[id,'旧缓存中文']))};await new TranslationCache(join(l.dir,'translation-results')).write(oldKey,old);const translate=vi.fn(async(units:any[])=>({modelConfig:config,units:Object.fromEntries(units.map(u=>[u.id,'新质量中文']))})),jobs=new WebTranslations(l,{translateWebBatch:translate});const result=await jobs.batch(e.id,{...request,qualityVersion:TRANSLATION_QUALITY_VERSION});expect(translate).toHaveBeenCalledTimes(1);expect(Object.values(result.units).every(text=>text==='新质量中文')).toBe(true);await expect(jobs.batch(e.id,{...request,qualityVersion:999})).rejects.toMatchObject({code:'translation_quality'});expect(translate).toHaveBeenCalledTimes(1);});
 
 it('reports batch timeout, whole-round expiry and disconnected clients as separate causes without retry',async()=>{
- const {l,e,request}=await setup();const original=TRANSLATION_LIMITS.callMs;const translate=vi.fn(async()=>new Promise<any>(()=>{}));
+ const {l,e,request}=await setup();const original=TRANSLATION_LIMITS.callMs;
+ // This test controls deadlines, rather than racing a 50ms polling interval against a 60ms timeout.
+ const saved=await l.get(e.id),get=vi.spyOn(l,'get').mockResolvedValue(saved);
+ vi.useFakeTimers({toFake:['setTimeout','clearTimeout','Date','performance']});
+ let started!:()=>void;let ready=new Promise<void>(resolve=>started=resolve);
+ const translate=vi.fn(async()=>{started();return new Promise<any>(()=>{});});
  try{
   Object.assign(TRANSLATION_LIMITS,{callMs:60});const batch=new WebTranslations(l,{translateWebBatch:translate},Date.now,500);
-  const first=batch.batch(e.id,request).catch(e=>e);await vi.waitFor(()=>expect(translate).toHaveBeenCalledTimes(1));const same=batch.batch(e.id,request).catch(e=>e);expect((await first).code).toBe('translation_batch_timeout');expect((await same).code).toBe('translation_batch_timeout');expect(translate).toHaveBeenCalledTimes(1);
+  const first=batch.batch(e.id,request).catch(e=>e);await ready;
+  const same=batch.batch(e.id,request).catch(e=>e);await Promise.resolve();await Promise.resolve();
+  await vi.advanceTimersByTimeAsync(60);
+  expect((await first).code).toBe('translation_batch_timeout');expect((await same).code).toBe('translation_batch_timeout');expect(translate).toHaveBeenCalledTimes(1);
+  ready=new Promise<void>(resolve=>started=resolve);
   const round=new WebTranslations(l,{translateWebBatch:translate},Date.now,25);
-  await expect(round.batch(e.id,{...request,operationId:'round-expiry'})).rejects.toMatchObject({code:'translation_round_timeout'});expect(translate).toHaveBeenCalledTimes(2);
+  const expired=round.batch(e.id,{...request,operationId:'round-expiry'}).catch(e=>e);await ready;await vi.advanceTimersByTimeAsync(25);
+  expect((await expired).code).toBe('translation_round_timeout');expect(translate).toHaveBeenCalledTimes(2);
+  ready=new Promise<void>(resolve=>started=resolve);
   const controller=new AbortController(),disconnected=new WebTranslations(l,{translateWebBatch:translate});const result=disconnected.batch(e.id,{...request,operationId:'disconnect'},controller.signal).catch(e=>e);
-  await vi.waitFor(()=>expect(translate).toHaveBeenCalledTimes(3));controller.abort();const error=await result;expect(error.code).toBe('translation_connection_interrupted');expect(error.message).not.toContain('已停止或超时');expect(translate).toHaveBeenCalledTimes(3);
- }finally{Object.assign(TRANSLATION_LIMITS,{callMs:original});}
+  await ready;controller.abort();const error=await result;expect(error.code).toBe('translation_connection_interrupted');expect(error.message).not.toContain('已停止或超时');expect(translate).toHaveBeenCalledTimes(3);
+ }finally{Object.assign(TRANSLATION_LIMITS,{callMs:original});get.mockRestore();vi.useRealTimers();}
 });

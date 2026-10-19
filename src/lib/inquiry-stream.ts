@@ -1,7 +1,8 @@
+import {hostedTransportId} from './hosted-operation-id';
 import {copySearch} from './evidence';
 import type {SearchTrace} from '../types';
-import {HOSTED,trialId} from './runtime-mode';
-import {track} from './hosted-usage';
+import {HOSTED,hostedGeneration,clearHostedGeneration,trialId} from './runtime-mode';
+import {noteAnswerComplete,track} from './hosted-usage';
 import {librarySession} from "./library-session";
 import {HOSTED_IMAGE_MAX_BYTES} from './pdf-data';
 import { requestDeadline } from "./request-deadline";
@@ -27,10 +28,11 @@ export async function readInquiryStream(request: InquiryRequest, onEvent: (event
   if (typeof document !== "undefined") document.addEventListener("visibilitychange", resumed);
   if (typeof window !== "undefined") window.addEventListener("pageshow", resumed);
   try {
-  const response = await budget.wait(fetcher(HOSTED?"/api/hosted/inquiry/stream":"/api/inquiries/stream", { method: "POST", headers: { "Content-Type": "application/json", ...(HOSTED?{"X-Trial-Id":trialId()}:{}), ...(!HOSTED && request.image ? {"X-Got-It-Session":await budget.wait(librarySession())} : {}) }, body: JSON.stringify(hostedBody??request), signal: budget.signal }));
+  const generation=HOSTED?await hostedGeneration():undefined;
+  const response = await budget.wait(fetcher(HOSTED?"/api/hosted/inquiry/stream":"/api/inquiries/stream", { method: "POST", headers: { "Content-Type": "application/json", ...(HOSTED?{"X-Trial-Id":trialId(),"X-Hosted-Operation-Id":hostedTransportId(request.requestId ?? ''),...(generation?{"X-Hosted-Generation":generation}:{})}:{}), ...(!HOSTED && request.image ? {"X-Got-It-Session":await budget.wait(librarySession())} : {}) }, body: JSON.stringify(hostedBody??request), signal: budget.signal }));
   if (!response.ok) {
     let detail = "";
-    try { const body = await budget.wait(response.json()); if (typeof body.error === "string") detail = body.error.slice(0, 300); } catch { /* Non-JSON failures use the HTTP status. */ }
+    try { const body = await budget.wait(response.json()); if (typeof body.error === "string") detail = body.error.slice(0, 300); if (body.code === 'operation_stale' || body.code === 'upgrade_required') clearHostedGeneration(); throw Object.assign(new Error(detail || `请求失败（HTTP ${response.status}），请重试。`), {code: body.code, status: response.status}); } catch (error) { if (error instanceof Error && (error as {code?:string}).code) throw error; }
     throw new Error(detail || `请求失败（HTTP ${response.status}），请重试。`);
   }
   if (!response.body) throw new Error("响应没有内容，请重试。");
@@ -56,7 +58,7 @@ export async function readInquiryStream(request: InquiryRequest, onEvent: (event
     complete = e.type === "complete";
     if(e.progress==='search-completed')track('search-complete');
     if(e.type==='complete'){
-      track('answer-complete');
+      noteAnswerComplete(request.requestId);
       if(request.intent==='verify')track('verify-complete');
       if(e.response?.sources.some(source=>source.retrievalStatus==='matched'))track('source-check-complete');
       if(e.response?.sources.some(source=>source.retrievalStatus&&source.retrievalStatus!=='matched'))track('source-check-failed');

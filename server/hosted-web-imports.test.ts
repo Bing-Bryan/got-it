@@ -47,6 +47,13 @@ describe('hosted ephemeral import and signed resource boundary',()=>{
   await expect(jobs.start('fresh','same-ip',token,{url:WEB_URL,operationId:'ip-over'})).rejects.toMatchObject({code:'web_rate_limit'});
   expect(jobs.memoryBytes).toBe(0);
  });
+ it('replaces an orphaned ready preview when the same input is retried, while a different input stays busy',async()=>{
+  const {tickets}=state(),data=await webFixture(),jobs=new HostedWebImports(tickets,{extractor:async()=>structuredClone(data)});
+  await jobs.start('owner','ip',token,{url:WEB_URL,operationId:'old'});expect((await ready(jobs,'owner','old')).status).toBe('ready');
+  await jobs.start('owner','ip',token,{url:WEB_URL,operationId:'retry'});const retried=await ready(jobs,'owner','retry');
+  expect(retried.operationId).toBe('retry');expect(retried.status).toBe('ready');expect(()=>jobs.status('owner','old',token)).toThrow('不存在');
+  await expect(jobs.start('owner','ip',token,{url:'https://example.org/other',operationId:'other'})).rejects.toMatchObject({code:'web_busy'});
+ });
  it('only retries signed public original media, explicitly disables proxy and returns verified bytes without modifying original',async()=>{
   const {tickets}=state(),fixture=await webFixture();const doc=fixture.workspace.document;if(doc.kind!=='web')throw new Error();const media=doc.web.media[0],image=fixture.resources.get(media.resourceId!)!;let fetched=0;
   const ticket=tickets.sign({v:1,documentId:doc.id,contentVersion:doc.web.contentVersion,mediaId:media.id,sourceUrl:media.sourceUrl!,extractorVersion:doc.web.extractorVersion});

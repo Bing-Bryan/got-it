@@ -34,7 +34,7 @@ await requireFile(path.join(runtimeRoot,'node_modules/express/package.json'),'�
 await requireFile(path.join(runtimeRoot,'node_modules/tsx/package.json'),'tsx 运行依赖未安装');
 await fs.mkdir(state,{recursive:true});
 const budget=path.join(state,'budget.json'),stats=path.join(state,'statistics.json');
-const baseEnv={PATH:process.env.PATH||'',HOME:process.env.HOME||'',NODE_ENV:'production',HOSTED_BUDGET_PATH:budget,HOSTED_STATISTICS_PATH:stats,HOSTED_ORIGIN:`http://127.0.0.1:${port}`};
+const baseEnv={PATH:process.env.PATH||'',HOME:process.env.HOME||'',NODE_ENV:'production',HOSTED_BUDGET_PATH:budget,HOSTED_STATISTICS_PATH:stats,HOSTED_ORIGIN:`http://127.0.0.1:${port}`,HOSTED_TRUSTED_PROXY:'loopback'};
 if(realModel){baseEnv.DEEPSEEK_API_KEY=realModelKey;baseEnv.HOSTED_DAILY_BUDGET_USD='0.005';}
 // Initialize only files owned by this explicitly supplied isolated state directory.
 if(!await exists(budget)) await initializeBudget(runtimeRoot,baseEnv);

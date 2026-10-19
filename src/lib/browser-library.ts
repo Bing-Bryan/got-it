@@ -130,7 +130,8 @@ export async function browserRequest<T>(path='',body?:unknown):Promise<T>{const 
   const source=translationSource.source,ids=input.unitIds;
   if(!Array.isArray(ids)||new Set(ids).size!==ids.length||ids.length>16)throw new Error('翻译批次无效');
   const units=ids.map((id:unknown)=>source.units.find(u=>u.id===id));if(units.some(u=>!u)||units.reduce((n,u)=>n+u!.text.length,0)>4000)throw new Error('翻译批次超出范围');
-  return await hostedOperationRequest('/translation-batches',input.operationId,{qualityVersion:TRANSLATION_QUALITY_VERSION,operationId:input.operationId,roundId:input.roundId,sourceVersion:input.sourceVersion,translationId:input.translationId,units}) as T;
+  const roundToken=typeof input.roundToken==='string'?input.roundToken:undefined;
+  return await hostedOperationRequest('/translation-batches',input.operationId,{qualityVersion:TRANSLATION_QUALITY_VERSION,operationId:input.operationId,roundId:input.roundId,sourceVersion:input.sourceVersion,translationId:input.translationId,units},roundToken?{'X-Hosted-Round-Token':roundToken}:undefined) as T;
  }
  return transaction(body!==undefined,(s)=>{
  if(!parts.length)return {entries:s.entries.map(e=>({id:e.id,version:e.version,lastOpenedAt:e.lastOpenedAt,filename:e.workspace.document.filename,path:null,historyCount:e.history.length,kind:e.workspace.document.kind??'markdown',...(e.workspace.document.kind==='web'?{url:e.workspace.document.web.originalUrl,importedAt:e.workspace.document.importedAt}:{})})),activeId:s.activeId,warnings:[],nativePicker:false} as T;

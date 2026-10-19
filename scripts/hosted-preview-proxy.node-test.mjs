@@ -89,6 +89,7 @@ test('proxy streams each chunk and preserves request metadata while replacing XF
   assert(receivedAt[1] - receivedAt[0] >= 40, 'the preview must not buffer until upstream completes');
   assert.equal(seenHeaders.origin, `http://127.0.0.1:${previewPort}`);
   assert.equal(seenHeaders['x-forwarded-for'], '127.0.0.1');
+  assert.equal(seenHeaders['x-gotit-client-ip'], '127.0.0.1');
   assert.equal(seenHeaders.host, `127.0.0.1:${previewPort}`);
   assert.equal(seenBody, '{"question":"stream test"}');
 });

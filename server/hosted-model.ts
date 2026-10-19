@@ -62,7 +62,7 @@ export function parseHostedInquiry(value:unknown,options:{images?:boolean}={}):H
   if(Buffer.byteLength(hostedPrompt(request),'utf8')+128>MAX_INPUT_TOKENS)throw new HostedError('选区和上下文过长，请缩小范围',413,'input_limit');
   return request;
 }
-export type HostedRunner=(request:HostedInquiry,signal:AbortSignal,onDelta:(delta:string)=>void,onProgress?:(progress:'search-started'|'search-completed'|'checking-sources')=>void)=>Promise<{response:InquiryResponse;usage?:{prompt_tokens:number;completion_tokens:number}}>;
+export type HostedRunner=(request:HostedInquiry,signal:AbortSignal,onDelta:(delta:string)=>void,onProgress?:(progress:'search-started'|'search-completed'|'checking-sources')=>void,track?:<T>(work:Promise<T>)=>Promise<T>)=>Promise<{response:InquiryResponse;usage?:{prompt_tokens:number;completion_tokens:number}}>;
 export function hostedModelBaseUrl(environment=process.env):string {
   const configured=environment.HOSTED_MODEL_BASE_URL;
   if(!configured)return 'https://api.deepseek.com';

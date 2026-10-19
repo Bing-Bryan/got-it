@@ -1,3 +1,4 @@
+import {HostedAdmission} from './hosted-admission';
 import {describe,expect,it,vi} from 'vitest';
 const model=vi.hoisted(()=>({output:{} as unknown,calls:[] as unknown[]}));
 vi.mock('openai',()=>({default:class{chat={completions:{create:async(body:unknown)=>{model.calls.push(body);return(async function*(){yield {choices:[{delta:{content:JSON.stringify(model.output)},finish_reason:'stop'}]};yield {choices:[],usage:{prompt_tokens:1500,completion_tokens:500}};})();}}};}}));
@@ -78,4 +79,14 @@ describe('bounded normalization of observed structured-output drift',()=>{
   expect(caught.schemaDiagnostic).toEqual({branch:'source-invalid-enum',index:0,field:'relation',valueType:'string'});
   expect(JSON.stringify(caught.schemaDiagnostic)).not.toContain('maybe');
  });
+});
+
+it('holds admission for the actual abort-ignoring reader after the runner rejects',async()=>{
+ const admission=new HostedAdmission();const lease=admission.acquire('inquiry','reader-owner');
+ let release!:(v:any)=>void;let started!:()=>void;const ready=new Promise<void>(r=>started=r);
+ const run=createHostedVerificationRunner('fixture',async()=>[candidate],async()=>{started();return new Promise(r=>release=r);});
+ const controller=new AbortController();const pending=run(request(),controller.signal,()=>{},undefined,work=>lease.track(work));lease.track(pending);
+ await ready;controller.abort(Error('stop'));await expect(pending).rejects.toThrow('stop');let settled=false;const drain=lease.settle().then(()=>settled=true);
+ await Promise.resolve();expect(settled).toBe(false);expect(admission.snapshot().slots.global).toBe(1);
+ release({url:candidate.url,text:excerpt});await drain;expect(admission.snapshot().slots.global).toBe(0);
 });
