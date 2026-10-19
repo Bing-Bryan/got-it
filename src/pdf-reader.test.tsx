@@ -153,10 +153,10 @@ it('replaces a region draft when text inside that region is selected',async()=>{
 it('keeps truthful save states and shows instructions inline without a help popup',async()=>{
  const props={document:pdf as Extract<DocumentSnapshot,{kind:'pdf'}>,entryId:'entry',inquiries:[]};
  await act(async()=>root.render(<PdfReader {...props} saveStatus="已保存到本机"/>));
- expect(host.querySelector('.pdf-save-state')?.textContent).toBe('已保存到本机');
+ expect(host.querySelector('.pdf-save-state')?.textContent).toBe('已保存');
  for(const status of ['保存中','已保存到本机','保存中','已保存到本机']) {
   await act(async()=>root.render(<PdfReader {...props} saveStatus={status}/>));
-  expect(host.querySelector('.pdf-save-state')?.textContent).toBe(status);
+  expect(host.querySelector('.pdf-save-state')?.textContent).toBe(status === '已保存到本机' ? '已保存' : status);
   expect(host.querySelector('.pdf-save-state')?.getAttribute('title')).toBe(status);
  }
 
@@ -295,4 +295,9 @@ it('continues with the image when OCR exceeds its own deadline instead of cancel
  expect(create).toHaveBeenCalledTimes(1);
  const a=create.mock.calls[0][1].anchor.pdf;expect(a.cropId).toBe('c'.repeat(64));expect(a.context).toContain('未提取到辅助文字');
  expect(host.querySelector('.pdf-error')).toBeNull();
+});
+
+it('delegates persistence to the shared toolbar without removing PDF page or selection controls',async()=>{
+ await act(async()=>root.render(<PdfReader document={pdf as Extract<DocumentSnapshot,{kind:'pdf'}>} entryId="entry" inquiries={[]} saveStatus="已保存到本机" hideSaveStatus/>));
+ expect(host.querySelector('.pdf-save-state')).toBeNull();expect(host.querySelector('.pdf-page-number')).not.toBeNull();expect(host.querySelector('.pdf-select-mode')).not.toBeNull();
 });

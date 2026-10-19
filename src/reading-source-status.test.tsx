@@ -11,7 +11,7 @@ it.each(['available', 'missing', 'permission', 'unreadable', 'reselect', 'unlink
   const retry = vi.fn(), choose = vi.fn(), update = vi.fn();
   const library = { recoveries:[], entry: { source: status === 'unlinked' ? null : {}, history: [] }, list: { nativePicker: true }, check: { status, message: '来源状态' }, checkSource: retry, choose, acceptUpdate: update } as unknown as ReturnType<typeof useReadingLibrary>;
   await act(async () => root.render(<ReadingLibraryStatus library={library} />));
-  if (status === 'available') expect(host.textContent).toBe('');
+  if (status === 'available') { expect(host.querySelector('.library-source-state')).toBeNull(); expect(host.querySelector('.reader-local-privacy summary')?.textContent).toBe('保存与隐私'); }
   else {
     const buttons = [...host.querySelectorAll('button')];
     expect(buttons.map(b => b.textContent)).toEqual(status === 'changed' ? ['使用更新后的原文'] : status === 'unlinked' ? ['关联原文件'] : ['重试读取', '重新定位']);

@@ -26,14 +26,12 @@ async function setup(units:Record<string,string>|null,side:'original'|'translate
  return {host,library,onSide,dispose:async()=>{await act(async()=>root.unmount());host.remove();}};
 }
 
-it('starts a PDF translation from the same icon after the short permission panel, without per-page hints',async()=>{
+it('starts a PDF translation directly from the same icon, without per-page hints',async()=>{
  const t=await setup(null);
  try{
   const icon=t.host.querySelector<HTMLButtonElement>('.translation-side-toggle')!;expect(icon.title).toBe('翻译为中文');
   await act(async()=>icon.click());
-  expect(t.host.querySelector('.translation-permission')!.textContent).toContain('在原页对应位置显示中文');expect(t.host.textContent).not.toContain('以后自动翻译');
-  expect(t.library.translate).not.toHaveBeenCalled();
-  await act(async()=>[...t.host.querySelectorAll('button')].find(b=>b.textContent==='开始译中')!.click());
+  expect(t.host.querySelector('.translation-permission')).toBeNull();expect(t.host.textContent).not.toContain('以后自动翻译');expect(t.library.setAutoTranslation).not.toHaveBeenCalled();
   expect(t.library.translate).toHaveBeenCalledOnce();
  }finally{await t.dispose();}
 });

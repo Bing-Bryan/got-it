@@ -150,3 +150,9 @@ it('keeps saved evidence limits and source links without generation actions',asy
  expect(host.querySelector('.start-how-extra,.start-boundary,.start-demo-label')).toBeNull();
  expect(panel.querySelector('.question-composer,.regenerate-action,.stop-action,.verify-again-action')).toBeNull();
 });
+
+it('keeps explicit restoration reachable from the homepage when every material was removed',async()=>{
+ const restoreEntry=vi.fn(),library=baseLibrary({entry:null,list:{entries:[],removedEntries:[summary('removed.md','2026')],activeId:null,warnings:[],nativePicker:false},restoreEntry,open:vi.fn()});
+ await mountPage(library);await openLibrary();expect(host.querySelectorAll('.start-library-row')).toHaveLength(0);expect(host.querySelector('.library-removed summary')?.textContent).toContain('已移出（1）');
+ await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="恢复到阅读库：removed.md"]')!.click());expect(restoreEntry).toHaveBeenCalledWith('removed.md');expect(library.open).not.toHaveBeenCalled();
+});

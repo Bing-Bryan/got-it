@@ -84,7 +84,7 @@ export function readingFontReady(timeoutMs = 2500): Promise<void> {
     fonts.ready.then(finish, finish);
   });
 }
-interface Options { workspace: Workspace; install: (w: Workspace,entryId?:string) => void; interrupt: () => Workspace; update?: (w: Workspace) => void; getWorkspace?: () => Workspace; readingVisible?: boolean; onOpened?: () => void }
+interface Options { workspace: Workspace; install: (w: Workspace,entryId?:string) => void; interrupt: () => Workspace; update?: (w: Workspace) => void; getWorkspace?: () => Workspace; readingVisible?: boolean; onOpened?: () => void; onEmptied?: () => void }
 export function useReadingLibrary(options: Options) {
   const latest = useRef(options); latest.current = options;
   const entryRef = useRef<LibraryEntry | null>(null);
@@ -111,6 +111,7 @@ export function useReadingLibrary(options: Options) {
   const storeRef = useRef<DraftStore | null>(null);
   const store = () => storeRef.current ??= new DraftStore(localStorage);
   const [notice, setNotice] = useState("");
+  const [removedUndo,setRemovedUndo]=useState<string|null>(null);
   const [webImportOpen, setWebImportOpen] = useState(false);
   const [webImportInline,setWebImportInline] = useState(false);
   const [webPrefill,setWebPrefill]=useState("");
@@ -385,6 +386,26 @@ export function useReadingLibrary(options: Options) {
       const e = await api<LibraryEntry>(`/entries/${id}/activate`, {});
       install(e); for (const r of recoveries) if (r.entryId===id || r.resultEntryId===id) dismissedRecoveries.current.delete(r.id);
       await refresh(); await refreshRecoveries(); await checkSource();
+    });
+  }
+  async function removeEntry(id:string) {
+    await transition(async()=>{
+      await preserve();
+      const target=await api<LibraryEntry>(`/entries/${id}`);
+      await api(`/entries/${id}/visibility`,{expectedVersion:target.version,removed:true});
+      setRemovedUndo(id);setNotice(`已移出：${target.workspace.document.filename}`);
+      const next=await refresh();
+      if(entryRef.current?.id===id){
+        if(next.entries.length){install(await api<LibraryEntry>(`/entries/${next.entries[0].id}/activate`,{}));await refresh();await checkSource();}
+        else {entryRef.current=null;setEntry(null);setCheck(null);saved.current="";latest.current.onEmptied?.();}
+      }
+    });
+  }
+  async function restoreEntry(id:string) {
+    await transition(async()=>{
+      const target=await api<LibraryEntry>(`/entries/${id}`);
+      await api(`/entries/${id}/visibility`,{expectedVersion:target.version,removed:false});
+      setRemovedUndo(null);setNotice(`已恢复：${target.workspace.document.filename}`);await refresh();
     });
   }
   async function openBookmark(id:string):Promise<boolean> {
@@ -829,7 +850,7 @@ export function useReadingLibrary(options: Options) {
   }
   useEffect(()=> { if (!notice) return; const id=setTimeout(()=>setNotice(""),4500); return ()=>clearTimeout(id); },[notice]);
   useEffect(()=>()=>{fontReflow.current?.cleanup();fontReflow.current=null;},[]);
-  return { returnToStart, webPrefill, ensureEntry, retryWebMedia, translate, stopTranslation, translationRunning, translationProgress, translationActivity, translationRepairCount, autoTranslate, setAutoTranslation, saveNow:flush, webImportOpen, webImportInline, webImportSuccess, webJob, webError, showWebImport, readWebUrl, readWebArticle, readXArticleFile, confirmWebImport, cancelWebImport, initialPosition: desiredPosition.current, entry, list, ready, busy:busy||preparingEntry, error, importError, clearError: () => { setError(""); setImportError(false); }, status, check, recovery, recoveries, blocked, draftWarning, notice, historyId,
+  return { removeEntry, restoreEntry, removedUndo, returnToStart, webPrefill, ensureEntry, retryWebMedia, translate, stopTranslation, translationRunning, translationProgress, translationActivity, translationRepairCount, autoTranslate, setAutoTranslation, saveNow:flush, webImportOpen, webImportInline, webImportSuccess, webJob, webError, showWebImport, readWebUrl, readWebArticle, readXArticleFile, confirmWebImport, cancelWebImport, initialPosition: desiredPosition.current, entry, list, ready, busy:busy||preparingEntry, error, importError, clearError: () => { setError(""); setImportError(false); }, status, check, recovery, recoveries, blocked, draftWarning, notice, historyId,
     readOnly: !!historyId || !!recovery || blocked || busy,
     openBookmark, prepareBookmarks:preserve, open, choose, importFile, checkSource: () => transition(checkSource), acceptUpdate, viewRevision, resolveRecovery, acknowledgeRecovery, showRecovery, closeRecovery,
     retry: () => ready && !blockedDraft.current ? transition(() => flush()) : initialize(),

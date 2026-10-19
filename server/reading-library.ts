@@ -89,18 +89,28 @@ export class ReadingLibrary {
       e.contentDigest = hash(readingContent(e.workspace)); return e;
     } catch (error) { if (error instanceof LibraryError && error.status === 404) throw error; return fail("阅读条目无法读取，其他材料仍可使用。", 404, "entry_unreadable"); }
   }
-  async list(): Promise<LibraryList> {
+  async list(includeRemoved = false): Promise<LibraryList> {
     const entries: LibraryEntry[] = [], warnings: string[] = [];
     let ids: string[] = [];
     try { ids = await readdir(join(this.dir, "entries")); } catch (e) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") fail("无法读取本机阅读列表，请检查保存目录权限。", 503); }
     for (const id of ids.filter(uid)) { try { entries.push(await this.get(id)); } catch { warnings.push("有一份阅读记录无法读取，其他材料不受影响。"); } }
     let activeId: string | null = null;
     try { const value = JSON.parse(await readFile(join(this.dir, "active.json"), "utf8")); if (entries.some(e => e.id === value.id)) activeId = value.id; } catch { /* optional last view */ }
-    return { entries: entries.sort((a,b) => b.lastOpenedAt.localeCompare(a.lastOpenedAt)).map(e => ({ id: e.id, version: e.version, filename: e.workspace.document.filename, path: e.source?.path ?? null, historyCount: e.history.length, ...(e.workspace.document.kind === "web" ? {kind:"web" as const,url:e.workspace.document.web.originalUrl,importedAt:e.workspace.document.importedAt} : {}), lastOpenedAt: e.lastOpenedAt })), activeId, warnings, nativePicker: process.platform === "darwin" };
+    const summaries = (items: LibraryEntry[]) => items.sort((a,b) => b.lastOpenedAt.localeCompare(a.lastOpenedAt)).map(e => ({ id:e.id,version:e.version,filename:e.workspace.document.filename,path:e.source?.path??null,historyCount:e.history.length,lastOpenedAt:e.lastOpenedAt,kind:e.workspace.document.kind??"markdown",...(e.workspace.document.kind === "web" ? {url:e.workspace.document.web.originalUrl,importedAt:e.workspace.document.importedAt} : {}) }));
+    return {entries:summaries(entries.filter(e=>includeRemoved||!e.removedAt)),removedEntries:summaries(entries.filter(e=>!!e.removedAt)),activeId:entries.some(e=>e.id===activeId&&!e.removedAt)?activeId:null,warnings,nativePicker:process.platform==="darwin"};
   }
+  async setRemoved(id:string, expectedVersion:number, removed:unknown) {
+    if(typeof removed!=="boolean")fail("请明确选择移出或恢复。");
+    return this.serialize(async()=>{
+      const e=await this.get(id);this.version(e,expectedVersion);
+      if(removed)e.removedAt=now();else delete e.removedAt;
+      e.version++;await this.commit(e);return e;
+    });
+  }
+
   async activate(id: string) {
     return this.serialize(async () => {
-      const e = await this.get(id); e.lastOpenedAt = now();
+      const e = await this.get(id); if(e.removedAt)fail("此材料已移出阅读库，请先在已移出中恢复。",409,"entry_removed"); e.lastOpenedAt = now();
       // Metadata also uses optimistic versioning so another tab cannot silently replace it.
       e.version++; await this.commit(e); await this.atomic(join(this.dir, "active.json"), JSON.stringify({ id })); return e;
     });
@@ -161,7 +171,7 @@ export class ReadingLibrary {
     if (workspace.document.isDemo) fail("示例无需加入阅读列表。");
     if (workspace.document.kind === "web") fail("网页须先读取并确认服务器预览。",400,"web_candidate_required");
     return this.serialize(async () => {
-      const list = await this.list();
+      const list = await this.list(true);
       for (const summary of list.entries) { const existing = await this.get(summary.id); if (existing.creationKey === creationKey) return existing; }
       let source: LibrarySource | null = null;
       let pdfApproved=false;
@@ -199,7 +209,7 @@ export class ReadingLibrary {
   }
   async findWeb(input: string): Promise<LibraryEntry | null> {
     const url=webUrl(input).href,identity=xArticleIdentity(url);
-    for(const summary of (await this.list()).entries){const e=await this.get(summary.id);if(e.workspace.document.kind==="web" && [e.workspace.document.web.originalUrl,e.workspace.document.web.finalUrl].some(u=>identity?xArticleIdentity(webUrl(u).href)===identity:webUrl(u).href===url))return e;
+    for(const summary of (await this.list(true)).entries){const e=await this.get(summary.id);if(e.workspace.document.kind==="web" && [e.workspace.document.web.originalUrl,e.workspace.document.web.finalUrl].some(u=>identity?xArticleIdentity(webUrl(u).href)===identity:webUrl(u).href===url))return e;
       if(identity&&e.workspace.document.kind==="web"){const w=e.workspace.document.web;if(w.retrieval?.provider==="fxtwitter"&&identity===`x-status:${w.retrieval.url.split('/').at(-1)}`||w.identity&&[ `x-status:${w.identity.statusId}`,`x-article:${w.identity.articleId}`].includes(identity))return e;}}
     return null;
   }
@@ -209,7 +219,7 @@ export class ReadingLibrary {
     const document=workspace.document;
     return this.serialize(async()=>{
       const existing=await this.findWeb(document.web.originalUrl) ?? await this.findWeb(document.web.finalUrl);if(existing)return {...existing,webImportCreated:false};
-      for(const summary of (await this.list()).entries){const e=await this.get(summary.id);if(e.creationKey===creationKey)fail("确认标识已用于另一材料。",409,"web_creation_conflict");}
+      for(const summary of (await this.list(true)).entries){const e=await this.get(summary.id);if(e.creationKey===creationKey)fail("确认标识已用于另一材料。",409,"web_creation_conflict");}
       for(const m of document.web.media)if(m.status==="saved"){
         const image=resources.get(m.resourceId!);if(!image||image.mime!==m.mime||image.bytes.length!==m.bytes||image.width!==m.width||image.height!==m.height)fail("网页静态资源与候选不匹配。");
       }
@@ -267,7 +277,7 @@ export class ReadingLibrary {
     const ids=new Set<string>();
     const collect=(original:ReturnType<ReadingLibrary["webOriginal"]>)=>{if(original)for(const media of original.web.media)if(media.status==="saved"&&media.resourceId)ids.add(media.resourceId);};
     // Valid CURRENT records protect successful commits even if a later response failed.
-    for(const summary of (await this.list()).entries){const entry=await this.get(summary.id);for(const w of [entry.workspace,...entry.history.map(h=>h.workspace)])collect(this.webOriginal(w));}
+    for(const summary of (await this.list(true)).entries){const entry=await this.get(summary.id);for(const w of [entry.workspace,...entry.history.map(h=>h.workspace)])collect(this.webOriginal(w));}
     // Independent committed ownership protects history/recovery when CURRENT is damaged.
     let owners:string[]=[];try{owners=await readdir(join(this.dir,"web-authorizations"));}catch(e){if((e as NodeJS.ErrnoException).code!=="ENOENT")throw e;}
     for(const owner of owners.filter(uid))for(const file of await readdir(join(this.dir,"web-authorizations",owner))){if(!/^[a-f0-9]{64}\.json$/.test(file))continue;try{const proof=JSON.parse(await readFile(join(this.dir,"web-authorizations",owner,file),"utf8"));if(proof.entryId===owner&&hash(JSON.stringify(proof.original))+".json"===file)collect(proof.original);}catch{throw new WebError("资源授权记录无法核对，暂不清理。","web_resource_proof",503);}}
@@ -441,7 +451,7 @@ export class ReadingLibrary {
     });
   }
   private async noDuplicateSource(id: string, source: LibrarySource) {
-    for (const s of (await this.list()).entries) if (s.id !== id) { const other = await this.get(s.id); if (other.source?.realPath === source.realPath) fail("此文件已属于另一阅读条目，请打开已有条目。", 409); }
+    for (const s of (await this.list(true)).entries) if (s.id !== id) { const other = await this.get(s.id); if (other.source?.realPath === source.realPath) fail("此文件已属于另一阅读条目，请打开已有条目。", 409); }
   }
   async updateSource(id: string, candidateId: string, expectedVersion: number) {
     return this.serialize(async () => {

@@ -59,7 +59,7 @@ export function createHostedApp(options:HostedOptions) {
       else if(category){
         const id=validateIdentity(req.get('x-trial-id'));
         admission.requireGeneration(req.get('x-hosted-generation'));
-        const ip=admission.clientIp(req,true)!;
+        const ip=admission.clientIp(req,true,category==='capture'?'import':'model')!;
         res.locals.transportId=admission.validateTransportId(req.get('x-hosted-operation-id'));
         const round=req.get('x-hosted-round-token');
         const exempt=category==='translation'&&!!round&&admission.claimRound(id,round);

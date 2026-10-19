@@ -1,8 +1,9 @@
+import {readerSaveStatus} from "./lib/reader-save-status";
 import {PdfReaderBoundary,reloadAfterPreserving} from './PdfReaderBoundary';
 import {InquiryStreamError} from './lib/inquiry-stream';
 import {loadSampleImages} from './lib/browser-library';
 import {HOSTED,hostedCapabilities} from './lib/runtime-mode';
-import {HostedSettings,HostedSamples,HostedSendDisclosure} from './HostedControls';
+import {HostedSettings,HostedSendDisclosure} from './HostedControls';
 import {installUsage,track,markMaterial,noteAiStarted} from './lib/hosted-usage';
 import {revealBookmarkRanges} from './lib/bookmark-navigation';
 import { selectionContext,selectionRequestError } from './lib/inquiry-selection';
@@ -264,7 +265,7 @@ function App() {
     const next = restoreWorkspace(workspaceRef.current) ?? workspaceRef.current;
     workspaceRef.current = next; setWorkspace(next); return next;
   }, []);
-  const library = useReadingLibrary({ workspace, readingVisible:readingView==='reading', onOpened:enterReading, install: installLibraryWorkspace, interrupt: interruptForSwitch, getWorkspace: () => workspaceRef.current, update: (next) => { workspaceRef.current=next;setWorkspace(next); } });
+  const library = useReadingLibrary({ workspace, readingVisible:readingView==='reading', onOpened:enterReading, onEmptied:()=>{setReadingView('start');try{sessionStorage.setItem(START_VIEW_KEY,'start');}catch{}}, install: installLibraryWorkspace, interrupt: interruptForSwitch, getWorkspace: () => workspaceRef.current, update: (next) => { workspaceRef.current=next;setWorkspace(next); } });
   const recoveryPriority=library.blocked||!!library.recovery||library.recoveries.some(r=>r.state==='pending'&&r.hasDifferences!==false);
   const showStart=(!library.ready||!library.entry||readingView==='start')&&!recoveryPriority;
   useEffect(()=>{if(recoveryPriority)enterReading();},[recoveryPriority,enterReading]);
@@ -1034,7 +1035,6 @@ function App() {
 
         <nav className="sidebar-scroll">
           <section className="nav-section">
-            {HOSTED?<details className="hosted-sample-picker"><summary className="disclosure-summary"><span>公开样例</span><ChevronDown size={13} className="disclosure-chevron" aria-hidden="true"/></summary><HostedSamples onOpen={library.importFile}/></details>:null}
           {workspace.document.kind === "pdf" && library.entry ? <PdfOutline key={library.entry.id+workspace.document.pdf.resourceId+documentLoadId} entryId={library.entry.id} fileHash={workspace.document.pdf.resourceId} pages={workspace.document.pdf.pages.length} currentPage={pdfCurrentPage} readOnly={library.readOnly} onJump={item=>{bookmarkPreparing.current=null;setBookmarkTarget(null);setBookmarksOpen(false);setPdfDirectoryTarget({documentId:workspace.document.id,item,nonce:Date.now()});setMobileSidebarOpen(false);}}/> : <>
             <div className="section-label">
               <span>{workspace.document.kind === "pdf" ? "PDF 原页" : "文档结构"}</span>
@@ -1104,13 +1104,17 @@ function App() {
         </header>
 
         <div className={`reader-tools${HOSTED ? " reader-tools--hosted" : ""}${workspace.document.kind === "web" ? " reader-tools--web" : ""}`}>
+        <div className="reader-tools-leading">
         <ReadingLibraryStatus library={library} hideWebSource={workspace.document.kind === "web"} onImport={() => fileInputRef.current?.click()} />
-        <WebTranslationControls key={workspace.document.id+":"+documentLoadId} workspace={workspace} library={library} saveStatus={saveStatus} onSide={side => { setSelectionDraft(null);setBookmarkDraft(null);setInquirySelectionError('');window.getSelection()?.removeAllRanges(); const position = capturePosition();updateWorkspace(current=>({...current,readingSide:side})); requestAnimationFrame(()=>restorePosition(position)); }} />
-        <div ref={setPdfToolbarHost} className="reader-status-host" />
-        {workspace.document.kind !== "pdf" && workspace.document.kind !== "web" ? <div className="markdown-toolbar"><div className="markdown-toolbar-row"><div className="library-save-status" role="status">{saveStatus}{library.busy ? " · 正在处理…" : ""}</div></div></div> : null}
+        <WebTranslationControls key={workspace.document.id+":"+documentLoadId} workspace={workspace} library={library} saveStatus={saveStatus} showSaveStatus={false} onSide={side => { setSelectionDraft(null);setBookmarkDraft(null);setInquirySelectionError('');window.getSelection()?.removeAllRanges(); const position = capturePosition();updateWorkspace(current=>({...current,readingSide:side})); requestAnimationFrame(()=>restorePosition(position)); }} />
+        </div>
+        <div className="reader-tools-trailing">
+        <div className="library-save-status" role="status">{readerSaveStatus(library.blocked ? library.status : saveStatus,workspace.document,library.blocked)}{library.busy ? " · 正在处理…" : ""}</div>
         <div ref={setAdjustmentHost} className="reader-adjustment-layer">
           {workspace.document.kind !== "pdf" ? <div key={workspace.document.id+":"+documentLoadId} className="reading-adjustment-dock"><MarkdownWidthControls width={markdownWidth.width} measuredPercent={markdownWidth.measuredPercent} error={markdownWidth.error} onChange={markdownWidth.change}/></div> : null}
         </div>
+        </div>
+        <div ref={setPdfToolbarHost} className="reader-status-host" />
         </div>
         <div className="reader-viewport" ref={readerViewportRef}>
         <div key={workspace.document.id+":"+documentLoadId} className={`reader-scroll${workspace.document.kind === "pdf" ? " reader-scroll--pdf" : ""}`} onScroll={() => { if (!markdownWidth.adjusting.current) library.scrolled(); }}>
@@ -1121,7 +1125,7 @@ function App() {
               <button type="button" onClick={() => void library.choose()}>换成我的文档</button>
             </div>
           ) : null}
-          {workspace.document.kind === "pdf" && library.entry ? <PdfReaderBoundary key={workspace.document.id+documentLoadId} onReload={()=>reloadAfterPreserving(library.returnToStart,()=>window.location.reload())}><Suspense fallback={<p className="pdf-status">正在加载 PDF 阅读器…</p>}><PdfReader translation={workspace.webTranslation} showTranslation={workspace.readingSide==="translated"} toolbarHost={pdfToolbarHost} adjustmentHost={adjustmentHost} onReadingTime={receivePdfMinutes} outlineTarget={pdfDirectoryTarget?.documentId===workspace.document.id?pdfDirectoryTarget:null} onCurrentPage={setPdfCurrentPage} key={workspace.document.id+documentLoadId} document={workspace.document} revisionId={library.entry.revisionId} onBookmarkSaved={finishBookmarkSave} bookmarkCompleted={bookmarkCompleted} bookmarks={currentBookmarks} bookmarkVersion={bookmarkVersion} onBookmarkStarted={beginBookmarkSave} onBookmarkFailed={bookmarkFeedback.failed} bookmarkTarget={bookmarkTarget} onBookmarkLocated={success=>{if(!bookmarkTarget||bookmarkPreparing.current?.nonce!==bookmarkTarget.locateNonce)return;bookmarkPreparing.current=null;if(!success){showToast("无法定位收藏原文，摘录仍保留。");setBookmarksOpen(true);}else setBookmarksOpen(false);setBookmarkTarget(null);}} entryId={library.entry.id} inquiries={workspace.inquiries} activeId={workspace.activeInquiryId} target={pdfTarget} onLocated={finishSourceNavigation} initialPosition={library.initialPosition} readOnly={library.readOnly} saveStatus={saveStatus} saveBusy={library.busy} saveError={library.blocked||library.status==="阅读进度暂未保存"} onCreate={createInquiry} onActivate={openAnchor} onReady={library.rendered} onView={library.scrolled}/></Suspense></PdfReaderBoundary> : <article
+          {workspace.document.kind === "pdf" && library.entry ? <PdfReaderBoundary key={workspace.document.id+documentLoadId} onReload={()=>reloadAfterPreserving(library.returnToStart,()=>window.location.reload())}><Suspense fallback={<p className="pdf-status">正在加载 PDF 阅读器…</p>}><PdfReader translation={workspace.webTranslation} showTranslation={workspace.readingSide==="translated"} toolbarHost={pdfToolbarHost} adjustmentHost={adjustmentHost} onReadingTime={receivePdfMinutes} outlineTarget={pdfDirectoryTarget?.documentId===workspace.document.id?pdfDirectoryTarget:null} onCurrentPage={setPdfCurrentPage} key={workspace.document.id+documentLoadId} document={workspace.document} revisionId={library.entry.revisionId} onBookmarkSaved={finishBookmarkSave} bookmarkCompleted={bookmarkCompleted} bookmarks={currentBookmarks} bookmarkVersion={bookmarkVersion} onBookmarkStarted={beginBookmarkSave} onBookmarkFailed={bookmarkFeedback.failed} bookmarkTarget={bookmarkTarget} onBookmarkLocated={success=>{if(!bookmarkTarget||bookmarkPreparing.current?.nonce!==bookmarkTarget.locateNonce)return;bookmarkPreparing.current=null;if(!success){showToast("无法定位收藏原文，摘录仍保留。");setBookmarksOpen(true);}else setBookmarksOpen(false);setBookmarkTarget(null);}} entryId={library.entry.id} inquiries={workspace.inquiries} activeId={workspace.activeInquiryId} target={pdfTarget} onLocated={finishSourceNavigation} initialPosition={library.initialPosition} readOnly={library.readOnly} hideSaveStatus saveStatus={saveStatus} saveBusy={library.busy} saveError={library.blocked||library.status==="阅读进度暂未保存"} onCreate={createInquiry} onActivate={openAnchor} onReady={library.rendered} onView={library.scrolled}/></Suspense></PdfReaderBoundary> : <article
             ref={articleRef}
             className="markdown-article"
             data-reading-side={workspace.readingSide ?? "original"}
@@ -1168,13 +1172,13 @@ function App() {
                   const tabs=NEW_INQUIRY_INTENTS,active=tabs.indexOf(intent);
                   const next = event.key === "ArrowRight" ? (active + 1) % tabs.length : event.key === "ArrowLeft" ? (active + tabs.length-1) % tabs.length : event.key === "Home" ? 0 : event.key === "End" ? tabs.length-1 : -1;
                   if (next < 0) return; event.preventDefault(); switchTab(tabs[next]); document.getElementById(`intent-tab-${tabs[next]}`)?.focus();
-                }}><Icon size={14} aria-hidden="true" /><span className="tab-label">{INTENT_META[intent].label}</span>{items.length > 0 ? <span className="tab-count">({items.length > 99 ? "99+" : items.length})</span> : null}{busy ? <i className="tab-busy" aria-label="处理中" /> : null}</button>;
+                }}><span className="tab-content"><Icon size={16} strokeWidth={1.8} aria-hidden="true" /><span className="tab-label">{INTENT_META[intent].label}</span><span className="tab-short-label" aria-hidden="true" data-label={intent === "explain" ? "解释" : intent === "verify" ? "来源" : "问题"} /></span>{items.length > 0 ? <span className="tab-count">({items.length > 99 ? "99+" : items.length})</span> : null}{busy ? <i className="tab-busy" aria-label="处理中" /> : null}</button>;
             })}
           </div>
         </div>
         {!resultPanel.pinned ? <button className="result-collapse-action icon-button" type="button" aria-label="收起知识贴" title="收起知识贴（Esc）" onClick={resultPanel.close}><PanelRightClose size={15} /></button> : null}
         <div ref={listScrollRef} onScroll={rememberList} className={`intent-result${activeInquiry ? "" : " category-view"}`} id="intent-result" role="tabpanel" aria-labelledby={tabIntent !== "why" ? `intent-tab-${tabIntent}` : undefined}>
-        {activeInquiry ? <div className="result-navigation">{activeInquiry.anchor.translation ? <button type="button" className="source-excerpt" onClick={()=>{if(activeInquiry.anchor.translation?.translationId!==workspace.webTranslation?.id || activeInquiry.anchor.translation?.version!==workspace.webTranslation?.version){showToast("旧译文摘录仍保留；当前译文版本不同，请用对应原文段落回看。");return;}updateWorkspace(current=>({...current,readingSide:"translated"}));requestAnimationFrame(()=>locateInquiry(activeInquiry.id,true));}}>译文摘录：{activeInquiry.anchor.translation.quote}</button> : null}<button className="return-to-list" type="button" onClick={() => switchTab(tabIntent, true)}><ChevronLeft size={16} aria-hidden="true" />返回</button>{activeInquiry.anchor.scope === "document" ? <span className="source-excerpt">全文</span> : <button className="source-excerpt" type="button" title={activeInquiry.anchor.quote} aria-label={`定位原文：${activeInquiry.anchor.pdf?.kind === 'region' ? `第 ${activeInquiry.anchor.pdf.page} 页 · 所选区域` : activeInquiry.anchor.quote}`} onClick={() => { track("source-return"); if(activeInquiry.anchor.translation)updateWorkspace(current=>({...current,readingSide:"original"}));requestAnimationFrame(()=>locateInquiry(activeInquiry.id, true)); }}>{activeInquiry.anchor.pdf ? <span className="source-page">第 {activeInquiry.anchor.pdf.page} 页{activeInquiry.anchor.pdf.kind === 'region' ? ' · 所选区域' : ''}</span> : null}{activeInquiry.anchor.pdf?.kind !== 'region' ? <span>{activeInquiry.anchor.translation?"对应原文段落：":""}{activeInquiry.anchor.quote}</span> : null}</button>}</div> : null}
+        {activeInquiry ? <div className="result-navigation">{activeInquiry.anchor.translation ? <button type="button" className="source-excerpt" onClick={()=>{if(activeInquiry.anchor.translation?.translationId!==workspace.webTranslation?.id || activeInquiry.anchor.translation?.version!==workspace.webTranslation?.version){showToast("旧译文摘录仍保留；当前译文版本不同，请用对应原文段落回看。");return;}updateWorkspace(current=>({...current,readingSide:"translated"}));requestAnimationFrame(()=>locateInquiry(activeInquiry.id,true));}}><span>译文摘录：{activeInquiry.anchor.translation.quote}</span></button> : null}<button className="return-to-list" type="button" onClick={() => switchTab(tabIntent, true)}><ChevronLeft size={16} aria-hidden="true" />返回</button>{activeInquiry.anchor.scope === "document" ? <span className="source-excerpt">全文</span> : <button className="source-excerpt" type="button" title={activeInquiry.anchor.quote} aria-label={`定位原文：${activeInquiry.anchor.pdf?.kind === 'region' ? `第 ${activeInquiry.anchor.pdf.page} 页 · 所选区域` : activeInquiry.anchor.quote}`} onClick={() => { track("source-return"); if(activeInquiry.anchor.translation)updateWorkspace(current=>({...current,readingSide:"original"}));requestAnimationFrame(()=>locateInquiry(activeInquiry.id, true)); }}>{activeInquiry.anchor.pdf ? <span className="source-page">第 {activeInquiry.anchor.pdf.page} 页{activeInquiry.anchor.pdf.kind === 'region' ? ' · 所选区域' : ''}</span> : null}{activeInquiry.anchor.pdf?.kind !== 'region' ? <span>{activeInquiry.anchor.translation?"对应原文段落：":""}{activeInquiry.anchor.quote}</span> : null}</button>}</div> : null}
           <div hidden={!!activeInquiry} className="category-heading category-toolbar"><strong>本文的{tabIntent === "ask" ? "问题" : INTENT_META[tabIntent].shortLabel}</strong><div className="category-heading-actions"><span>{categoryItems.length} 条</span>
             <button id="inquiry-delete-toggle" className="category-delete-toggle" type="button" aria-label={deleteMode ? "退出删除模式" : "删除知识贴"} title={deleteMode ? "退出删除模式（Esc）" : "删除知识贴"} aria-pressed={deleteMode}
               disabled={!categoryItems.length || library.readOnly || library.busy || !library.ready}
@@ -1188,10 +1192,9 @@ function App() {
             {deleteMode ? <button className={`category-delete${pendingDeleteId === item.id ? " confirming" : ""}`} type="button" data-delete-inquiry-id={item.id}
               aria-label={`${pendingDeleteId === item.id ? "确认删除知识贴" : "删除知识贴"}：${item.anchor.quote}`}
               title={pendingDeleteId === item.id ? "再次点击，删除此知识贴及全部回答" : "删除此知识贴"}
-              onClick={() => deleteInquiry(item.id)}>{pendingDeleteId === item.id ? <><Check size={16} aria-hidden="true" /><span>确认删除</span></> : <Trash2 size={16} aria-hidden="true" />}</button> : null}
+              onBlur={() => setPendingDeleteId(null)} onClick={() => deleteInquiry(item.id)}><Trash2 size={16} fill={pendingDeleteId === item.id ? "currentColor" : "none"} aria-hidden="true" /></button> : null}
           </div>) : <p>{tabIntent === "ask" ? "可以向全文提问，也可以选中原文问一问。" : <>还没有{INTENT_META[tabIntent].label}条目。在原文选中文字，再选择“{INTENT_META[tabIntent].label}”即可创建。</>}</p>}
           {tabIntent === "ask" ? <div className="document-question-entry">
-            {HOSTED?<HostedSendDisclosure/>:null}
             {documentQuestionOpen ? <QuestionComposer initialOpen disabled={documentQuestionBusy || library.readOnly || library.busy || !library.ready || !modelReady} onClose={() => setDocumentQuestionOpen(false)} onSubmit={question => createInquiry("ask", { anchor: documentAnchor(workspace.document), context: "", rect: { top: 0, left: 0, width: 0, height: 0 } }, question)} /> : <button className="document-question-trigger" type="button" disabled={documentQuestionBusy || library.readOnly || library.busy || !library.ready || !modelReady} onClick={() => setDocumentQuestionOpen(true)}><span aria-hidden="true">＋</span>向全文提问</button>}
           </div> : null}
         </nav>

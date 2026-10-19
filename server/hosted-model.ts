@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import {crc32} from 'node:zlib';
 import {AnswerDecoder} from './codex-stream';
 import type {InquiryRequest, InquiryResponse} from '../src/types';
-import {READING_BASE_INSTRUCTIONS, readingMaterials, refinementInstruction} from './prompt-materials';
+import {READING_BASE_INSTRUCTIONS, READING_COVERAGE_CHECK, readingMaterials, refinementInstruction} from './prompt-materials';
 import {HostedError, MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS} from './hosted-budget';
 import {HOSTED_IMAGE_MAX_BYTES, REGION_NO_TEXT_CONTEXT} from '../src/lib/pdf-data';
 import {REGION_MAX_PIXELS, REGION_MAX_SIDE} from '../src/lib/pdf-region';
@@ -35,7 +35,7 @@ export function hostedSearchQuery(request:HostedInquiry):string{
 }
 export function hostedPrompt(request:HostedInquiry) {
   const intent=request.intent==='ask'?'准确回答 question 中的具体阅读问题，结合选区和历史解释代词，不替换为泛泛介绍。':request.intent==='entity'?'说明是什么、做什么和与文章的关系；未知信息明确不确定。':'结合选区和上下文给出通俗解释、必要例子和原文中的作用。';
-  return [READING_BASE_INSTRUCTIONS,intent,...(request.hostedImage?[IMAGE_PROMPT_NOTE]:[]),'先直接回答核心问题，用简体中文短段落。只能依据提供的选区、有限上下文和追问历史；没有搜索或来源核对能力，不能声称已搜索或已查证。材料不足时明确缺口，不猜测最新事实。返回 JSON 对象，且仅含 answer（非空字符串）、sources（空数组）、evidenceStatus（not-applicable）。',refinementInstruction({...request,intent:request.intent==='why'?'explain':request.intent}),readingMaterials(request)].join('\n\n');
+  return [READING_BASE_INSTRUCTIONS,intent,...(request.hostedImage?[IMAGE_PROMPT_NOTE]:[]),'先直接回答核心问题，用简体中文短段落。只能依据提供的选区、有限上下文和追问历史；没有搜索或来源核对能力，不能声称已搜索或已查证。材料不足时明确缺口，不猜测最新事实。返回 JSON 对象，且仅含 answer（非空字符串）、sources（空数组）、evidenceStatus（not-applicable）。',refinementInstruction({...request,intent:request.intent==='why'?'explain':request.intent}),READING_COVERAGE_CHECK, readingMaterials(request)].join('\n\n');
 }
 export function parseHostedInquiry(value:unknown,options:{images?:boolean}={}):HostedInquiry {
   if(!value||typeof value!=='object'||Array.isArray(value))throw new HostedError('请求格式错误');

@@ -86,6 +86,7 @@ export function libraryRouter(library: ReadingLibrary, token = randomBytes(32).t
   router.post("/choose", action(() => library.choose()));
   router.post("/entries", action(req => library.add(req.body?.workspace, req.body?.creationKey, req.body?.selectionId)));
   router.get("/entries/:id", action(req => library.get(id(req))));
+  router.post("/entries/:id/visibility", action(req => library.setRemoved(id(req),req.body?.expectedVersion,req.body?.removed)));
   router.post("/entries/:id/activate", action(req => library.activate(id(req))));
   router.post("/entries/:id/save", action(req => library.save(id(req), req.body?.expectedVersion, req.body?.revisionId, req.body?.workspace, req.body?.position)));
   router.post("/entries/:id/check", action(req => library.check(id(req))));

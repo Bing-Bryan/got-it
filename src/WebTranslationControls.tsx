@@ -1,10 +1,10 @@
-import {HOSTED} from './lib/runtime-mode';
+import {readerSaveStatus} from "./lib/reader-save-status";
 import {X_PUBLIC_SCOPE} from "./lib/x-article-url";
 import {X_CAPTURE_EXTRACTOR, X_CAPTURE_SCOPE} from "./lib/x-article-capture";
 import {confidentlyChinese} from "./lib/translation-policy";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, Languages } from "lucide-react";
+import { Languages } from "lucide-react";
 import { friendlyTranslationError, validUnitTranslation, TRANSLATION_PLACEHOLDER, type TranslationUnit } from "./lib/web-translation";
 import { documentTranslationSource } from "./lib/document-translation";
 import { pdfHasShownTranslation, pdfTranslationSummary, usePdfTranslationSource } from "./usePdfTranslationSource";
@@ -63,11 +63,7 @@ function RunningTranslationProgress({activity}:{activity:TranslationActivity}) {
   </div>;
 }
 
-export function WebTranslationControls({workspace,library,onSide,saveStatus}:{workspace:Workspace;library:ReturnType<typeof useReadingLibrary>;onSide:(side:"original"|"translated")=>void;saveStatus?:string}) {
-  const [permission,setPermission]=useState(false);
-  const [autoChoice,setAutoChoice]=useState(false);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const panelId = useId();
+export function WebTranslationControls({workspace,library,onSide,saveStatus,showSaveStatus=true}:{workspace:Workspace;library:ReturnType<typeof useReadingLibrary>;onSide:(side:"original"|"translated")=>void;saveStatus?:string;showSaveStatus?:boolean}) {
   const sourceDescriptionId = useId();
   const doc=workspace.document,pdf=doc.kind==="pdf"?doc.pdf:undefined;
   // PDF: the text layer is read locally only once a translation exists or is running.
@@ -94,24 +90,18 @@ export function WebTranslationControls({workspace,library,onSide,saveStatus}:{wo
   const resumeLabel = allDone ? "重试保存译文" : "继续翻译";
   const resumeDescription = allDone ? "只保存已有译文，不重新生成。" : "仅翻译未完成的文本块，保留已有译文、原文和知识贴。";
   const currentSaveStatus = saveStatus ?? library.status;
-  const publicMissing=web?.extractorVersion==='x-fxtwitter-public-v1'?web.media.filter(m=>m.status!=='saved').length:0;
-  // Markdown keeps its single save line in App; only web pages show save state here.
-  const status = !web ? "" : publicMissing && /^(?:已保存|正文已保存)/.test(currentSaveStatus) ? `正文已保存到本机，${publicMissing}张图片未保存` : currentSaveStatus.startsWith("已保存") ? "已保存" : currentSaveStatus.startsWith("保存中") ? "保存中" : currentSaveStatus;
+  const status = web && showSaveStatus ? readerSaveStatus(currentSaveStatus,doc) : "";
   const progress = library.translationProgress;
   const rawTranslationStatus = progress === "全文译中已保存" || progress === "已保存公开正文译中已保存" ? "" : progress || (state?.status !== "complete" ? state?.error : "");
   const translationStatus = friendlyTranslationError((idleIncomplete ? rawTranslationStatus?.replace(/^已翻译 \d+ \/ \d+ 个文本块；/, "") : rawTranslationStatus)??"");
-  const closePanel = () => { setPermission(false); trigger.current?.focus(); };
-  const switchSide = () => { onSide(translated ? "original" : "translated"); closePanel(); };
-  const permissionText = pdf ? "将有文字层页面的正文段落分批发送给当前 AI，在原页对应位置显示中文；图片、扫描页和原页内容不发送也不改动。" : null;
-  const hostedPermissionDetail = "正文会分批发送给托管服务及模型服务商，每批使用体验额度；停止后已完成部分保留，服务端不持久保存正文或译文。";
-  return <section className="web-translation-controls" aria-label={web?"网页正文翻译":pdf?"PDF 中文":"正文翻译"} onKeyDown={event => { if (event.key === "Escape" && permission) { event.stopPropagation(); closePanel(); } }}>
+  return <section className="web-translation-controls" aria-label={web?"网页正文翻译":pdf?"PDF 中文":"正文翻译"}>
     <div className="translation-toolbar">
       {web ? <><a className="translation-source" href={web.originalUrl} target="_blank" rel="noopener noreferrer" title={sourceFacts} aria-describedby={sourceDescriptionId}>打开原网页</a><span id={sourceDescriptionId} className="translation-source-description">{sourceFacts}</span></> : null}
       <div className="translation-actions">
-        {hasTranslation || (!state && canTranslate) || library.translationRunning ? <button ref={trigger} type="button" className={`translation-side-toggle${library.translationRunning ? " translation-stop" : ""}`} aria-label={actionLabel} title={actionLabel} aria-pressed={translated} aria-expanded={hasTranslation || library.translationRunning ? undefined : permission} aria-controls={permission ? panelId : undefined} disabled={!library.translationRunning && !hasTranslation && disabled} onClick={() => {
-          if (library.translationRunning) { library.stopTranslation(); closePanel(); }
-          else if (hasTranslation) switchSide();
-          else { setAutoChoice(library.autoTranslate); setPermission(value => !value); }
+        {hasTranslation || (!state && canTranslate) || library.translationRunning ? <button type="button" className={`translation-side-toggle${library.translationRunning ? " translation-stop" : ""}`} aria-label={actionLabel} title={actionLabel} aria-pressed={translated} disabled={!library.translationRunning && !hasTranslation && disabled} onClick={() => {
+          if (library.translationRunning) library.stopTranslation();
+          else if (hasTranslation) onSide(translated ? "original" : "translated");
+          else void library.translate();
         }}><Languages size={18} strokeWidth={1.8} aria-hidden="true" focusable="false" />{library.translationRunning ? <span>停止翻译</span> : null}</button> : null}
         {idleIncomplete ? <button type="button" className="translation-resume" disabled={disabled} title={resumeDescription} aria-description={resumeDescription} onClick={()=>void library.translate()}>{resumeLabel}</button> : null}
         {excerpt ? <span className="translation-scope-warning" role="status">仅保存公开部分，付费内容未导入。</span> : null}
@@ -122,13 +112,6 @@ export function WebTranslationControls({workspace,library,onSide,saveStatus}:{wo
       {library.translationRunning && library.translationActivity ? <RunningTranslationProgress activity={library.translationActivity}/> : translationStatus ? <span className="translation-progress" role="status">{translationStatus}</span> : null}
       {status ? <span className="translation-status" role="status">{status}</span> : null}
     </div>
-    {permission && !library.translationRunning ? <div id={panelId} className="translation-permission" role="group" aria-label={web?"网页正文翻译授权":"正文翻译授权"}>
-      <p>{permissionText ?? <>{excerpt?"将已保存公开部分的全部可翻译正文分批发送给当前 AI，生成中文译文，不包含原站付费内容。":"将全部可翻译正文分批发送给当前 AI，生成中文译文。"}代码、URL和图片不发送，原文保留。</>}</p>
-      {web ? <label><input type="checkbox" checked={autoChoice} onChange={event=>setAutoChoice(event.target.checked)}/>以后自动翻译确认加入的新英文网页</label> : null}
-      <div><button type="button" disabled={disabled} onClick={()=>{closePanel();if(web)library.setAutoTranslation(autoChoice);void library.translate();}}>开始译中</button><button type="button" onClick={closePanel}>取消</button></div>
-      {HOSTED ? <details className="hosted-inline-details"><summary className="disclosure-summary"><span>发送与存储说明</span><ChevronDown size={13} className="disclosure-chevron" aria-hidden="true"/></summary><p>{hostedPermissionDetail}</p></details> : null}
-    </div>:null}
-    {web && !permission && library.autoTranslate?<label><input type="checkbox" checked onChange={()=>library.setAutoTranslation(false)}/>自动翻译新加入英文网页（可关闭）</label>:null}
     {web && web.extractorVersion !== 'x-fxtwitter-public-v1' && web.media.some(media => media.status !== "saved") ? <p className="translation-media-warning" role="status">部分图片／图表未导入</p> : null}
     {workspace.translationNotice?<p role="alert">{workspace.translationNotice}</p>:null}
   </section>;

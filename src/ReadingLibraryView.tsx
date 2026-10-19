@@ -1,13 +1,24 @@
+import {TranslationPrivacySettings} from "./TranslationPrivacySettings";
 import {HOSTED} from './lib/runtime-mode';
-import {HostedStorageControls,HostedSampleAttribution} from './HostedControls';
+import {HostedDisclosure,HostedStorageControls,HostedSampleAttribution,HostedSamples} from './HostedControls';
 import {X_PUBLIC_SCOPE} from "./lib/x-article-url";
 import {X_CAPTURE_EXTRACTOR, X_CAPTURE_SCOPE} from "./lib/x-article-capture";
-import { Copy, Check, Plus, ChevronDown } from "lucide-react";
+import { Copy, Check, Plus, ChevronDown, Trash2 } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { LibrarySummary } from "./lib/library-types";
 import type { useReadingLibrary } from "./useReadingLibrary";
 import { ReadingRecoveryView } from "./ReadingRecoveryView";
 import { searchLibraryNames } from "./lib/library-name-search";
 type Library = ReturnType<typeof useReadingLibrary>;
+export function LibraryRemoveButton({library,entry}:{library:Library;entry:LibrarySummary}){
+ const [pending,setPending]=useState(false);
+ useEffect(()=>setPending(false),[entry.id,library.entry?.id]);
+ return <button type="button" className={`category-delete library-remove${pending?' confirming':''}`} disabled={!library.ready||library.busy||library.readOnly} aria-label={`${pending?'确认移出阅读库':'移出阅读库'}：${entry.filename}`} title={pending?'再次点击移出；原文件和知识贴保留，可随时恢复':'移出阅读库'} onBlur={()=>setPending(false)} onKeyDown={event=>{if(event.key==='Escape'&&pending){event.preventDefault();event.stopPropagation();setPending(false);}}} onClick={()=>{if(pending){setPending(false);void library.removeEntry(entry.id);}else setPending(true);}}><Trash2 size={16} fill={pending?'currentColor':'none'} aria-hidden="true"/></button>;
+}
+export function RemovedLibraryEntries({library,query=''}:{library:Library;query?:string}){
+ const entries=searchLibraryNames(library.list.removedEntries??[],query);
+ return library.list.removedEntries?.length?<details className="library-removed"><summary>已移出（{library.list.removedEntries.length}）</summary><p>原文件与知识贴仍保留。</p>{entries.map(entry=><div className="library-removed-row" key={entry.id}><span title={entry.filename}>{entry.filename}</span><button type="button" disabled={library.busy||!library.ready} onClick={()=>void library.restoreEntry(entry.id)} aria-label={`恢复到阅读库：${entry.filename}`}>恢复</button></div>)}{!entries.length?<p>没有匹配的文件名称</p>:null}</details>:null;
+}
 export function ReadingLibraryNavigation({ library, importCopy }: { library: Library; importCopy: () => void }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -34,6 +45,25 @@ export function ReadingLibraryNavigation({ library, importCopy }: { library: Lib
   const holder = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const popupId = useId();
+  const popupPanel = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!open || !popupPanel.current) return;
+    const panel = popupPanel.current;
+    const measure = () => {
+      const viewport = window.visualViewport;
+      const bottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight;
+      const available = Math.max(0, Math.floor(bottom - panel.getBoundingClientRect().top - 12));
+      panel.style.setProperty('--library-popup-height', `${available}px`);
+      panel.dataset.short = String(available < 280);
+    };
+    measure();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    if (holder.current) observer?.observe(holder.current);
+    window.addEventListener('resize',measure);
+    window.visualViewport?.addEventListener('resize',measure);
+    window.visualViewport?.addEventListener('scroll',measure);
+    return () => { observer?.disconnect();window.removeEventListener('resize',measure);window.visualViewport?.removeEventListener('resize',measure);window.visualViewport?.removeEventListener('scroll',measure); };
+  }, [open]);
   const entries = useMemo(() => searchLibraryNames(library.list.entries, query), [library.list.entries, query]);
   const disabled = !library.ready || library.busy;
   useEffect(()=>{if(disabled)setAddOpen(false);},[disabled]);
@@ -68,13 +98,18 @@ export function ReadingLibraryNavigation({ library, importCopy }: { library: Lib
       <div className="library-switcher" ref={holder}
         onPointerEnter={event => { if (event.pointerType !== "touch") setOpen(true); }}
         onPointerLeave={() => { if (!holder.current?.contains(document.activeElement)) closePopup(); }}
-        onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) closePopup(); }}
+        onBlur={event => {
+          // Disabling the focused download/import button may blur to the document.
+          // That is not an outside navigation; pointerdown/Escape still close explicitly.
+          if (event.relatedTarget === null && event.target instanceof HTMLButtonElement && event.target.disabled) return;
+          if (!event.currentTarget.contains(event.relatedTarget)) closePopup();
+        }}
         onKeyDown={event => {
           if (event.nativeEvent.isComposing) return;
           if (event.key === "Escape") { event.stopPropagation(); closePopup(); trigger.current?.focus(); }
-          if (open && ["ArrowDown", "ArrowUp"].includes(event.key) && (event.target === searchInput.current || (event.target as HTMLElement).matches(".library-open"))) {
+          if (open && ["ArrowDown", "ArrowUp"].includes(event.key) && (event.target === searchInput.current || (event.target as HTMLElement).matches(".library-open,.library-samples button"))) {
             event.preventDefault(); event.stopPropagation();
-            const buttons = [...(holder.current?.querySelectorAll<HTMLButtonElement>(".library-open:not(:disabled)") ?? [])];
+            const buttons = [...(holder.current?.querySelectorAll<HTMLButtonElement>(".library-open:not(:disabled),.library-samples button:not(:disabled)") ?? [])];
             const index = buttons.indexOf(event.target as HTMLButtonElement);
             const next = index + (event.key === "ArrowDown" ? 1 : -1);
             if (next < 0) searchInput.current?.focus(); else buttons[Math.min(next, buttons.length - 1)]?.focus();
@@ -85,18 +120,20 @@ export function ReadingLibraryNavigation({ library, importCopy }: { library: Lib
           <span>{library.entry?.workspace.document.filename ?? "选择文件"}</span><ChevronDown size={13} className="disclosure-chevron" aria-hidden="true"/>
         </button>
         {open ? <div className="library-popup" id={popupId} aria-label="切换阅读文件">
-          <div className="library-popup-panel">
+          <div className="library-popup-panel" ref={popupPanel}>
           <div className="library-search"><input ref={searchInput} type="search" aria-label="搜索文件名称" placeholder="搜索文件名或网页标题" value={query} onChange={event => setQuery(event.target.value)} /></div>
           <div className="library-items">{entries.length ? entries.map(e => <div className={`library-item ${library.entry?.id === e.id ? "current" : ""}`} key={e.id}>
-            <div className="library-title"><button className="library-open" type="button" disabled={disabled} aria-current={library.entry?.id === e.id ? "page" : undefined} onClick={() => { closePopup(); void library.open(e.id); }}>{e.filename}</button>
+            <div className="library-title"><button className="library-open" type="button" disabled={disabled} aria-current={library.entry?.id === e.id ? "page" : undefined} onClick={() => { closePopup(); void library.open(e.id); }}>{e.filename}</button><LibraryRemoveButton library={library} entry={e}/>
             {library.recoveries.filter(r=>(r.entryId === e.id || r.resultEntryId === e.id) && r.state === "pending" && r.hasDifferences !== false).map(r=><button key={r.id} type="button" className="library-recovery-link" disabled={library.busy} onClick={()=>{closePopup();void library.showRecovery(r.id);}}>{r.state === "pending" ? "查看待核对差异" : "查看记录差异"}</button>)}
 
             </div>
             {e.kind === "web" || e.url ? <div className="library-path"><div className="library-web-source"><a className="library-source-url" href={e.url} target="_blank" rel="noopener noreferrer">{e.url}</a><button type="button" className="library-copy-url" aria-label={`复制来源：${e.filename}`} onClick={() => void copyPath(e.id, e.url!)}>{copyStatus?.id === e.id && copyStatus.ok ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}</button></div>{copyStatus?.id === e.id ? <small role="status">{copyStatus.ok ? "来源已复制" : "复制失败，请选中链接手动复制"}</small> : null}</div> : e.path ? <div className="library-path">
               <button className="library-copy-path" type="button" aria-label={`复制路径：${e.filename}`} onClick={() => void copyPath(e.id, e.path!)}><span>{e.path}</span>{copyStatus?.id === e.id && copyStatus.ok ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}</button>
               {copyStatus?.id === e.id ? <small role="status">{copyStatus.ok ? "路径已复制" : "复制失败，请选中路径手动复制"}</small> : null}
-            </div> : <span className="library-no-path">未关联原文件</span>}
+            </div> : null}
           </div>) : <p className="nav-empty" role="status">{library.list.entries.length ? "没有匹配的文件名称" : "还没有文件，先添加一篇文章。"}</p>}</div>
+          <RemovedLibraryEntries library={library} query={query}/>
+          {HOSTED?<section className="library-samples" aria-label="公开样例"><h3>公开样例</h3><HostedSamples compact query={query} disabled={disabled} onOpen={async file=>{await library.importFile(file);closePopup();}}/></section>:null}
           </div>
         </div> : null}
       </div>
@@ -112,12 +149,13 @@ export function ReadingLibraryStatus({ library, onImport, hideWebSource = false,
   const saveBlocked = library.blocked || library.status === "阅读进度暂未保存";
   const duplicateImportError = (library.webImportOpen || library.webImportInline) && library.webError && library.error === library.webError;
   return <div className="library-state">
-    {HOSTED&&!hideHostedControls?<div className="hosted-library-controls"><HostedStorageControls save={()=>library.saveNow()} onRestore={()=>onImport?.()}/>{library.entry?<HostedSampleAttribution hash={library.entry.workspace.document.contentHash}/>:null}</div>:null}
+    {HOSTED&&!hideHostedControls?<div className="hosted-library-controls"><HostedStorageControls hideSendDetails={!startPage} save={()=>library.saveNow()} onRestore={()=>onImport?.()}><TranslationPrivacySettings compact={!startPage} automatic={!!library.autoTranslate} onAutomaticChange={library.setAutoTranslation}/></HostedStorageControls>{library.entry?<HostedSampleAttribution hash={library.entry.workspace.document.contentHash}/>:null}</div>:null}
+    {!HOSTED&&!hideHostedControls?<HostedDisclosure label="保存与隐私" className="reader-local-privacy"><p>原文保持不变，材料与知识贴工作区保存在本机；密钥和登录凭据不进入阅读记录或导出。</p><TranslationPrivacySettings compact={!startPage} automatic={!!library.autoTranslate} onAutomaticChange={library.setAutoTranslation}/></HostedDisclosure>:null}
     {((library.error && !duplicateImportError) || saveBlocked) && !library.recovery ? <div role="alert" className="library-warning"><span>{library.error}{saveBlocked ? <small>当前内容仍保留，保存成功后才能离开。</small> : null}</span>
       {saveBlocked || !library.ready ? <button type="button" disabled={library.busy} onClick={() => void library.retry()}>{saveBlocked ? "重试保存" : "重新连接"}</button> : library.importError && onImport ? <button type="button" disabled={library.busy} onClick={onImport}>重新选择文件</button> : <button type="button" disabled={library.busy} onClick={library.clearError}>关闭提示</button>}
     </div> : null}
     {library.draftWarning ? <p role="alert" className="library-warning">{library.draftWarning}</p> : null}
-    {library.notice ? <p role="status" className="library-recovered">{library.notice}</p> : null}
+    {library.notice ? <p role="status" className="library-recovered">{library.notice}{library.removedUndo?<button type="button" disabled={library.busy} onClick={()=>void library.restoreEntry(library.removedUndo!)}>撤销移出</button>:null}</p> : null}
     {library.recoveries.filter(r=>r.state === 'pending' && r.savedRecordUnavailable).map(r=><div key={r.id} className="library-warning" role="alert"><span>{r.filename}：当前保存记录无法读取，之前的记录已保留。</span><button type="button" disabled={library.busy} onClick={()=>void library.showRecovery(r.id)}>找回阅读记录</button></div>)}
     <ReadingRecoveryView library={library} />
     {webDoc && !hideWebSource && !startPage ? <details key={webDoc.id} className="web-source-state"><summary>来源详情</summary><div className="web-source-details"><span>导入于 {new Date(webDoc.importedAt).toLocaleString()}</span><span>{webDoc.web.retrieval?.provider === "fxtwitter" ? X_PUBLIC_SCOPE : webDoc.web.extractorVersion === X_CAPTURE_EXTRACTOR ? X_CAPTURE_SCOPE : "正在阅读本机保存副本"}</span>{webDoc.web.retrieval?.provider === "fxtwitter" ? <a href={webDoc.web.retrieval.url} target="_blank" rel="noopener noreferrer">查看获取接口</a> : null}{webDoc.web.coverage === "public-excerpt" ? <span>仅保存公开部分，付费内容未导入</span> : null}<a href={webDoc.web.originalUrl} target="_blank" rel="noopener noreferrer">打开原网页</a></div></details> : null}

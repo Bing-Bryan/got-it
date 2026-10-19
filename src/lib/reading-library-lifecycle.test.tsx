@@ -39,6 +39,7 @@ async function dispatch(path='',body?:Record<string,unknown>):Promise<unknown>{
  if(!op)return l.get(id);
  if(op==='check')return l.check(id);
  if(op==='activate')return l.activate(id);
+ if(op==='visibility')return l.setRemoved(id,body!.expectedVersion as number,body!.removed===true);
  if(op==='recover'){if(failedSave)throw new Error('磁盘保存失败测试');return l.recover(id,body);}
  if(op==='save'){if(failedSave)throw new Error('磁盘保存失败测试');return l.save(id,body!.expectedVersion as number,body!.revisionId as string,body!.workspace,body!.position);}
  throw new Error('unexpected '+path);
@@ -169,4 +170,13 @@ it('does not immediately replace a dismissed dialog with another already-known r
   expect(control.busy).toBe(false);
   expect(control.recovery).not.toBeNull();
  },{timeout:2000,interval:25});
+});
+
+it('saves before removing the current entry, selects another, then exposes restoration when all are removed',async()=>{
+ await mount();await change('移出前保留的回答');await act(async()=>control.removeEntry(a.id));expect((await l.get(a.id)).workspace.inquiries[0].messages[0].content).toBe('移出前保留的回答');expect(control.entry?.id).toBe(b.id);expect(control.list.entries.map(e=>e.id)).toEqual([b.id]);expect(control.removedUndo).toBe(a.id);
+ await act(async()=>control.removeEntry(b.id));expect(control.entry).toBeNull();expect(control.list.entries).toEqual([]);expect(control.list.removedEntries).toHaveLength(2);
+ await act(async()=>control.restoreEntry(a.id));expect(control.list.entries.map(e=>e.id)).toEqual([a.id]);await act(async()=>control.open(a.id));expect(current.inquiries[0].messages[0].content).toBe('移出前保留的回答');
+});
+it('does not remove or switch when preserving the current draft fails',async()=>{
+ await mount();await change('移出也不能丢');failedSave=true;await act(async()=>control.removeEntry(a.id));expect(control.entry?.id).toBe(a.id);expect((await l.get(a.id)).removedAt).toBeUndefined();expect(control.removedUndo).toBeNull();expect(control.status).toBe('阅读进度暂未保存');expect(new DraftStore(localStorage).read().drafts).toHaveLength(1);
 });

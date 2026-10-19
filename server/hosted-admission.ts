@@ -122,12 +122,12 @@ export class HostedAdmission {
     throw new HostedError('操作过于频繁，请稍后再试', 429, 'rate_limited', retryAfter);
   }
 
-  clientIp(req: Request, required: boolean) {
+  clientIp(req: Request, required: boolean, operation: 'import'|'model' = 'model') {
     const header = req.get(CLIENT_IP_HEADER);
     const forged = req.get('x-forwarded-for');
     if (!this.trustedProxy) {
       this.counts.trustedIp += 1;
-      if (required) throw new HostedError('体验入口未配置可信代理，已拒绝付费请求', 503, 'trusted_proxy_unconfigured');
+      if (required) throw new HostedError(operation==='import'?'体验入口未配置可信代理，暂时无法导入材料':'体验入口未配置可信代理，暂时无法执行模型请求', 503, 'trusted_proxy_unconfigured');
       return forged ? undefined : 'untrusted';
     }
     if (!loopback(req.socket.remoteAddress)) {

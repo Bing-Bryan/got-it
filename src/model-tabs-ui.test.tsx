@@ -155,7 +155,7 @@ it('shows model controls inside the closed provider menu and exposes secondary a
 it.each([[99, '(99)'], [100, '(99+)']] as const)('renders single-line tab icons and count %s with zero hidden',async(count,label)=>{
  const base=w.inquiries[0];w.inquiries=Array.from({length:count},(_,i)=>({...base,id:'i'+i}));w.activeInquiryId='i0';await mount();
  expect(host.querySelector('#intent-tab-explain')?.textContent).toBe('解释一下'+label);expect(host.querySelector('#intent-tab-verify')?.textContent).toBe('查找来源');
- expect(host.querySelectorAll('.inquiry-tabs button > svg').length).toBe(3);expect(host.querySelector('.inquiry-tabs small')).toBeNull();
+ expect(host.querySelectorAll('.inquiry-tabs button .tab-content > svg').length).toBe(3);expect(host.querySelector('.inquiry-tabs small')).toBeNull();
 });
 
 it.each(['explain','why','verify'] as const)('uses a noninteractive prompt and explicitly submitted question for %s',async intent=>{
@@ -588,4 +588,48 @@ it('keeps the existing continue-question trigger during generation',async()=>{
  w.inquiries[0].intent='ask';w.inquiries[0].lastError='受控失败';
  stream.mockImplementation(()=>new Promise(()=>{}));await mount();await click('.regenerate-action');
  expect(host.querySelector('.question-toggle')?.textContent).toBe('继续追问…');expect(host.querySelector<HTMLButtonElement>('.question-toggle')!.disabled).toBe(true);
+});
+
+
+it.each(['markdown','web','pdf'] as const)('keeps translation in the leading toolbar and persistence beside adjustment for %s',async kind=>{
+ if(kind==='web'){
+  const {webWorkspace}=await import('./test-support/web');w=webWorkspace();w.document.markdown='# Controlled toolbar fixture\n\nThis English paragraph is handwritten only for toolbar checks.';
+ }else if(kind==='pdf'){
+  w.document={id:'safe-toolbar-pdf',filename:'controlled-toolbar.pdf',kind:'pdf',isDemo:false,contentHash:'a'.repeat(64),importedAt:'2026',pdf:{resourceId:'a'.repeat(64),pages:[{view:[0,0,400,300],rotation:0}]}};w.inquiries=[];w.activeInquiryId=null;
+ }else w.document={id:w.document.id,filename:'controlled-toolbar.md',kind:'markdown',isDemo:false,contentHash:'b'.repeat(64),importedAt:'2026',markdown:'# Controlled toolbar fixture\n\nThis English paragraph is handwritten only for toolbar checks.'};
+ const saved=await testLibraryRequest('/entries',{workspace:w,creationKey:'toolbar-'+kind}) as {id:string};await testLibraryRequest(`/entries/${saved.id}/activate`,{});await mount();await click('.start-resume button');
+ const tools=host.querySelector('.reader-tools')!,leading=tools.querySelector('.reader-tools-leading')!,trailing=tools.querySelector('.reader-tools-trailing')!;
+ expect(leading.querySelector('.library-state')?.nextElementSibling?.classList.contains('web-translation-controls')).toBe(true);
+ expect(leading.querySelector('.translation-side-toggle')).not.toBeNull();
+ await vi.waitFor(()=>expect(trailing.querySelector('.library-save-status')?.textContent).toBe(kind==='web'?'已保存，部分内容未导入':'已保存'),{timeout:2000});
+ expect(trailing.querySelector('.library-save-status')?.nextElementSibling?.classList.contains('reader-adjustment-layer')).toBe(true);
+ expect(leading.querySelector('.translation-status')).toBeNull();expect(tools.querySelectorAll('.library-save-status')).toHaveLength(1);expect(stream).not.toHaveBeenCalled();
+});
+
+it('keeps 99+ and running indicators outside the centered category content without losing busy semantics',async()=>{
+ const base=w.inquiries[0];w.inquiries=Array.from({length:100},(_,index)=>({...base,id:'pressure-'+index,...(index===0?{lastError:'controlled retry fixture'}:{})}));w.activeInquiryId='pressure-0';
+ let finish!:()=>void;stream.mockImplementation((_request:InquiryRequest,_callback:unknown,signal:AbortSignal)=>new Promise<void>(resolve=>{finish=resolve;signal.addEventListener('abort',()=>resolve(),{once:true});}));
+ await mount();await click('.regenerate-action');const tab=host.querySelector('#intent-tab-explain')!,content=tab.querySelector('.tab-content')!;
+ expect(tab.getAttribute('aria-busy')).toBe('true');expect(tab.getAttribute('aria-label')).toContain('(100)');expect(tab.querySelector('.tab-count')?.textContent).toBe('(99+)');expect(content.querySelector('svg')).not.toBeNull();expect(content.querySelector('.tab-label')?.textContent).toBe('解释一下');
+ expect(content.querySelector('.tab-count,.tab-busy')).toBeNull();expect(tab.querySelector('.tab-count')?.parentElement).toBe(tab);expect(tab.querySelector('.tab-busy')?.parentElement).toBe(tab);expect(stream).toHaveBeenCalledOnce();await click('.stop-action');await act(async()=>finish());expect(tab.getAttribute('aria-busy')).toBe('false');
+});
+
+it('keeps translated and original excerpt text inside unpadded preview spans',async()=>{
+ const anchor=w.inquiries[0].anchor,quote='受控手写译文，仅用于界面结构回归。';anchor.translation={version:2,translationId:'controlled-excerpt',sourceVersion:'e'.repeat(64),blockId:anchor.blockId,quote,prefix:'',suffix:'',start:0,end:quote.length};await mount();
+ const excerpts=[...host.querySelectorAll<HTMLButtonElement>('.result-navigation button.source-excerpt')];expect(excerpts).toHaveLength(2);expect(excerpts[0].firstElementChild?.tagName).toBe('SPAN');expect(excerpts[0].firstElementChild?.textContent).toBe('译文摘录：'+quote);for(const excerpt of excerpts)expect([...excerpt.childNodes].some(node=>node.nodeType===Node.TEXT_NODE&&!!node.textContent?.trim())).toBe(false);
+});
+
+it('sends the bounded nonadjacent definition for explanation and a natural follow-up without changing the quote',async()=>{
+ if(w.document.kind==='pdf')throw Error();w.document.markdown='# 缓冲区间\n\n第一段只介绍阅读顺序。\n\n## 不相关\n\n建站桌面的配色说明。无关原文标记。\n\n## 作者用法\n\n缓冲区间是指两次操作之间预留的时间，作者用它吸收延迟，而不是某个硬件缓存。';
+ const article=document.createElement('div');article.innerHTML=renderMarkdown(w.document.markdown).html;const heading=article.querySelector<HTMLElement>('h1')!;
+ w.inquiries[0].anchor={documentId:w.document.id,blockId:heading.dataset.blockId!,headingPath:['缓冲区间'],quote:'缓冲区间',prefix:'',suffix:'',start:0,end:4,matchStatus:'matched'};w.inquiries[0].lastError='controlled retry';
+ stream.mockImplementation(async(request:InquiryRequest,emit:(event:InquiryEvent)=>void)=>emit({type:'complete',sequence:1,requestId:request.requestId!,response:{answer:'受控手写回答，非模型输出。',sources:[],evidenceStatus:'not-applicable',mode:'live',providerId:'codex',providerName:'Codex'}}));
+ await mount();expect(stream).not.toHaveBeenCalled();await click('.regenerate-action');expect(stream).toHaveBeenCalledOnce();await click('.question-toggle');await typeQuestion('这里的缓冲区间在操作时是什么意思？');await click('.question-composer [type=submit]');expect(stream).toHaveBeenCalledTimes(2);
+ for(const [request] of stream.mock.calls){expect(request.quote).toBe('缓冲区间');expect(request.context).toContain('两次操作之间预留的时间');expect(request.context).not.toContain('无关原文标记');expect(request.context.length).toBeLessThanOrEqual(5600);}
+});
+
+it('keeps the trash icon armed without text expansion and cancels confirmation when focus leaves',async()=>{
+ await mount();await click('#intent-tab-explain');await click('#inquiry-delete-toggle');const trash=host.querySelector<HTMLButtonElement>('[data-delete-inquiry-id="explain"]')!;
+ await act(async()=>trash.focus());await click('[data-delete-inquiry-id="explain"]');expect(trash.querySelector('svg')?.getAttribute('fill')).toBe('currentColor');expect(trash.textContent).toBe('');expect(testWorkspace().inquiries).toHaveLength(1);
+ await act(async()=>host.querySelector<HTMLButtonElement>('.category-open')!.focus());expect(host.querySelector('.category-delete.confirming')).toBeNull();expect(testWorkspace().inquiries).toHaveLength(1);expect(stream).not.toHaveBeenCalled();
 });

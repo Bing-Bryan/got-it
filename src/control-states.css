@@ -6,6 +6,12 @@
   :root {
     --control-radius: 8px;
     --control-font-size: 12px;
+    --control-height: 32px;
+    --control-icon-size: 16px;
+    --control-icon-stroke: 1.8;
+    --control-gap: 6px;
+    --control-padding-x: 8px;
+    --control-padding-y: 6px;
     --control-pressed: #b8c2fa;
     --control-primary-pressed: #343ba0;
     --control-disabled-bg: var(--soft);
@@ -62,23 +68,78 @@
     --control-border: transparent;
   }
 
-  /* Menu-open is not a selected mode: e.g. width opens on hover, Codex on click. */
-  button[aria-expanded="true"] {
-    --control-bg: var(--blue-soft);
-    --control-fg: var(--blue-strong);
-    --control-border: var(--blue-line);
+  /* Persistent choices reserve their boundary in every state. Keep this list
+     explicit: source HTML, landing teaching tabs and submit/danger actions differ. */
+  :is(.inquiry-tabs [role="tab"], .anchor-requests button, .provider-option, .library-open, .library-current, .outline-item, .desktop-sidebar-controls .icon-button, .desktop-panel-controls .icon-button, .bookmarks-nav, .translation-side-toggle, .pdf-select-mode, .category-delete-toggle, .provider-trigger, .reading-adjustment-trigger, .library-add, .document-bookmarks-trigger, .reader-tools .disclosure-summary, .result-navigation button, .question-back, .compact-actions > .secondary-action, .library-samples .hosted-samples button) {
+    border: 1px solid var(--control-border);
+    border-radius: var(--control-radius);
+    --control-active-bg: var(--paper);
+    --control-active-fg: var(--blue-strong);
+    --control-active-border: var(--blue-strong);
+    --control-active-shadow: inset 0 0 0 1px var(--blue-strong);
+    min-height: var(--control-height);
+    gap: var(--control-gap);
+    font-size: var(--control-font-size);
+    line-height: 1.5;
   }
 
-  button:is([aria-pressed="true"], [aria-selected="true"], [aria-current="true"], [aria-current="location"]),
-  button.provider-option.active,
-  .library-item.current .library-open {
-    --control-bg: var(--blue-soft);
+  :is(.reader-tools .disclosure-summary, .result-navigation button, .question-back, .compact-actions > .secondary-action, .library-samples .hosted-samples button) {
+    --control-bg: transparent;
+    --control-border: transparent;
+    display: inline-flex;
+    align-items: center;
+    padding: var(--control-padding-y) var(--control-padding-x);
+  }
+
+  :is(.inquiry-tabs [role="tab"], .anchor-requests button, .provider-option, .outline-item, .desktop-sidebar-controls .icon-button, .desktop-panel-controls .icon-button, .bookmarks-nav, .translation-side-toggle, .reader-tools .disclosure-summary, .result-navigation button, .question-back, .compact-actions > .secondary-action) svg {
+    width: var(--control-icon-size);
+    height: var(--control-icon-size);
+    stroke-width: var(--control-icon-stroke);
+    flex-shrink: 0;
+  }
+
+  .library-open, .reader-tools .disclosure-summary {
+    padding: var(--control-padding-y) var(--control-padding-x);
+  }
+  .compact-actions > .question-toggle.secondary-action {
+    --control-border: var(--line-strong);
+    --control-bg: var(--paper);
+  }
+
+  /* Clamp the unpadded inner span; clamping the padded button leaks a third line. */
+  .result-navigation button.source-excerpt {
+    display: block;
+    text-align: left;
+  }
+  .result-navigation button.source-excerpt > span {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+
+  .reader-tools details[open] > .disclosure-summary {
+    --control-bg: var(--paper);
     --control-fg: var(--blue-strong);
-    --control-border: var(--blue-line);
-    --control-hover-bg: var(--blue-line);
-    --control-hover-border: var(--blue);
-    --control-active-bg: var(--control-pressed);
-    --control-active-fg: #30368f;
+    --control-border: var(--blue);
+    --control-hover-bg: var(--paper);
+    --control-hover-border: var(--blue-strong);
+  }
+
+  /* Expanded remains menu state, never a replacement for selected semantics. */
+  :is(.inquiry-tabs [role="tab"], .anchor-requests button, .provider-option, .library-open, .library-current, .outline-item, .desktop-sidebar-controls .icon-button, .desktop-panel-controls .icon-button, .bookmarks-nav, .translation-side-toggle, .pdf-select-mode, .category-delete-toggle, .provider-trigger, .reading-adjustment-trigger, .library-add, .document-bookmarks-trigger, .reader-tools .disclosure-summary, .result-navigation button, .question-back, .compact-actions > .secondary-action, .library-samples .hosted-samples button):is([aria-pressed="true"], [aria-selected="true"], [aria-current="true"], [aria-current="location"], [aria-expanded="true"]),
+  .provider-option.active,
+  .library-item.current .library-open {
+    --control-bg: var(--paper);
+    --control-fg: var(--blue-strong);
+    --control-border: var(--blue);
+    --control-hover-bg: var(--paper);
+    --control-hover-fg: var(--blue-strong);
+    --control-hover-border: var(--blue-strong);
+  }
+
+  :is(.inquiry-tabs [role="tab"], .anchor-requests button, .provider-option, .library-open, .library-current, .outline-item, .desktop-sidebar-controls .icon-button, .desktop-panel-controls .icon-button, .bookmarks-nav, .translation-side-toggle, .pdf-select-mode, .category-delete-toggle, .provider-trigger, .reading-adjustment-trigger, .library-add, .document-bookmarks-trigger, .reader-tools .disclosure-summary, .result-navigation button, .question-back, .compact-actions > .secondary-action, .library-samples .hosted-samples button):not(:disabled):not([aria-disabled="true"]):active {
+    box-shadow: var(--control-active-shadow);
   }
 
   :is(.primary-action, .recovery-primary, .question-send),
@@ -105,7 +166,20 @@
     --control-active-bg: var(--control-danger-pressed);
     --control-active-fg: #922e35;
     --control-active-border: var(--red);
+    color: var(--control-fg);
+    background: var(--control-bg);
+    border-color: var(--control-border);
   }
+  @media (hover: hover) {
+    button.category-delete.confirming:not(:disabled):not([aria-disabled="true"]):hover {
+      color: var(--control-hover-fg); background: var(--control-hover-bg); border-color: var(--control-hover-border);
+    }
+  }
+  button.category-delete.confirming:not(:disabled):not([aria-disabled="true"]):active {
+    color: var(--control-active-fg); background: var(--control-active-bg); border-color: var(--control-active-border);
+  }
+  button.category-delete.confirming:focus-visible { outline-color: var(--red); }
+  button.category-delete.confirming:is(:disabled,[aria-disabled="true"]) { color:var(--control-disabled-fg); background:var(--control-disabled-bg); border-color:var(--control-disabled-border); box-shadow:none; }
 
   @media (hover: hover) {
     :where(button, summary):not(:where(.mobile-scrim, .markdown-article *, .answer-markdown *)):not(:disabled):not([aria-disabled="true"]):hover {
@@ -140,14 +214,13 @@
 
   button:not(:where(.markdown-article *, .answer-markdown *)) > svg { color: inherit; }
   .provider-option-icon { color: inherit; border-color: currentColor; }
-  .inquiry-tabs [aria-selected="true"]::after { background: var(--blue); }
-  .inquiry-tabs :is(:disabled, [aria-disabled="true"])::after { background: var(--control-disabled-fg); }
+  .inquiry-tabs [role="tab"]::after { display: none; }
 
-  .library-item { background: transparent; }
-  .library-item.current { background: var(--blue-soft); }
+  /* The file button owns current/hover; do not tint the whole row or path. */
+  .library-item, .library-item.current { background: transparent; }
   @media (hover: hover) {
-    .library-item:has(button:enabled):hover { background: var(--blue-soft); }
-    .library-item.current:has(button:enabled):hover { background: var(--blue-line); }
+    .library-item:has(button:enabled):hover,
+    .library-item.current:has(button:enabled):hover { background: transparent; }
   }
 
   @media (prefers-reduced-motion: reduce) {

@@ -58,3 +58,11 @@ describe('selected PDF regions in the browser library',()=>{
   await expect(browserRequest(`/entries/${entry.id}/ocr`,{version:1,fileHash:pdfId,page:2,lines:[]})).rejects.toThrow('不符');
  });
 });
+
+it('keeps removed materials, notes and resources in backups while restoring only by explicit action',async()=>{
+ const e=await add();await browserRequest(`/entries/${e.id}/activate`,{});const hidden=await browserRequest<LibraryEntry>(`/entries/${e.id}/visibility`,{expectedVersion:e.version,removed:true});
+ expect((await browserRequest<LibraryList>()).entries).toEqual([]);expect((await browserRequest<LibraryList>()).removedEntries?.map(e=>e.id)).toEqual([e.id]);
+ await expect(browserRequest(`/entries/${e.id}/activate`,{})).rejects.toThrow('已移出');await expect(browserRequest('/entries',{workspace:e.workspace,creationKey:e.creationKey,activate:true})).rejects.toThrow('已移出');await expect(browserRequest(`/entries/${e.id}/visibility`,{expectedVersion:hidden.version})).rejects.toThrow('明确选择');expect((await browserRequest<LibraryList>()).entries).toHaveLength(0);await expect(browserRequest(`/entries/${e.id}/visibility`,{expectedVersion:e.version,removed:false})).rejects.toMatchObject({status:409});
+ const backup=await browserBackup();await clear();await restoreBrowserBackup(backup);expect((await browserRequest<LibraryList>()).entries).toEqual([]);expect((await browserRequest<LibraryList>()).activeId).toBeNull();
+ expect((await browserRequest<LibraryEntry>(`/entries/${e.id}`)).workspace).toEqual(e.workspace);await browserRequest(`/entries/${e.id}/visibility`,{expectedVersion:hidden.version,removed:false});expect((await browserRequest<LibraryList>()).entries.map(e=>e.id)).toEqual([e.id]);
+});

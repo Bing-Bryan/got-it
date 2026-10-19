@@ -2,6 +2,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { QuestionComposer } from './QuestionComposer';
+import { SelectionActions } from './SelectionActions';
 let root: Root, host: HTMLDivElement;
 beforeEach(() => { host=document.createElement('div');document.body.append(host);root=createRoot(host); });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();});
@@ -35,4 +36,36 @@ it('hides only the closed trigger and preserves its prompt, open input and draft
  await render(true);expect(host.querySelector('textarea')!.value).toBe('保留的草稿');await key({key:'Escape'});
  expect(host.querySelector('.question-toggle')).toBeNull();expect(host.querySelector('.question-prompt')?.textContent).toBe('还是不懂？');
  await render(false);await click('.question-toggle');expect(host.querySelector('textarea')!.value).toBe('保留的草稿');expect(send).not.toHaveBeenCalled();
+});
+
+
+it('removes selection input return and close controls, cancels on Escape and keeps submission separate',async()=>{
+ const select=vi.fn(),close=vi.fn();await act(async()=>root.render(<SelectionActions onSelect={select} onClose={close}/>));
+ expect(host.querySelector('.selection-close')).not.toBeNull();await click('.question-toggle');
+ expect(host.querySelector('.selection-close')).toBeNull();expect(host.querySelector('.question-back')).toBeNull();
+ const input=host.querySelector('textarea')!;await act(async()=>input.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true,button:0})));
+ await type('解释这个用法');await act(async()=>input.setSelectionRange(0,2));expect(host.querySelector('textarea')).toBe(input);expect(select).not.toHaveBeenCalled();
+ await key({key:'Escape',isComposing:true});expect(host.querySelector('textarea')).toBe(input);expect(close).not.toHaveBeenCalled();
+ await key({key:'Escape'});expect(host.querySelector('textarea')).toBeNull();expect(host.querySelector('.selection-close')).not.toBeNull();expect(close).toHaveBeenCalledOnce();
+ close.mockClear();await click('.question-toggle');expect(host.querySelector('textarea')!.value).toBe('解释这个用法');
+ await key({key:'Enter',isComposing:true});await key({key:'Enter',shiftKey:true});expect(select).not.toHaveBeenCalled();
+ await act(async()=>host.querySelector('[type=submit]')!.dispatchEvent(new MouseEvent('pointerdown',{bubbles:true,button:0})));
+ await click('[type=submit]');expect(select).toHaveBeenCalledExactlyOnceWith('ask','解释这个用法');expect(close).not.toHaveBeenCalled();
+ expect(host.querySelector('.selection-close')).not.toBeNull();await click('.selection-close');expect(close).toHaveBeenCalledOnce();
+});
+
+
+it.each([{isComposing:true},{keyCode:229}])('keeps IME Escape away from the native window dismissal handler: %j',async composing=>{
+ const select=vi.fn(),close=vi.fn(),windowDismiss=vi.fn();
+ const dismiss=(event:KeyboardEvent)=>{if(event.key==='Escape')windowDismiss();};
+ window.addEventListener('keydown',dismiss);
+ try {
+  await act(async()=>root.render(<SelectionActions onSelect={select} onClose={close}/>));await click('.question-toggle');await type('输入法草稿');
+  const input=host.querySelector('textarea')!;
+  const event=new KeyboardEvent('keydown',{key:'Escape',...composing,bubbles:true,cancelable:true});
+  await act(async()=>input.dispatchEvent(event));
+  expect(event.defaultPrevented).toBe(false);expect(windowDismiss).not.toHaveBeenCalled();expect(close).not.toHaveBeenCalled();expect(select).not.toHaveBeenCalled();
+  expect(host.querySelector('textarea')).toBe(input);expect(input.value).toBe('输入法草稿');
+  await key({key:'Escape'});expect(close).toHaveBeenCalledOnce();expect(windowDismiss).not.toHaveBeenCalled();
+ } finally {window.removeEventListener('keydown',dismiss);}
 });

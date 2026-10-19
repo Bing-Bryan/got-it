@@ -45,3 +45,9 @@ it('keeps popup titles, original URLs and copying without extra source metadata 
     if(clipboardBefore)Object.defineProperty(navigator,'clipboard',clipboardBefore);else Reflect.deleteProperty(navigator,'clipboard');
   }
 });
+
+it('keeps full-text privacy and an existing automatic preference available without requesting translation',async()=>{
+ const host=document.body.appendChild(document.createElement('div')),root=createRoot(host),change=vi.fn(),translate=vi.fn();
+ const library={ready:true,status:'已保存',recoveries:[],list:{nativePicker:false},autoTranslate:true,setAutoTranslation:change,translate} as unknown as ReturnType<typeof useReadingLibrary>;
+ try{await act(async()=>root.render(<ReadingLibraryStatus library={library}/>));const privacy=host.querySelector('.reader-local-privacy')!;expect(privacy.textContent).not.toContain('全部可翻译正文分批发送');expect(privacy.querySelector('.translation-privacy-settings p')).toBeNull();const checkbox=privacy.querySelector<HTMLInputElement>('input')!;expect(checkbox.checked).toBe(true);expect(change).not.toHaveBeenCalled();expect(translate).not.toHaveBeenCalled();await act(async()=>checkbox.click());expect(change).toHaveBeenCalledWith(false);expect(translate).not.toHaveBeenCalled();}finally{await act(async()=>root.unmount());host.remove();}
+});

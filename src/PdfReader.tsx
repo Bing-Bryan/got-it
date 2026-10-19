@@ -1,3 +1,4 @@
+import {readerSaveStatus} from "./lib/reader-save-status";
 import {HOSTED,hostedCapabilities} from './lib/runtime-mode';
 import {regionNeedsSmallerSelection,renderRegion} from './lib/pdf-region';
 import {revealBookmarkRects} from './lib/bookmark-navigation';
@@ -29,7 +30,7 @@ import './pdf-reader.css';
 GlobalWorkerOptions.workerSrc = workerUrl;
 type PdfDocument = Extract<DocumentSnapshot, {kind:'pdf'}>;
 type Viewport = ReturnType<PDFPageProxy['getViewport']>;
-interface Props { translation?:WebTranslationState; showTranslation?:boolean; bookmarkCompleted?:BookmarkCreate|null; bookmarks?:ReadingBookmark[]; onBookmarkStarted?:(request:BookmarkCreate)=>void; bookmarkVersion?:number;onBookmarkFailed?:(request:BookmarkCreate,error:string)=>void; revisionId?:string; onBookmarkSaved?:(result:BookmarkResult,request:BookmarkCreate)=>void; bookmarkTarget?:ReadingBookmark|null;onBookmarkLocated?:(success:boolean)=>void; toolbarHost?:HTMLElement|null; adjustmentHost?:HTMLElement|null; onReadingTime?:(hash:string,minutes:number|null)=>void; outlineTarget?:{item:PdfOutlineItem;nonce:number}|null; onCurrentPage?:(page:number)=>void; document:PdfDocument; entryId:string; inquiries:Inquiry[]; activeId?:string|null; target?:{id:string;nonce:number;returnToSource?:boolean}|null; onLocated?:(id:string,success:boolean,returnToSource?:boolean,target?:HTMLElement)=>void; initialPosition?:ReadingPosition; readOnly?:boolean; saveStatus?:string; saveBusy?:boolean; saveError?:boolean; onCreate?:(intent:ActiveInquiryIntent,draft:SelectionDraft,question?:string)=>void; onActivate?:(id:string)=>void; onReady?:()=>void; onView?:()=>void }
+interface Props { translation?:WebTranslationState; showTranslation?:boolean; bookmarkCompleted?:BookmarkCreate|null; bookmarks?:ReadingBookmark[]; onBookmarkStarted?:(request:BookmarkCreate)=>void; bookmarkVersion?:number;onBookmarkFailed?:(request:BookmarkCreate,error:string)=>void; revisionId?:string; onBookmarkSaved?:(result:BookmarkResult,request:BookmarkCreate)=>void; bookmarkTarget?:ReadingBookmark|null;onBookmarkLocated?:(success:boolean)=>void; toolbarHost?:HTMLElement|null; adjustmentHost?:HTMLElement|null; onReadingTime?:(hash:string,minutes:number|null)=>void; outlineTarget?:{item:PdfOutlineItem;nonce:number}|null; onCurrentPage?:(page:number)=>void; document:PdfDocument; entryId:string; inquiries:Inquiry[]; activeId?:string|null; target?:{id:string;nonce:number;returnToSource?:boolean}|null; onLocated?:(id:string,success:boolean,returnToSource?:boolean,target?:HTMLElement)=>void; initialPosition?:ReadingPosition; readOnly?:boolean; saveStatus?:string; hideSaveStatus?:boolean; saveBusy?:boolean; saveError?:boolean; onCreate?:(intent:ActiveInquiryIntent,draft:SelectionDraft,question?:string)=>void; onActivate?:(id:string)=>void; onReady?:()=>void; onView?:()=>void }
 interface SheetToolbar {page:number;ready:boolean;mode:'text'|'region';busy:boolean;start:()=>void;cancel:()=>void}
 const rectStyle=(r:PdfRect)=>({left:r[0],top:r[1],width:r[2]-r[0],height:r[3]-r[1]});
 const errorText=(e:unknown)=>e instanceof Error?e.message:'PDF 操作未完成，请重试。';
@@ -86,12 +87,12 @@ export default function PdfReader(props:Props) {
   useEffect(()=>{if(error&&props.bookmarkTarget)props.onBookmarkLocated?.(false);},[error,props.bookmarkTarget]);
   useEffect(()=>{if(error&&props.target)props.onLocated?.(props.target.id,false,props.target.returnToSource);},[error,props.target]);
   const activeToolbar=toolbar?.page===currentPage?toolbar:null;
-  const saveLabel=props.saveError?'未保存':props.saveBusy?'处理中':props.saveStatus??'';
+  const saveLabel=props.saveError?'未保存':props.saveBusy?'处理中':readerSaveStatus(props.saveStatus??'',props.document);
   const toolbarNode = <div className="pdf-toolbar" aria-label="PDF 阅读工具栏">
       <span className="pdf-page-number" aria-live="off">第 {currentPage} / {props.document.pdf.pages.length} 页</span>
       {!props.readOnly?<><button type="button" className="pdf-select-mode" aria-pressed={activeToolbar?.mode==='region'} disabled={!activeToolbar?.ready} onClick={()=>{if(activeToolbar?.busy||activeToolbar?.mode==='region')activeToolbar.cancel();else activeToolbar?.start();}}>{activeToolbar?.busy?'取消识别':activeToolbar?.mode==='region'?'取消框选':'框选内容'}</button>{activeToolbar?.mode==='region'||activeToolbar?.busy?<span className="pdf-mode-hint">{activeToolbar.busy?'识别中…':'拖动框选'}</span>:null}</>:<span className="pdf-mode-hint">只读</span>}
       <span className="pdf-inline-help" title="文字可直接拖选；图片可框选，再选择功能。">{HOSTED?"文字可直接拖选；图片可框选预览，读图能力尚未通过验证。":"文字可直接拖选；图片可框选，再选择功能。"}</span>
-      <span className={`pdf-save-state ${props.saveError?'failed':''}`} role="status" title={props.saveStatus}>{saveLabel}</span>
+      {!props.hideSaveStatus ? <span className={`pdf-save-state ${props.saveError?'failed':''}`} role="status" title={props.saveStatus}>{saveLabel}</span> : null}
     </div>;
   const adjustmentNode = <div className="reading-adjustment-dock reading-adjustment-dock--pdf"><PdfZoomControls scale={zoom.scale} automatic={zoom.manual===null} onChange={zoom.change}/></div>;
   return <div ref={root} className="pdf-reader" data-zoom={zoom.manual??0}>

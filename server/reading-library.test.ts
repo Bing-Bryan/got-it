@@ -130,3 +130,12 @@ describe("local library API boundary",()=>{
     } finally { server.close(); await once(server,"close"); }
   });
 });
+
+it('soft removes with optimistic versions, retains source and notes, and restores after restart',async()=>{
+ const s=await setup();const e=await saveFixture(s.library,await add(s.library));await s.library.activate(e.id);const current=await s.library.get(e.id);
+ await expect(s.library.setRemoved(e.id,e.version,true)).rejects.toMatchObject({status:409});
+ const hidden=await s.library.setRemoved(e.id,current.version,true);await expect(s.library.setRemoved(e.id,hidden.version,undefined)).rejects.toThrow("明确选择");const restart=new ReadingLibrary(s.library.dir);expect((await restart.list()).entries).toHaveLength(0);expect((await restart.list()).removedEntries?.map(e=>e.id)).toEqual([e.id]);expect((await restart.list()).activeId).toBeNull();
+ expect((await restart.get(e.id)).workspace.inquiries).toEqual(e.workspace.inquiries);expect(await readFile(s.source,'utf8')).toBe(e.workspace.document.markdown);
+ expect((await add(s.library,'duplicate-hidden')).id).toBe(e.id);await expect(restart.activate(e.id)).rejects.toThrow('已移出');
+ await restart.setRemoved(e.id,hidden.version,false);expect((await restart.list()).entries).toHaveLength(1);expect((await restart.activate(e.id)).workspace.inquiries).toEqual(e.workspace.inquiries);
+});
