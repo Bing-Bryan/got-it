@@ -2,7 +2,8 @@ import OpenAI from 'openai';
 import {crc32} from 'node:zlib';
 import {AnswerDecoder} from './codex-stream';
 import type {InquiryRequest, InquiryResponse} from '../src/types';
-import {READING_BASE_INSTRUCTIONS, READING_COVERAGE_CHECK, readingMaterials, refinementInstruction} from './prompt-materials';
+import {hostedPrompt, hostedInputBytes} from '../src/lib/hosted-prompt';
+export {hostedPrompt, IMAGE_PROMPT_NOTE} from '../src/lib/hosted-prompt';
 import {HostedError, MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS} from './hosted-budget';
 import {HOSTED_IMAGE_MAX_BYTES, REGION_NO_TEXT_CONTEXT} from '../src/lib/pdf-data';
 import {REGION_MAX_PIXELS, REGION_MAX_SIDE} from '../src/lib/pdf-region';
@@ -13,7 +14,6 @@ export type HostedInquiry=InquiryRequest&{hostedImage?:HostedImage};
 // Observed deepseek-flash usage stayed under ~700 tokens per megapixel. A settled
 // overrun blocks the whole day, so reserve well above that (2.5 MP -> 6750 tokens).
 export const imageTokenReserve=(pixels:number)=>Math.ceil(pixels/400)+500;
-export const IMAGE_PROMPT_NOTE='本次附有用户在 PDF 中框选的区域图片，以图片为主要依据；quote 只是区域位置说明，context 中的识别文字只是辅助，可能有误。看不清或无法确定的数值要明确说明，不要猜测。';
 const PNG_SIGNATURE=Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]);
 function parseHostedImage(value:unknown):HostedImage{
   if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>k!=='data'))throw new HostedError('图片格式无效',400,'invalid_image');
@@ -32,10 +32,6 @@ export const usesHostedSearch=(request:InquiryRequest)=>request.intent==='verify
 export function hostedSearchQuery(request:HostedInquiry):string{
   const basis=request.hostedImage?(request.context===REGION_NO_TEXT_CONTEXT?'':request.context):request.quote;
   return [basis,request.question].join(' ').replace(/https?:\/\/\S+/gi,' ').replace(/\s+/g,' ').trim().slice(0,256);
-}
-export function hostedPrompt(request:HostedInquiry) {
-  const intent=request.intent==='ask'?'准确回答 question 中的具体阅读问题，结合选区和历史解释代词，不替换为泛泛介绍。':request.intent==='entity'?'说明是什么、做什么和与文章的关系；未知信息明确不确定。':'结合选区和上下文给出通俗解释、必要例子和原文中的作用。';
-  return [READING_BASE_INSTRUCTIONS,intent,...(request.hostedImage?[IMAGE_PROMPT_NOTE]:[]),'先直接回答核心问题，用简体中文短段落。只能依据提供的选区、有限上下文和追问历史；没有搜索或来源核对能力，不能声称已搜索或已查证。材料不足时明确缺口，不猜测最新事实。返回 JSON 对象，且仅含 answer（非空字符串）、sources（空数组）、evidenceStatus（not-applicable）。',refinementInstruction({...request,intent:request.intent==='why'?'explain':request.intent}),READING_COVERAGE_CHECK, readingMaterials(request)].join('\n\n');
 }
 export function parseHostedInquiry(value:unknown,options:{images?:boolean}={}):HostedInquiry {
   if(!value||typeof value!=='object'||Array.isArray(value))throw new HostedError('请求格式错误');
@@ -59,7 +55,7 @@ export function parseHostedInquiry(value:unknown,options:{images?:boolean}={}):H
   if(usesHostedSearch(request)&&!hostedSearchQuery(request))throw new HostedError('请提供可以查找的主张或问题',400,'query_empty');
   // UTF-8 byte count is a deliberately conservative upper bound for tokenizer input,
   // including application instructions, JSON escaping and chat framing overhead.
-  if(Buffer.byteLength(hostedPrompt(request),'utf8')+128>MAX_INPUT_TOKENS)throw new HostedError('选区和上下文过长，请缩小范围',413,'input_limit');
+  if(hostedInputBytes(hostedPrompt(request))>MAX_INPUT_TOKENS)throw new HostedError('选区和上下文过长，请缩小范围',413,'input_limit');
   return request;
 }
 export type HostedRunner=(request:HostedInquiry,signal:AbortSignal,onDelta:(delta:string)=>void,onProgress?:(progress:'search-started'|'search-completed'|'checking-sources')=>void,track?:<T>(work:Promise<T>)=>Promise<T>)=>Promise<{response:InquiryResponse;usage?:{prompt_tokens:number;completion_tokens:number}}>;
@@ -94,7 +90,7 @@ export function createHostedJsonModel(apiKey:string,limits={input:MAX_INPUT_TOKE
   const client=new OpenAI({apiKey,baseURL,maxRetries:0,timeout:60_000,...(baseURL==='https://api.deepseek.com'?{}:{fetch:createHostedModelFixtureFetch(baseURL)})});
   return async(prompt:string,signal:AbortSignal,onDelta:(delta:string)=>void,image?:HostedImage)=>{
     signal.throwIfAborted();
-    if(Buffer.byteLength(prompt,'utf8')+128>limits.input)throw new HostedError('模型上下文超过限制',413,'input_limit');
+    if(hostedInputBytes(prompt)>limits.input)throw new HostedError('模型上下文超过限制',413,'input_limit');
     const stream=await client.chat.completions.create({model:HOSTED_MODEL,messages:[{role:'user',content:image?[{type:'text',text:prompt},{type:'image_url',image_url:{url:image.dataUrl,detail:'high'}}]:prompt}],response_format:{type:'json_object'},max_tokens:limits.output,stream:true,stream_options:{include_usage:true},...{thinking:{type:'disabled'}}} as Parameters<typeof client.chat.completions.create>[0]&{stream:true}, {signal});
     const decoder=new AnswerDecoder();
     let raw='',usage:{prompt_tokens:number;completion_tokens:number}|undefined,finish:string|null=null;

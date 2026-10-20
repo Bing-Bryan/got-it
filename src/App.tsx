@@ -22,6 +22,7 @@ import brandIcon from "./assets/got-it-icon.svg";
 import { useResponsiveDrawer } from "./useResponsiveDrawer";
 import { useReadingViewport } from "./useReadingViewport";
 import { documentAnchor, documentQuestionContext, markdownSections } from "./lib/document-question";
+import { hostedDocumentQuestionContext } from "./lib/hosted-document-question";
 import { MarkdownWidthControls } from "./MarkdownWidthControls";
 import { useMarkdownWidth } from "./useMarkdownWidth";
 import { renderedReadingMinutes } from "./lib/reading-time";
@@ -602,7 +603,7 @@ function App() {
             sections = result.sections; notice = result.notice;
           }
           controller.signal.throwIfAborted();
-          const prepared = documentQuestionContext(sections, scoped.question, notice);
+          const prepared = HOSTED ? hostedDocumentQuestionContext(sections, scoped, notice) : documentQuestionContext(sections, scoped.question, notice);
           scoped.context = prepared.context; contextNotice = prepared.notice;
           updateInquiry(inquiryId, inquiry => ({ ...inquiry, messages: inquiry.messages.map(message => message.id === messageId ? { ...message, contextNotice } : message) }));
         }

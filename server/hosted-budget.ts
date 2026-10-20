@@ -2,7 +2,8 @@ import {dirname} from 'node:path';
 import { syncDirectory } from './private-storage';
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 
-export const MAX_INPUT_TOKENS = 8000;
+import {HOSTED_INPUT_LIMIT} from '../src/lib/hosted-prompt';
+export const MAX_INPUT_TOKENS = HOSTED_INPUT_LIMIT;
 export const MAX_OUTPUT_TOKENS = 1500;
 // Highest published tariff, cache misses; reserve before sending any model request.
 export const MAX_REQUEST_USD = (MAX_INPUT_TOKENS * .30 + MAX_OUTPUT_TOKENS * 1.20) / 1_000_000;
