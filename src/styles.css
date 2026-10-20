@@ -2833,6 +2833,15 @@ a:focus-visible {
 @media (max-width: 780px) {
   .reader-column { --reader-row-inset: 12px; --reader-tools-tail: calc(var(--reader-drawer-size) + var(--reader-action-gap)); }
 }
+/* Keep the four drawer controls comfortable to tap without enlarging every
+   toolbar item or changing desktop geometry. */
+@media (max-width: 1080px) and (pointer: coarse) {
+  .drawer-navigation-trigger, .sidebar-close { flex: 0 0 44px; width: 44px; height: 44px; }
+}
+@media (max-width: 780px) and (pointer: coarse) {
+  .drawer-results-trigger, .panel-mobile-head .icon-button { flex: 0 0 44px; width: 44px; height: 44px; }
+  .reader-column { --reader-drawer-size: 44px; }
+}
 }
 
 .web-source-state summary { cursor: pointer; width: fit-content; padding: 4px 0; }

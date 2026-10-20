@@ -236,10 +236,20 @@ function App() {
   const restoreListFocus = useRef(false);
   const navigationSequence = useRef(0);
   const sidebarDrawer = useResponsiveDrawer({ narrow: sidebar.narrow, panel: sidebar.ref, desktopExpanded: sidebar.pinned || sidebar.peek, desktopTrigger: '.sidebar-rail button', desktopControl: '.desktop-sidebar-controls button' });
-  const { open: mobileSidebarOpen, setOpen: setMobileSidebarOpen } = sidebarDrawer;
+  const { open: mobileSidebarOpen, setOpen: setSidebarDrawerOpen } = sidebarDrawer;
   const [documentQuestionOpen, setDocumentQuestionOpen] = useState(false);
   const resultDrawer = useResponsiveDrawer({ narrow: resultPanel.narrow, panel: resultPanel.ref, desktopExpanded: resultPanel.expanded, desktopTrigger: '.result-rail button', desktopControl: '.desktop-panel-controls button' });
-  const { open: mobilePanelOpen, setOpen: setMobilePanelOpen } = resultDrawer;
+  const { open: mobilePanelOpen, setOpen: setResultDrawerOpen } = resultDrawer;
+  // One overlay owns focus at a time; mobile visibility never changes desktop pins.
+  const setMobileSidebarOpen = useCallback((open: boolean) => {
+    if (open) setResultDrawerOpen(false);
+    setSidebarDrawerOpen(open);
+  }, [setResultDrawerOpen, setSidebarDrawerOpen]);
+  const setMobilePanelOpen = useCallback((open: boolean) => {
+    if (open) setSidebarDrawerOpen(false);
+    setResultDrawerOpen(open);
+  }, [setSidebarDrawerOpen, setResultDrawerOpen]);
+  const mobileDrawerOpen = (sidebar.narrow && mobileSidebarOpen) || (resultPanel.narrow && mobilePanelOpen);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const articleRef = useRef<HTMLElement>(null);
   const markdownWidth = useMarkdownWidth(articleRef);
@@ -1000,8 +1010,9 @@ function App() {
       }}
       onDrop={handleDrop}
       onKeyDown={event => { if (event.key === "Escape" && !event.defaultPrevented) {
-        if (providerOpen || selectionDraft || bookmarkDraft) return;
+        if (providerOpen || (!mobileDrawerOpen && (selectionDraft || bookmarkDraft))) return;
         if (deleteMode) { setDeleteMode(false); setPendingDeleteId(null); document.getElementById("inquiry-delete-toggle")?.focus(); return; }
+        if (mobileDrawerOpen) { sidebarDrawer.close(); resultDrawer.close(); return; }
         sidebar.close(); resultPanel.close(); sidebarDrawer.close(); resultDrawer.close(); } }}
     >
       <input
@@ -1231,6 +1242,7 @@ function App() {
       {bookmarkDraft && !bookmarksOpen ? (
         <SelectionToolbar
           draft={bookmarkDraft}
+          hidden={mobileDrawerOpen}
           hint={inquirySelectionError}
           bookmark={(library.entry||HOSTED)&&!library.readOnly?<BookmarkAction prepareEntry={!library.entry?library.ensureEntry:undefined} entryId={library.entry?.id??""} revisionId={library.entry?.revisionId??""} anchor={bookmarkDraft.anchor} iconOnly onSaved={finishBookmarkSave} version={bookmarkVersion} onStarted={beginBookmarkSave} onFailed={bookmarkFeedback.failed}/>:null}
           onSelect={(intent, question) => createInquiry(intent, undefined, question)}
@@ -1258,7 +1270,6 @@ function App() {
           type="button"
           aria-label="关闭面板"
           onClick={() => {
-            // The right drawer sits above the left one when both are open.
             sidebarDrawer.close(!mobilePanelOpen);
             resultDrawer.close(true);
           }}
@@ -1340,8 +1351,10 @@ function SelectionToolbar({
   disabled,
   bookmark,
   hint,
+  hidden = false,
 }: {
   draft: BookmarkDraft;
+  hidden?: boolean;
   hint?:string;
   bookmark?: ReactNode;
   onSelect: (intent: ActiveInquiryIntent, question?: string) => void;
@@ -1356,6 +1369,8 @@ function SelectionToolbar({
   return (
     <div
       className="selection-toolbar selection-surface"
+      hidden={hidden}
+      inert={hidden}
       style={{ left, top }}
       onMouseDown={(event) => { if (!(event.target instanceof HTMLTextAreaElement)) event.preventDefault(); }}
     >

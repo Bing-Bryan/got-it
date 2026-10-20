@@ -541,6 +541,47 @@ it('narrow result close retains the desktop pin preference',async()=>{
  expect(localStorage.getItem('got-it.result-panel-pinned.v1')).toBe('true');
 });
 
+it('keeps mobile overlays exclusive and suspends selection actions without losing an unsent draft', async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(()=>({matches:true,addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+ localStorage.setItem('got-it.sidebar-pinned.v1','true');
+ localStorage.setItem('got-it.result-panel-pinned.v1','true');
+ await mount();
+ const p=host.querySelector('.markdown-article p')!;
+ const range=document.createRange();range.selectNodeContents(p);
+ Object.defineProperty(Range.prototype,'getBoundingClientRect',{configurable:true,value:()=>({left:40,top:200,bottom:220,width:100,height:20,right:140})});
+ const selection=window.getSelection()!;selection.removeAllRanges();selection.addRange(range);
+ const raf=vi.spyOn(window,'requestAnimationFrame').mockImplementation(callback=>{callback(0);return 0;});
+ await act(async()=>p.dispatchEvent(new MouseEvent('mouseup',{bubbles:true})));
+ raf.mockRestore();
+ await click('.selection-toolbar .question-toggle');
+ const input=host.querySelector<HTMLTextAreaElement>('.selection-toolbar textarea')!;
+ await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(input,'保留手机问题');input.dispatchEvent(new Event('input',{bubbles:true}));});
+ // Keyboard activation does not emit pointerdown and therefore keeps the selection draft.
+ await click('[aria-label="打开导航"]');
+ expect(host.querySelector('.app-frame')!.classList.contains('sidebar-open')).toBe(true);
+ expect(host.querySelector<HTMLElement>('.selection-toolbar')!.hidden).toBe(true);
+ expect(host.querySelector('.selection-toolbar')!.hasAttribute('inert')).toBe(true);
+ await act(async()=>host.querySelector('.left-sidebar button')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true})));
+ expect(host.querySelector('.app-frame')!.classList.contains('sidebar-open')).toBe(false);
+ expect(document.activeElement?.getAttribute('aria-label')).toBe('打开导航');
+ expect(host.querySelector<HTMLElement>('.selection-toolbar')!.hidden).toBe(false);
+ expect(input.value).toBe('保留手机问题');
+ await click('[aria-label="打开导航"]');
+ // An existing-anchor activation must replace the navigation overlay atomically.
+ await click('mark[data-inquiry-id="explain"]');
+ expect(host.querySelector('.app-frame')!.classList.contains('sidebar-open')).toBe(false);
+ expect(host.querySelector('.app-frame')!.classList.contains('panel-open')).toBe(true);
+ await click('[aria-label="关闭面板"]');
+ expect(host.querySelector<HTMLElement>('.selection-toolbar')!.hidden).toBe(false);
+ expect(host.querySelector('.selection-toolbar textarea')).toBe(input);
+ expect(input.value).toBe('保留手机问题');
+ expect(host.querySelector('main')!.hasAttribute('inert')).toBe(false);
+ expect(localStorage.getItem('got-it.sidebar-pinned.v1')).toBe('true');
+ expect(localStorage.getItem('got-it.result-panel-pinned.v1')).toBe('true');
+ expect(stream).not.toHaveBeenCalled();
+ selection.removeAllRanges();delete (Range.prototype as any).getBoundingClientRect;
+});
+
 it('isolates PDF scrolling and layout when switching back to Markdown', async()=>{
  w.inquiries=[];w.activeInquiryId=null;
  const markdown=await testLibraryRequest('/entries',{workspace:w,creationKey:'switch-markdown'}) as {id:string};
