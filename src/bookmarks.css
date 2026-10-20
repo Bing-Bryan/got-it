@@ -92,3 +92,8 @@
 
 .bookmarks-view { background: var(--reading-paper); }
 .bookmark-card, .bookmark-search input { background: var(--reading-card); border-color: var(--reading-line); }
+
+@media(max-width:560px) {
+ .app-frame .selection-toolbar { bottom:calc(var(--reading-viewport-bottom,0px) + 10px); }
+ .app-frame .selection-understanding { max-height:min(360px,calc(var(--reading-viewport-height,100dvh) - 24px)); }
+}

@@ -20,6 +20,7 @@ import { WebTranslationControls } from "./WebTranslationControls";
 import { translatedRendering, canonicalTranslationDraft, selectedQuote, translationContext } from "./lib/translation-reading";
 import brandIcon from "./assets/got-it-icon.svg";
 import { useResponsiveDrawer } from "./useResponsiveDrawer";
+import { useReadingViewport } from "./useReadingViewport";
 import { documentAnchor, documentQuestionContext, markdownSections } from "./lib/document-question";
 import { MarkdownWidthControls } from "./MarkdownWidthControls";
 import { useMarkdownWidth } from "./useMarkdownWidth";
@@ -228,6 +229,8 @@ function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [pdfTarget,setPdfTarget] = useState<{id:string;nonce:number;returnToSource?:boolean}|null>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  useReadingViewport(frameRef);
   const sidebar = useSidebar();
   const resultPanel = useResultPanel();
   const openResultPanel = resultPanel.openReading;
@@ -999,6 +1002,7 @@ function App() {
             </div>;
   return (
     <div
+      ref={frameRef}
       className={`app-frame ${showStart ? "start-mode" : ""} ${bookmarksOpen ? "bookmarks-mode" : ""} ${!sidebar.pinned ? "sidebar-collapsed" : ""} ${sidebar.peek ? "sidebar-peek" : ""} ${!resultPanel.expanded ? "result-collapsed" : ""} ${mobileSidebarOpen ? "sidebar-open" : ""} ${mobilePanelOpen ? "panel-open" : ""}`}
       onDragEnter={(event) => {
         event.preventDefault();

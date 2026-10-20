@@ -3,8 +3,8 @@
   "files": [
     {
       "path": "src/App.tsx",
-      "bytes": 100318,
-      "sha256": "c5b7139e1e5debb91f8490b378d787f9d43f4a13616902dd7727c79c22a4324e"
+      "bytes": 100479,
+      "sha256": "c4f80207a894c4e163c64e57f5a55f90adcf58b8bc50c7bc55288ee14dba2431"
     },
     {
       "path": "src/AssistantMessage.test.tsx",
@@ -253,8 +253,8 @@
     },
     {
       "path": "src/bookmarks.css",
-      "bytes": 15541,
-      "sha256": "588f1437c1cff8a2fb0b89aed6e378e64e5dfc3b6b69d313b128278f2696153a"
+      "bytes": 15776,
+      "sha256": "53c815cd05e25554ae3fba101e17ecca4293b3e5001dfa3cc598d144ed15d70b"
     },
     {
       "path": "src/codex-login-ui.test.tsx",
@@ -973,8 +973,8 @@
     },
     {
       "path": "src/styles.css",
-      "bytes": 121725,
-      "sha256": "a3c55c5675992d736728f232a83786a652be7319db137829f5e6c3a0e65e0e35"
+      "bytes": 122702,
+      "sha256": "9f6d6b0e7cd98e24864b5a0ff03012e8860dd0610920c200b6dc2625fef7a4c3"
     },
     {
       "path": "src/test-support/library.ts",
@@ -1040,6 +1040,16 @@
       "path": "src/useReadingLibrary.ts",
       "bytes": 62266,
       "sha256": "60bf61d1ee5465add165b1e8b42393029965da05b023885c6b022f668778482b"
+    },
+    {
+      "path": "src/useReadingViewport.test.tsx",
+      "bytes": 4430,
+      "sha256": "269e2f535df047de52170bb5393db25c4bb3a79564de46ff6bcd265868ae32e3"
+    },
+    {
+      "path": "src/useReadingViewport.ts",
+      "bytes": 2737,
+      "sha256": "f3bea957f159edb5d1f0262ffb0171f4cd5c7773be01edb30bfdaf76228f04e0"
     },
     {
       "path": "src/useResponsiveDrawer.test.tsx",
@@ -1957,6 +1967,11 @@
       "sha256": "42624f7d9959623ddb2babb80b1b0ca7636d5f66369da4516c4a68cab3da7542"
     },
     {
+      "path": "docs/updates/2026-10-20-mobile-visible-area.md",
+      "bytes": 538,
+      "sha256": "1dff55064ce6466fcb6fc9b4edb2d57eef8d892a00bc04d5c475cde788f4e581"
+    },
+    {
       "path": "docs/updates/2026-10-20-reader-controls-and-context.md",
       "bytes": 1488,
       "sha256": "71ec69a781f7a07c60f77f23547b20cb39f6901ab404c444fc3d5e0ca1e65393"
@@ -2038,8 +2053,8 @@
     },
     {
       "path": "docs/ui-guidelines.md",
-      "bytes": 31866,
-      "sha256": "648aef0851318d070688de75b0af4ba68179edadfcc9014f63d299463c2d91df"
+      "bytes": 32500,
+      "sha256": "5e97a490bab0b3d9d99b9a7b4eeb04fe530362a2fb71035ccbfb2498590582e7"
     },
     {
       "path": "docs/ui/button-states.html",

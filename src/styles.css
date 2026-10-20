@@ -2990,3 +2990,17 @@ details[open] > .disclosure-summary > .disclosure-chevron { transform: rotate(18
 .start-library-material { display:flex; align-items:center; gap:8px; }
 .start-library-material .start-library-row { flex:1; min-width:0; }
 .library-recovered button { margin-left:8px; }
+
+@layer reader-base {
+  @media (max-width: 780px) {
+    .app-frame { height: var(--reading-viewport-height, 100dvh); top: var(--reading-viewport-top, 0px); }
+    /* The drawer remains scrollable as a whole while the keyboard is visible,
+       so a long excerpt cannot leave the focused composer in a tiny flex slot. */
+    .app-frame[data-keyboard-visible="true"] .right-panel { overflow-y: auto; }
+    .app-frame[data-keyboard-visible="true"] .question-composer { scroll-margin-block: 56px 12px; }
+    .app-frame[data-keyboard-visible="true"] .intent-result,
+    .app-frame[data-keyboard-visible="true"] .intent-result > .inquiry-panel-content,
+    .app-frame[data-keyboard-visible="true"] .intent-result .thread-scroll { flex: none; overflow: visible; }
+    .app-frame[data-keyboard-visible="true"] .pdf-selection-card { top: auto !important; bottom: calc(var(--reading-viewport-bottom, 0px) + 10px); max-height: calc(var(--reading-viewport-height, 100dvh) - 24px); }
+  }
+}
