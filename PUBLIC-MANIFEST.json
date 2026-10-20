@@ -53,13 +53,13 @@
     },
     {
       "path": "src/HostedControls.test.tsx",
-      "bytes": 5635,
-      "sha256": "1281655a048a2ee65ba998e11812050bd4d528c1044881f69a7d8f561f46b974"
+      "bytes": 6402,
+      "sha256": "792a1923c421d0ed333e0dc97c38fbbc2a838e18819362b59e80888a9d8db7f3"
     },
     {
       "path": "src/HostedControls.tsx",
-      "bytes": 12911,
-      "sha256": "e9e653686e1a7ee64389d3ac48f51a9ead763d5143859bfedca5dc3e6377feae"
+      "bytes": 12413,
+      "sha256": "521f83f3b364bbce878408233bde13d0212941a32b05863724213d9517426bde"
     },
     {
       "path": "src/MarkdownWidthControls.tsx",
@@ -138,8 +138,8 @@
     },
     {
       "path": "src/ReadingStartPage.tsx",
-      "bytes": 17846,
-      "sha256": "ac316fbfd6f27a7e68e8dce1a6d1cd1e1805546ebe1107c550ff7383a94985ae"
+      "bytes": 17867,
+      "sha256": "28618cdfb584d4972a4182db5519cac47b6a55b334e956bc66976c94cced1144"
     },
     {
       "path": "src/SelectionActions.tsx",
@@ -273,8 +273,8 @@
     },
     {
       "path": "src/home-reading-examples.ts",
-      "bytes": 9946,
-      "sha256": "ec27b247bfc71dc128906a28e43b7d91dc6c075b94da7159aa895189256741bc"
+      "bytes": 10154,
+      "sha256": "5bddaf80d615b104e9e1026c1994ca9fead851bf80c2612df868cd4b04bd7de0"
     },
     {
       "path": "src/hosted-recovery-view.test.tsx",
@@ -993,8 +993,8 @@
     },
     {
       "path": "src/styles.css",
-      "bytes": 122702,
-      "sha256": "9f6d6b0e7cd98e24864b5a0ff03012e8860dd0610920c200b6dc2625fef7a4c3"
+      "bytes": 122874,
+      "sha256": "d281b11e62f74bc25875e12d8a1ffb3ac89a8b63ab467729499c27477689f2da"
     },
     {
       "path": "src/test-support/library.ts",
@@ -1980,6 +1980,11 @@
       "path": "docs/updates/2026-10-19-reading-home-examples.md",
       "bytes": 1299,
       "sha256": "1d9924cb0d5826688ecaa74e7a7b65ad06ef0a675c08d4384da9abb1679bb3c4"
+    },
+    {
+      "path": "docs/updates/2026-10-20-ai-settings-and-start-card.md",
+      "bytes": 527,
+      "sha256": "fedb562098257e1ce469b3a620f67a166e77d27072f862d93b7d1ba9c082c5fb"
     },
     {
       "path": "docs/updates/2026-10-20-document-question-budget.md",

@@ -7,6 +7,8 @@ export interface HomeReadingExample {
   articlePath: string;
   before: string;
   quote: string;
+  /** Shorter pull-quote for the start tile; `quote` stays verbatim for the demo's source pane. */
+  cardQuote?: string;
   after: string;
   question?: string;
   title: string;
@@ -183,6 +185,7 @@ export const homeReadingExamples: HomeReadingExample[] = [
     "label": "问一问",
     "before": "与AI陪伴对话缓解孤独的短期效果与真人互动相当，优于看视频等其他活动；“感到被倾听”是关键中介变量，作用大于聊天机器人本身的能力。",
     "quote": "研究也指出效果是即时的，未证明能长期降低孤独感。",
+    "cardQuote": "研究指出效果及时性，未证明能长期降低孤独感。",
     "after": "",
     "question": "为什么短期有效，不能说明长期也有效？请用两到三个简短句子结合原句解释。",
     "title": "短期有效，为什么不代表长期有效？",

@@ -2866,9 +2866,11 @@ a:focus-visible {
 /* Hosted trial reuses the reader's shared controls and neutral surfaces. */
 .hosted-settings { padding: 12px; max-width: 380px; font-size: 13px; line-height: 1.6; }
 .hosted-settings p { margin: 10px 0; }
-.hosted-settings label { display: flex; align-items: center; gap: 8px; }
-.hosted-settings details p { overflow-wrap: anywhere; }
 .hosted-storage { font-size: 12px; line-height: 1.6; }
+.hosted-usage-settings { margin-top: 12px; }
+.hosted-usage-settings label { display: flex; align-items: center; gap: 8px; }
+.hosted-usage-settings p { margin: 8px 0 0; overflow-wrap: anywhere; }
+.hosted-disclosure-panel .hosted-usage-settings { border-top: 1px solid var(--line); padding-top: 12px; }
 
 .hosted-samples { padding: 22px 36px; }
 .hosted-samples h2 { font-size: 20px; }

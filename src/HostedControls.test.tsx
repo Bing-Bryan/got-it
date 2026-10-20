@@ -35,16 +35,27 @@ it('does not round small browser usage down to an apparent empty library',async(
  try{await act(async()=>root.render(<HostedStorageControls save={vi.fn()} onRestore={restore}/>));expect(host.textContent).toContain('少于 0.1 MB');expect(host.textContent).not.toContain('0.0 MB');await act(async()=>host.querySelectorAll<HTMLButtonElement>('.hosted-backup-actions button')[1].click());expect(restore).toHaveBeenCalledOnce();}finally{await act(async()=>root.unmount());host.remove();}
 });
 
-it('does not turn an unreadable capability check into a definite search or quota claim',async()=>{
+it('does not turn an unreadable capability check into a definite quota claim',async()=>{
  vi.mocked(hostedCapabilities).mockRejectedValue(new TypeError('Failed to fetch'));
  const host=document.body.appendChild(document.createElement('div')),root=createRoot(host);
- try{await act(async()=>{root.render(<HostedSettings/>);await new Promise(resolve=>setTimeout(resolve,0));});expect(host.querySelector('[role=status]')?.textContent).toBe('额度暂时无法读取');expect(host.textContent).toContain('联网查找来源：暂时无法确认');expect(host.textContent).not.toContain('搜索服务尚未配置');expect(host.textContent).not.toContain('Failed to fetch');}finally{await act(async()=>root.unmount());host.remove();}
+ try{await act(async()=>{root.render(<HostedSettings/>);await new Promise(resolve=>setTimeout(resolve,0));});expect(host.querySelector('[role=status]')?.textContent).toBe('额度暂时无法读取');expect(host.textContent).not.toContain('启用匿名使用统计');expect(host.textContent).not.toContain('Failed to fetch');}finally{await act(async()=>root.unmount());host.remove();}
 });
 
-it('says search status is still loading, then reports the read capability',async()=>{
+it('shows only the model and quota while capabilities load, then reports the current quota',async()=>{
  let resolve!:(value:any)=>void;vi.mocked(hostedCapabilities).mockReturnValue(new Promise(r=>{resolve=r;}));
  const host=document.body.appendChild(document.createElement('div')),root=createRoot(host);
- try{await act(async()=>root.render(<HostedSettings/>));expect(host.textContent).toContain('联网查找来源：正在读取…');expect(host.textContent).not.toContain('搜索服务尚未配置');
+ try{await act(async()=>root.render(<HostedSettings/>));expect(host.textContent).toContain('正在读取额度…');expect(host.textContent).not.toContain('启用匿名使用统计');expect(host.textContent).not.toContain('材料与成果仅保存在当前浏览器');
   await act(async()=>{resolve({model:'deepseek-flash',searchAvailable:true,quota:{remaining:3,browserLimit:30,globalExhausted:false,resetAt:'2026-10-18T00:00:00Z'}});await new Promise(r=>setTimeout(r,0));});
-  expect(host.textContent).toContain('联网查找来源：已配置博查搜索');expect(host.querySelector('[role=status]')?.textContent).toContain('今日剩余 3 / 30 次');}finally{await act(async()=>root.unmount());host.remove();}
+  expect(host.textContent).toContain('体验版默认模型 · deepseek-flash');expect(host.querySelector('[role=status]')?.textContent).toContain('今日剩余 3 / 30 次');}finally{await act(async()=>root.unmount());host.remove();}
+});
+
+it('keeps the anonymous usage opt-out inside 保存与隐私',async()=>{
+ localStorage.removeItem('got-it.usage.v1');
+ const host=document.body.appendChild(document.createElement('div')),root=createRoot(host);
+ try{await act(async()=>root.render(<HostedStorageControls save={vi.fn()} onRestore={vi.fn()}/>));
+  const toggle=host.querySelector<HTMLInputElement>('.hosted-usage-settings input[type=checkbox]')!;
+  expect(toggle).not.toBeNull();expect(toggle.checked).toBe(true);expect(host.textContent).toContain('统计内容与保存边界');
+  await act(async()=>toggle.click());
+  expect(toggle.checked).toBe(false);expect(JSON.parse(localStorage.getItem('got-it.usage.v1')??'{}').enabled).toBe(false);
+ }finally{await act(async()=>root.unmount());host.remove();}
 });
