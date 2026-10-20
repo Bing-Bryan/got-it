@@ -1,6 +1,7 @@
 node_modules/
 dist/
 dist-hosted/
+dist-ops/
 .env
 .env.*
 !.env.example

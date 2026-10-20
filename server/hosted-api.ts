@@ -11,8 +11,9 @@ import {hostedOperationId, hostedOperationToken} from './hosted-web-imports';
 import type {HostedTranslations} from './hosted-translations';
 import {WebError} from './web-fetch';
 import type {HostedStatistics} from './hosted-statistics';
+import type {HostedHealth, RequestOutcome} from './hosted-health';
 
-export interface HostedOptions {origin:string;budget:HostedBudget;runner?:HostedRunner;verificationRunner?:HostedRunner;searchCostUsd?:number;webImports?:HostedWebImports;translations?:HostedTranslations;statistics?:HostedStatistics;timeoutMs?:number;images?:boolean;apiId?:string;candidateId?:string;fixtureMode?:'loopback-fixture';admission?:HostedAdmission;alerts?:HostedAlerts;opsToken?:string;trustedProxy?:boolean;}
+export interface HostedOptions {origin:string;budget:HostedBudget;runner?:HostedRunner;verificationRunner?:HostedRunner;searchCostUsd?:number;webImports?:HostedWebImports;translations?:HostedTranslations;statistics?:HostedStatistics;timeoutMs?:number;images?:boolean;apiId?:string;candidateId?:string;fixtureMode?:'loopback-fixture';admission?:HostedAdmission;alerts?:HostedAlerts;health?:HostedHealth;opsToken?:string;trustedProxy?:boolean;}
 const loopback=(address?:string)=>address==='127.0.0.1'||address==='::1'||address==='::ffff:127.0.0.1';
 export function createHostedApp(options:HostedOptions) {
   const app=express();
@@ -23,8 +24,18 @@ export function createHostedApp(options:HostedOptions) {
   app.use('/api/hosted/ops',(req,res)=>{
     res.setHeader('Cache-Control','no-store');
     const token=req.get('x-gotit-ops-token')||'';
-    if(!loopback(req.socket.remoteAddress)||!options.opsToken||!sameSecret(token,options.opsToken)){res.status(404).json({error:'接口不存在',code:'not_found'});return;}
-    if(req.method==='GET'&&req.path==='/'){res.json({admission:admission.snapshot(),budget:options.budget.summary(),statistics:options.statistics?.summary()??null,alerts:options.budget.alerts()});return;}
+    const loopbackHost=/^(?:127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(req.get('host')||'');
+    const proxied=!!(req.get('x-forwarded-for')||req.get('forwarded')||req.get('x-real-ip'));
+    if(!loopback(req.socket.remoteAddress)||!loopbackHost||proxied||!options.opsToken||!sameSecret(token,options.opsToken)){res.status(404).json({error:'接口不存在',code:'not_found'});return;}
+    if(req.method==='GET'&&req.path==='/'){
+      const queryValue=(name:string)=>{const value=req.query[name];if(value===undefined)return undefined;if(typeof value!=='string')throw new HostedError('统计筛选无效');return value;};
+      let statistics:unknown=null,statisticsError:null|{code:string;message:string}=null;
+      if(options.statistics){try{statistics=options.statistics.report({from:queryValue('from'),to:queryValue('to'),channel:queryValue('channel'),material:queryValue('material')});}catch(error){const safe=error instanceof HostedError?error:new HostedError('统计暂不可用',503,'statistics_unavailable');statisticsError={code:safe.code,message:safe.message};}}
+      let budget:unknown=null,budgetError:null|string=null;
+      try{budget=options.budget.summary();}catch{budgetError='预算账本或告警暂不可读';}
+      res.json({schemaVersion:1,generatedAt:new Date().toISOString(),admission:admission.snapshot(),budget,budgetError,statistics,statisticsError,health:options.health?.snapshot()??null});
+      return;
+    }
     const retry=req.path.match(/^\/alerts\/([^/]+)\/retry$/);
     if(req.method==='POST'&&retry){try{res.json(options.budget.retryAlert(decodeURIComponent(retry[1])));}catch(error){const safe=error instanceof HostedError?error:new HostedError('请求格式错误');res.status(safe.status).json({error:safe.message,code:safe.code});}return;}
     res.status(404).json({error:'接口不存在',code:'not_found'});
@@ -64,7 +75,7 @@ export function createHostedApp(options:HostedOptions) {
         const round=req.get('x-hosted-round-token');
         const exempt=category==='translation'&&!!round&&admission.claimRound(id,round);
         if(exempt&&round)res.once('finish',()=>admission.releaseRound(round));
-        admission.takeExpensive(id,ip,exempt);
+        admission.takeExpensive(id,ip,exempt,category);
         const length=Number(req.get('content-length'));
         if(Number.isFinite(length)&&length>bodyLimit(req.path))throw new HostedError('请求体超过允许容量',413,'body_limit');
         admission.preflight(category,id);
@@ -88,8 +99,17 @@ export function createHostedApp(options:HostedOptions) {
     admission.beginOperation(key,hash,category);
     let lease:AdmissionLease;
     try{lease=admission.acquire(category,owner);}catch(error){admission.abandonOperation(key);throw error;}
-    try{return await run(lease,signal);}
+    const terminal=options.health?.observeRequest(category);
+    try{const value=await run(lease,signal);const deferredCapture=category==='capture'&&!!value&&typeof value==='object'&&'status'in value&&(value as {status?:unknown}).status==='reading';if(!deferredCapture)terminal?.('success');return value;}
+    catch(error){terminal?.(terminalOutcome(error,signal));throw error;}
     finally{if(lease.hasWork())void lease.settle().finally(()=>admission.finishOperation(key,hash,category));else{lease.releaseNow();admission.finishOperation(key,hash,category);}}
+  }
+  function terminalOutcome(error:unknown,signal?:AbortSignal):RequestOutcome{
+    if(error instanceof HostedError){
+      if(error.code==='translation_timeout'||error.code==='request_timeout'||error.code==='timed_out'||error.code==='web_timeout')return 'timedOut';
+      if(error.code==='translation_cancelled'||error.code==='request_interrupted')return 'cancelled';
+    }
+    return signal?.aborted?'cancelled':'failed';
   }
   if(options.webImports){
     for(const [path,x]of [['web-imports',false],['x-article-imports',true]] as const)app.post(`/api/hosted/${path}`,async(req,res,next)=>{try{
@@ -112,7 +132,7 @@ export function createHostedApp(options:HostedOptions) {
     }catch(e){next(e);}});
     app.post('/api/hosted/translation-batches/:op/cancel',(req,res,next)=>{try{emptyBody(req);admission.noteCancelled();res.json(options.translations!.cancel(identity(req),String(req.params.op),operationToken(req)));}catch(e){next(e);}});
   }
-  app.get('/api/hosted/capabilities',(req,res,next)=>{try{res.json({apiId:options.apiId||'unversioned',candidateId:options.candidateId||null,generation:admission.generation,...(options.fixtureMode?{fixtureMode:options.fixtureMode,transport:options.fixtureMode}:{}),model:HOSTED_MODEL,providerId:'deepseek',supportsImages:imagesEnabled,supportsWebImport:!!options.webImports,supportsXCapture:!!options.webImports,supportsWebMediaRetry:!!options.webImports,supportsTranslation:!!options.translations,supportsWebSearch:verificationAvailable,searchAvailable:verificationAvailable,searchProvider:'bocha',available:!!options.runner,quota:options.budget.status(identity(req),admission.clientIp(req,false)||'untrusted'),admission:{globalSlots:3,perIdSlots:1,translationSlots:2,captureSlots:2,conservative:true}});}catch(e){next(e);}});
+  app.get('/api/hosted/capabilities',(req,res,next)=>{try{res.json({apiId:options.apiId||'unversioned',candidateId:options.candidateId||null,generation:admission.generation,...(options.fixtureMode?{fixtureMode:options.fixtureMode,transport:options.fixtureMode}:{}),model:HOSTED_MODEL,providerId:'deepseek',supportsImages:imagesEnabled,supportsWebImport:!!options.webImports,supportsXCapture:!!options.webImports,supportsWebMediaRetry:!!options.webImports,supportsTranslation:!!options.translations,supportsWebSearch:verificationAvailable,searchAvailable:verificationAvailable,searchProvider:'bocha',available:!!options.runner,quota:options.budget.status(identity(req),admission.clientIp(req,false)||'untrusted'),admission:{...admission.snapshot().slots.limits,conservative:true}});}catch(e){next(e);}});
   app.post('/api/hosted/inquiry/stream',async(req,res,next)=>{
     let settle:ReturnType<HostedBudget['reserve']>|undefined;
     let budget:ReturnType<typeof requestDeadline>|undefined;
@@ -123,6 +143,7 @@ export function createHostedApp(options:HostedOptions) {
     const close=()=>{if(!res.writableEnded)cancel.abort(new Error('请求已停止'));};
     res.on('close',close);
     let lease:AdmissionLease|undefined;
+    let terminal:ReturnType<NonNullable<HostedOptions['health']>['observeRequest']>|undefined;
     try{
       const request=parseHostedInquiry(req.body,{images:imagesEnabled});
       const trialId=identity(req),clientIp=ipOf(req),key=`${trialId}:${res.locals.transportId}`,hash=hashOf(request);
@@ -132,6 +153,7 @@ export function createHostedApp(options:HostedOptions) {
       if(admission.operationState(key)==='expired')throw new HostedError('操作已过期，结果未知。请主动重新发起，不会自动重新发送。',409,'operation_expired');
       admission.beginOperation(key,hash,'inquiry');owned=true;
       try{lease=admission.acquire('inquiry',trialId);}catch(error){admission.abandonOperation(key);owned=false;throw error;}
+      terminal=options.health?.observeRequest('inquiry');
       budget=requestDeadline(Math.min(60_000,options.timeoutMs??60_000),cancel.signal);
       settle=options.budget.reserve(trialId,clientIp,usesHostedSearch(request)?options.searchCostUsd??NaN:0,request.hostedImage?{input:MAX_INPUT_TOKENS+request.hostedImage.tokens,output:MAX_OUTPUT_TOKENS}:undefined);
       res.status(200).set({'Content-Type':'application/x-ndjson; charset=utf-8','X-Accel-Buffering':'no'});res.flushHeaders();
@@ -143,10 +165,11 @@ export function createHostedApp(options:HostedOptions) {
       budget.check();
       settle(result.usage);
       budget.check();
-      emit({type:'complete',response:result.response});finished=true;res.end();
+      emit({type:'complete',response:result.response});finished=true;res.end();terminal?.('success');
     }catch(error){
       const diagnostic=(error as {schemaDiagnostic?:unknown})?.schemaDiagnostic;if(diagnostic)console.warn(JSON.stringify({event:'model_schema_invalid',diagnostic}));
       if(budget?.signal.aborted)admission.noteCancelled();
+      terminal?.(cancel.signal.aborted?'cancelled':budget?.signal.aborted?'timedOut':'failed');
       const safe=error instanceof HostedError?error:new HostedError(budget?.signal.aborted?(cancel.signal.aborted?'请求已停止':'本次请求超时，请重试'):'模型服务失败，请重试',502,budget?.signal.aborted?'request_interrupted':'model_failed');
       if(res.headersSent){emit({type:'error',error:safe.message,...(safe.code==='search_failed'?{response:{answer:'',sources:[],evidenceStatus:'not-applicable' as const,mode:'live' as const,providerId:'deepseek' as const,providerName:'体验版默认模型',model:HOSTED_MODEL,search:{status:'failed' as const,completedSearches:0,failedSearches:1}}}:{})});finished=true;res.end();}else next(safe);
     }finally{settle?.();budget?.dispose();res.off('close',close);void lease?.settle().finally(()=>{if(owned&&operationKey)admission.finishOperation(operationKey,hashOf(req.body),'inquiry');});}

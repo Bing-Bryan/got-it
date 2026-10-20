@@ -19,6 +19,8 @@
     "test:hosted-release": "node scripts/hosted-release-smoke.mjs",
     "test:hosted-candidate": "node --test scripts/hosted-candidate.node-test.mjs",
     "test:hosted-preview-proxy": "node --test scripts/hosted-preview-proxy.node-test.mjs",
+    "ops:viewer": "node scripts/hosted-ops-viewer.mjs",
+    "test:ops-viewer": "node --test scripts/hosted-ops-viewer.node-test.mjs",
     "release:prepare": "node scripts/prepare-public.mjs",
     "prepare:pdf": "node scripts/prepare-pdf-assets.mjs",
     "postinstall": "npm run prepare:pdf",
@@ -28,6 +30,7 @@
     "dev:hosted:web": "VITE_GOT_IT_MODE=hosted vite --host 127.0.0.1 --port 5174",
     "dev:hosted:api": "tsx watch server/hosted-index.ts",
     "build:hosted": "tsc --noEmit && VITE_GOT_IT_MODE=hosted vite build --outDir dist-hosted",
+    "build:ops": "tsc --noEmit && vite build --config vite.ops.config.ts",
     "start:hosted": "tsx server/hosted-index.ts",
     "prebuild:hosted": "npm run prepare:pdf"
   },

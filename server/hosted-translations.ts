@@ -5,6 +5,7 @@ import {WEB_TRANSLATION_INSTRUCTIONS} from './prompt-materials';
 import {createHostedJsonModel} from './hosted-model';
 import {HostedBudget,HostedError} from './hosted-budget';
 import {hostedOperationId,hostedOperationToken} from './hosted-web-imports';
+import {ADMISSION_LIMITS} from './hosted-admission';
 export const HOSTED_TRANSLATION_LIMITS={input:48000,output:8000,callMs:60_000};
 const record=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==='object'&&!Array.isArray(v);
 const same=(a:string,b:string)=>a.length===b.length&&timingSafeEqual(Buffer.from(a),Buffer.from(b));
@@ -44,7 +45,7 @@ export class HostedTranslations{
    if(!same(end.token,token))throw new HostedError('翻译操作不属于当前请求',403);
    throw new HostedError(end.status==='cancelled'?'翻译已停止，已有译文保留，可主动续译':end.status==='failed'?'前次批次已失败，请重新发起未完成部分':'该批次已完成，请使用新操作标识继续未保存部分',409,end.status==='cancelled'?'translation_cancelled':'translation_completed');}
   if(existing){if(!same(existing.token,token))throw new HostedError('翻译操作不属于当前请求',403);if(existing.hash!==hash)throw new HostedError('翻译操作标识已用于其他批次',409,'translation_operation_conflict');return existing.promise;}
-  if([...this.active.keys()].some(k=>k.startsWith(owner+':'))||this.active.size>=2||this.rounds.size>=256)throw new HostedError('已有翻译批次处理中，请先停止或等待',409,'translation_busy');
+  if([...this.active.keys()].some(k=>k.startsWith(owner+':'))||this.active.size>=ADMISSION_LIMITS.translationSlots||this.rounds.size>=256)throw new HostedError('已有翻译批次处理中，请先停止或等待',409,'translation_busy');
   const round=owner+':'+(r.roundId??r.translationId),started=this.rounds.get(round)??this.clock();this.rounds.set(round,started);const remaining=TRANSLATION_LIMITS.roundMs-(this.clock()-started);if(remaining<=0)throw new HostedError('本轮翻译已超时，已有译文保留，可主动续译',408,'translation_round_timeout');
   const controller=new AbortController(),deadline=requestDeadline(Math.min(this.timeoutMs,remaining,HOSTED_TRANSLATION_LIMITS.callMs),AbortSignal.any([parent,controller.signal]));
   let completed=false,output:TranslationBatchResult|undefined;
@@ -60,7 +61,7 @@ export class HostedTranslations{
     if(failed.length){const replacement=await run(failed,true);try{validateTranslationBatch(failed,replacement);}catch{throw new HostedError('本批译文排版或内容校验失败，已有译文保留，可主动续译',502,'translation_invalid');}const map=new Map(replacement.map(row=>[row.id,row]));rows=rows.map(row=>map.get(row.id)??row);repairCount=failed.length;}
     let units:Record<string,string>;try{units=validateTranslationBatch(r.units,rows);}catch{throw new HostedError('本批译文排版或内容校验失败，已有译文保留，可主动续译',502,'translation_invalid');}
     deadline.check();completed=true;output={operationId:r.operationId,translationId:r.translationId,sourceVersion:r.sourceVersion,modelConfig:{model:'deepseek-flash',reasoningEffort:'none'},providerId:'deepseek' as const,units,...(repairCount?{repairCount}:{})};return output;
-   }catch(error){if(deadline.signal.aborted)throw new HostedError('翻译已停止或超时，已有译文保留，可主动续译',408,'translation_cancelled');if(error instanceof HostedError)throw error;throw new HostedError('翻译失败，已有译文保留，可主动续译',502,'translation_failed');}
+   }catch(error){if(deadline.signal.aborted)throw new HostedError('翻译已停止或超时，已有译文保留，可主动续译',408,controller.signal.aborted?'translation_cancelled':'translation_timeout');if(error instanceof HostedError)throw error;throw new HostedError('翻译失败，已有译文保留，可主动续译',502,'translation_failed');}
    finally{deadline.dispose();this.active.delete(key);if(!this.terminal.has(key)){if(this.terminal.size>=256)this.terminal.delete(this.terminal.keys().next().value!);this.terminal.set(key,{token,hash,payloadHash,status:completed?'completed':'failed',created:this.clock(),...(output?{result:output}:{})});}}
   })();
   this.active.set(key,{token,hash,controller,promise,created:this.clock()});return promise;

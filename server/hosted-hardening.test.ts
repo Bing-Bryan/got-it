@@ -50,36 +50,103 @@ function post(base: string, path: string, body: unknown, id = ids[0], extra: Rec
 }
 
 describe('expensive admission', () => {
-  it('rejects a mixed request at the global cap before outbound, charge or daily count', async () => {
+  it('rejects a sixth non-inquiry at the reservation cap, before outbound, charge or daily count, while inquiry still enters', async () => {
     const f = files();
     const budget = new HostedBudget(f.path);
     cleanup.push(() => budget.close());
     let calls = 0;
-    const model: HostedTranslationModel = () => new Promise(() => { calls += 1; });
+    const model: HostedTranslationModel = () => { calls += 1; return new Promise(() => {}); };
     const translations = new HostedTranslations(budget, model);
-    const imports = new HostedWebImports(new HostedResourceTickets(join(f.dir, 'state')), {extractor: () => new Promise(() => { calls += 1; })});
+    const imports = new HostedWebImports(new HostedResourceTickets(join(f.dir, 'state')), {extractor: () => { calls += 1; return new Promise(() => {}); }});
     const admission = new HostedAdmission({generation, trustedProxy: true, initialTokens: 'capacity'});
-    const base = await listen(createHostedApp({origin, budget, admission, trustedProxy: true, translations, webImports: imports, runner: async () => { calls += 1; throw new Error('must not run'); }}));
+    const base = await listen(createHostedApp({origin, budget, admission, trustedProxy: true, translations, webImports: imports, runner: async () => ({response: {answer: 'entered', sources: [], evidenceStatus: 'not-applicable', mode: 'live', providerId: 'deepseek', providerName: '体验版默认模型', model: 'deepseek-flash'}})}));
     const held = [
       post(base, '/api/hosted/translation-batches', translationBody('batch-a'), ids[0], {'x-hosted-operation-token': token}),
       post(base, '/api/hosted/translation-batches', translationBody('batch-b'), ids[1], {'x-hosted-operation-token': token}),
+      post(base, '/api/hosted/translation-batches', translationBody('batch-c'), ids[2], {'x-hosted-operation-token': token}),
     ];
-    const imported = await post(base, '/api/hosted/web-imports', {url: WEB_URL, operationId: 'import-a'}, ids[2], {'x-hosted-operation-token': token});
-    expect(imported.status).toBe(200);
-    for (let i = 0; i < 50 && admission.snapshot().slots.global < 3; i += 1) await new Promise(resolve => setTimeout(resolve, 10));
-    expect(admission.snapshot().slots.global).toBe(3);
+    const firstImport = await post(base, '/api/hosted/web-imports', {url: WEB_URL, operationId: 'import-a'}, ids[3], {'x-hosted-operation-token': token});
+    expect(firstImport.status).toBe(200);
+    const fifth = '12345678-1234-4123-8123-123456789016';
+    const secondImport = await post(base, '/api/hosted/web-imports', {url: WEB_URL, operationId: 'import-b'}, fifth, {'x-hosted-operation-token': token});
+    expect(secondImport.status).toBe(200);
+    for (let i = 0; i < 50 && admission.snapshot().slots.nonInquiry < 5; i += 1) await new Promise(resolve => setTimeout(resolve, 10));
+    expect(admission.snapshot().slots).toMatchObject({global: 5, nonInquiry: 5, translation: 3, capture: 2});
     const before = readFileSync(f.path, 'utf8');
-    const denied = await post(base, '/api/hosted/inquiry/stream', {requestId: 'ask-1', intent: 'ask', quote: 'A sample quotation.', context: 'Nearby.', question: 'What does it mean?', history: []}, ids[3]);
+    const denied = await post(base, '/api/hosted/translation-batches', translationBody('batch-six'), '12345678-1234-4123-8123-123456789017', {'x-hosted-operation-token': token});
     expect(denied.status).toBe(429);
     expect(denied.headers.get('retry-after')).toBeTruthy();
     expect((await denied.json()).code).toBe('busy');
     // Malformed near-limit JSON must be rejected by the slot preflight, before JSON parsing.
-    const unparsed=await fetch(base+'/api/hosted/inquiry/stream',{method:'POST',headers:{origin,'content-type':'application/json','x-trial-id':ids[3],'x-hosted-generation':generation,'x-hosted-operation-id':transportId('unparsed'),'x-gotit-client-ip':'203.0.113.10'},body:'!'.repeat(35000)});
+    const unparsed=await fetch(base+'/api/hosted/translation-batches',{method:'POST',headers:{origin,'content-type':'application/json','x-trial-id':'12345678-1234-4123-8123-123456789018','x-hosted-generation':generation,'x-hosted-operation-id':transportId('unparsed'),'x-gotit-client-ip':'203.0.113.10','x-hosted-operation-token':token},body:'!'.repeat(35000)});
     expect(unparsed.status).toBe(429);expect((await unparsed.json()).code).toBe('busy');
-    expect(calls).toBe(3);
+    expect(calls).toBe(5);
     for (const request of held) void request.catch(() => undefined);
     expect(readFileSync(f.path, 'utf8')).toBe(before);
-    expect(budget.status(ids[3], '203.0.113.10').remaining).toBe(30);
+    expect(budget.status('12345678-1234-4123-8123-123456789017', '203.0.113.10').remaining).toBe(30);
+    const inquiry = await post(base, '/api/hosted/inquiry/stream', {requestId: 'ask-1', intent: 'ask', quote: 'A sample quotation.', context: 'Nearby.', question: 'What does it mean?', history: []}, '12345678-1234-4123-8123-123456789019');
+    expect(inquiry.status).toBe(200);
+    expect(await inquiry.text()).toContain('entered');
+    expect(admission.snapshot().slots).toMatchObject({global: 5, nonInquiry: 5});
+    expect(admission.snapshot().counts.busyByCategory.translation).toBe(2);
+  });
+
+  it('admits five different-ID translation batches and one inquiry together, then rejects the seventh request', async () => {
+    const f = files();
+    const budget = new HostedBudget(f.path);
+    cleanup.push(() => budget.close());
+    let calls = 0;
+    const model: HostedTranslationModel = () => { calls += 1; return new Promise(() => {}); };
+    const translations = new HostedTranslations(budget, model);
+    const admission = new HostedAdmission({generation, trustedProxy: true, initialTokens: 'capacity'});
+    let inquiryCalls = 0, releaseInquiry!: () => void;
+    const inquiryPending = new Promise<{response: {answer: string; sources: []; evidenceStatus: 'not-applicable'; mode: 'live'; providerId: 'deepseek'; providerName: string; model: string}}>(resolve => { releaseInquiry = () => resolve({response: {answer: 'entered', sources: [], evidenceStatus: 'not-applicable', mode: 'live', providerId: 'deepseek', providerName: '体验版默认模型', model: 'deepseek-flash'}}); });
+    const base = await listen(createHostedApp({origin, budget, admission, trustedProxy: true, translations, runner: async () => { inquiryCalls += 1; return inquiryPending; }}));
+    const idsFive = [ids[0], ids[1], ids[2], ids[3], '12345678-1234-4123-8123-123456789016'];
+    const held = idsFive.map((id, index) => post(base, '/api/hosted/translation-batches', translationBody('batch-' + index, 'Phrase ' + index), id, {'x-hosted-operation-token': token}));
+    for (let i = 0; i < 50 && admission.snapshot().slots.translation < 5; i += 1) await new Promise(resolve => setTimeout(resolve, 10));
+    expect(admission.snapshot().slots).toMatchObject({global: 5, nonInquiry: 5, translation: 5, inquiry: 0});
+    const inquiry = await post(base, '/api/hosted/inquiry/stream', {requestId: 'ask-five-plus-one', intent: 'ask', quote: 'A sample quotation.', context: 'Nearby.', question: 'What does it mean?', history: []}, '12345678-1234-4123-8123-123456789017');
+    for (let i = 0; i < 50 && admission.snapshot().slots.global < 6; i += 1) await new Promise(resolve => setTimeout(resolve, 10));
+    expect(admission.snapshot().slots).toMatchObject({global: 6, nonInquiry: 5, inquiry: 1});
+    expect(inquiryCalls).toBe(1);
+    expect(calls).toBe(5);
+    const seventh = await post(base, '/api/hosted/inquiry/stream', {requestId: 'ask-seven', intent: 'ask', quote: 'A sample quotation.', context: 'Nearby.', question: 'What?', history: []}, '12345678-1234-4123-8123-123456789018');
+    expect(seventh.status).toBe(429); expect((await seventh.json()).code).toBe('busy');
+    releaseInquiry();
+    expect(inquiry.status).toBe(200); expect(await inquiry.text()).toContain('entered');
+    for (let i = 0; i < 50 && admission.snapshot().slots.global < 5; i += 1) await new Promise(resolve => setTimeout(resolve, 10));
+    expect(admission.snapshot().slots).toMatchObject({global: 5, nonInquiry: 5, inquiry: 0, translation: 5});
+    for (const request of held) void request.catch(() => undefined);
+  });
+
+  it('does not treat six admission slots as a fee guarantee when the worst-case reservation is unaffordable', async () => {
+    const f = files();
+    const budget = new HostedBudget(f.path, MAX_REQUEST_USD + .00001);
+    cleanup.push(() => budget.close());
+    let calls = 0, release!: () => void;
+    const pending = new Promise<{response: {answer: string; sources: []; evidenceStatus: 'not-applicable'; mode: 'live'; providerId: 'deepseek'; providerName: string; model: string}}>(resolve => { release = () => resolve({response: {answer: 'paid', sources: [], evidenceStatus: 'not-applicable', mode: 'live', providerId: 'deepseek', providerName: '体验版默认模型', model: 'deepseek-flash'}}); });
+    const admission = new HostedAdmission({generation, trustedProxy: true, initialTokens: 'capacity'});
+    const base = await listen(createHostedApp({origin, budget, admission, trustedProxy: true, runner: async () => { calls += 1; return pending; }}));
+    const idsSix = [ids[0], ids[1], ids[2], ids[3], '12345678-1234-4123-8123-123456789016', '12345678-1234-4123-8123-123456789017'];
+    const first = await post(base, '/api/hosted/inquiry/stream', {requestId: 'paid-one', intent: 'ask', quote: 'A sample quotation.', context: 'Nearby.', question: 'What?', history: []}, idsSix[0]);
+    expect(first.status).toBe(200);
+    for (let i = 0; i < 50 && admission.snapshot().slots.global < 1; i += 1) await new Promise(resolve => setTimeout(resolve, 10));
+    for (let index = 1; index < idsSix.length; index += 1) {
+      const denied = await post(base, '/api/hosted/inquiry/stream', {requestId: 'paid-' + index, intent: 'ask', quote: 'A sample quotation.', context: 'Nearby.', question: 'What?', history: []}, idsSix[index]);
+      expect(denied.status).toBe(429);
+      expect((await denied.json()).code).toBe('global_quota_exhausted');
+    }
+    expect(calls).toBe(1);
+    expect(admission.snapshot().slots).toMatchObject({global: 1, nonInquiry: 0, inquiry: 1});
+    const ledger = JSON.parse(readFileSync(f.path, 'utf8')).days;
+    const day = Object.values(ledger as Record<string, {confirmed: number; reserved: number; blocked?: boolean}>)[0];
+    expect(day.confirmed + day.reserved).toBeCloseTo(MAX_REQUEST_USD, 6);
+    expect(day.confirmed + day.reserved).toBeLessThanOrEqual(MAX_REQUEST_USD + .00001);
+    release();
+    await first.text();
+    for (let i = 0; i < 50 && admission.snapshot().slots.global > 0; i += 1) await new Promise(resolve => setTimeout(resolve, 10));
+    expect(admission.snapshot().slots.global).toBe(0);
   });
 
   it('keeps the slot until an abort-ignoring adapter settles and discards the late result', async () => {
@@ -103,6 +170,43 @@ describe('expensive admission', () => {
     await new Promise(resolve => setTimeout(resolve, 20));
     expect(admission.snapshot().slots.global).toBe(0);
     expect(budget.status(ids[1], 'other').globalExhausted).toBe(true);
+  });
+
+  it('holds the translation slot after stop until the adapter settles, rejects the next batch, then recovers', async () => {
+    const f = files();
+    const budget = new HostedBudget(f.path);
+    cleanup.push(() => budget.close());
+    let calls = 0, releaseLate!: () => void;
+    const late = new Promise<{data: {translations: Record<string, string>}; usage: {prompt_tokens: number; completion_tokens: number}}>(resolve => { releaseLate = () => resolve({data: {translations: {unit: '迟到的译文'}}, usage: {prompt_tokens: 10, completion_tokens: 5}}); });
+    const model: HostedTranslationModel = async () => {
+      calls += 1;
+      if (calls === 1) return late;
+      return {data: {translations: {unit: '恢复后的译文'}}, usage: {prompt_tokens: 10, completion_tokens: 5}};
+    };
+    const translations = new HostedTranslations(budget, model);
+    const admission = new HostedAdmission({generation, trustedProxy: true, initialTokens: 'capacity'});
+    const base = await listen(createHostedApp({origin, budget, admission, trustedProxy: true, translations}));
+    const first = post(base, '/api/hosted/translation-batches', translationBody('cancel-me'), ids[0], {'x-hosted-operation-token': token});
+    for (let i = 0; i < 50 && admission.snapshot().slots.global < 1; i += 1) await new Promise(resolve => setTimeout(resolve, 10));
+    expect(admission.snapshot().slots).toMatchObject({global: 1, translation: 1});
+    const cancel = await fetch(base + '/api/hosted/translation-batches/cancel-me/cancel', {method: 'POST', headers: {origin, 'content-type': 'application/json', 'x-trial-id': ids[0], 'x-hosted-operation-token': token}, body: '{}'});
+    expect(cancel.status).toBe(200);
+    const stopped = await first;
+    expect(stopped.status).toBe(408);
+    expect(admission.snapshot().slots).toMatchObject({global: 1, translation: 1});
+    const next = await post(base, '/api/hosted/translation-batches', translationBody('next-after-stop', 'Next phrase.'), ids[0], {'x-hosted-operation-token': token});
+    expect(next.status).toBe(429);
+    expect((await next.json()).code).toBe('busy');
+    expect(calls).toBe(1);
+    releaseLate();
+    for (let i = 0; i < 50 && admission.snapshot().slots.global > 0; i += 1) await new Promise(resolve => setTimeout(resolve, 10));
+    expect(admission.snapshot().slots.global).toBe(0);
+    const recovered = await post(base, '/api/hosted/translation-batches', translationBody('after-settled', 'Recovered phrase.'), ids[0], {'x-hosted-operation-token': token});
+    expect(recovered.status).toBe(200);
+    expect((await recovered.json()).units.unit).toBe('恢复后的译文');
+    expect(calls).toBe(2);
+    expect(admission.snapshot().slots.global).toBe(0);
+    expect(admission.snapshot().counts.acceptedByCategory.translation).toBe(2);
   });
 
   it('does not let a forged forwarding header change the trusted IP, and keeps cancel available when the expensive window is full', async () => {

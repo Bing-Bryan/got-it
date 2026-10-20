@@ -4,9 +4,10 @@ import {HostedError} from './hosted-budget';
 
 /** Conservative defaults pending the isolated load check. Not a measured capacity. */
 export const ADMISSION_LIMITS = {
-  globalSlots: 3,
+  globalSlots: 6,
+  nonInquirySlots: 5,
   perIdSlots: 1,
-  translationSlots: 2,
+  translationSlots: 5,
   captureSlots: 2,
   expensive: {global: 30, ip: 10, id: 3, windowMs: 60_000},
   statistics: {global: 120, ip: 30, windowMs: 60_000},
@@ -59,6 +60,7 @@ export class HostedAdmission {
   private initial: number | 'capacity';
   readonly trustedProxy: boolean;
   private globalSlots = 0;
+  private nonInquirySlots = 0;
   private translationSlots = 0;
   private captureSlots = 0;
   private idSlots = new Map<string, number>();
@@ -72,7 +74,14 @@ export class HostedAdmission {
   private active = new Map<string, {hash: string; category: AdmissionCategory}>();
   private tombstones = new Map<string, Tombstone>();
   private rounds = new Map<string, RoundToken>();
-  private counts = {accepted: 0, busy: 0, rateLimited: 0, trustedIp: 0, upgradeRequired: 0, stale: 0, expired: 0, conflict: 0, inProgress: 0, capacity: 0, cancelled: 0, timedOut: 0};
+  private counts = {
+    accepted: 0, busy: 0, rateLimited: 0, trustedIp: 0, upgradeRequired: 0,
+    stale: 0, expired: 0, conflict: 0, inProgress: 0, capacity: 0,
+    cancelled: 0, timedOut: 0,
+    acceptedByCategory: {inquiry: 0, translation: 0, capture: 0},
+    busyByCategory: {inquiry: 0, translation: 0, capture: 0},
+    rateLimitedByCategory: {inquiry: 0, translation: 0, capture: 0},
+  };
 
   constructor(private options: AdmissionOptions = {}) {
     this.clock = options.clock ?? Date.now;
@@ -117,8 +126,9 @@ export class HostedAdmission {
     return this.take(bucket, capacity, windowMs, now);
   }
 
-  private limited(retryAfter: number) {
+  private limited(retryAfter: number, category?: AdmissionCategory) {
     this.counts.rateLimited += 1;
+    if (category) this.counts.rateLimitedByCategory[category] += 1;
     throw new HostedError('操作过于频繁，请稍后再试', 429, 'rate_limited', retryAfter);
   }
 
@@ -163,7 +173,7 @@ export class HostedAdmission {
 
   private consume(bucket: Bucket) { bucket.tokens -= 1; }
 
-  takeExpensive(id: string, ip: string, exemptId = false) {
+  takeExpensive(id: string, ip: string, exemptId = false, category?: AdmissionCategory) {
     const now = this.clock();
     const global = this.expensiveGlobal;
     const ipBucket = this.bucketFor(this.expensiveIp, ip, ADMISSION_LIMITS.expensive.ip, ADMISSION_LIMITS.expensive.windowMs, now);
@@ -171,7 +181,7 @@ export class HostedAdmission {
     const retry = this.wait(global, ADMISSION_LIMITS.expensive.global, ADMISSION_LIMITS.expensive.windowMs, now)
       || this.wait(ipBucket, ADMISSION_LIMITS.expensive.ip, ADMISSION_LIMITS.expensive.windowMs, now)
       || (idBucket ? this.wait(idBucket, ADMISSION_LIMITS.expensive.id, ADMISSION_LIMITS.expensive.windowMs, now) : 0);
-    if (retry) this.limited(retry);
+    if (retry) this.limited(retry, category);
     this.consume(global);
     this.consume(ipBucket);
     if (idBucket) this.consume(idBucket);
@@ -200,8 +210,9 @@ export class HostedAdmission {
     if (header !== this.generation) { this.counts.stale += 1; throw new HostedError('服务已重启，上次操作结果未知。请刷新后主动重试，不会自动重新发送。', 409, 'operation_stale'); }
   }
 
-  private busy() {
+  private busy(category: AdmissionCategory) {
     this.counts.busy += 1;
+    this.counts.busyByCategory[category] += 1;
     throw new HostedError('当前体验请求较多，请稍后重试。已有内容仍可阅读。', 429, 'busy', ADMISSION_LIMITS.busyRetryAfter);
   }
 
@@ -210,18 +221,23 @@ export class HostedAdmission {
     if ((this.idSlots.get(id) || 0) >= ADMISSION_LIMITS.perIdSlots) return false;
     if (category === 'translation' && this.translationSlots >= ADMISSION_LIMITS.translationSlots) return false;
     if (category === 'capture' && this.captureSlots >= ADMISSION_LIMITS.captureSlots) return false;
+    // The last global slot is reserved for inquiry. Non-inquiry work may never
+    // borrow it, even when every other slot is idle.
+    if (category !== 'inquiry' && this.nonInquirySlots >= ADMISSION_LIMITS.nonInquirySlots) return false;
     return true;
   }
 
-  preflight(category: AdmissionCategory, id: string) { if (!this.fits(category, id)) this.busy(); }
+  preflight(category: AdmissionCategory, id: string) { if (!this.fits(category, id)) this.busy(category); }
 
   acquire(category: AdmissionCategory, id: string): AdmissionLease {
-    if (!this.fits(category, id)) this.busy();
+    if (!this.fits(category, id)) this.busy(category);
     this.globalSlots += 1;
     this.idSlots.set(id, (this.idSlots.get(id) || 0) + 1);
+    if (category !== 'inquiry') this.nonInquirySlots += 1;
     if (category === 'translation') this.translationSlots += 1;
     if (category === 'capture') this.captureSlots += 1;
     this.counts.accepted += 1;
+    this.counts.acceptedByCategory[category] += 1;
     const pending = new Set<Promise<unknown>>();
     let settled = false;
     const release = () => {
@@ -230,6 +246,7 @@ export class HostedAdmission {
       this.globalSlots -= 1;
       const left = (this.idSlots.get(id) || 1) - 1;
       if (left <= 0) this.idSlots.delete(id); else this.idSlots.set(id, left);
+      if (category !== 'inquiry') this.nonInquirySlots -= 1;
       if (category === 'translation') this.translationSlots -= 1;
       if (category === 'capture') this.captureSlots -= 1;
     };
@@ -316,12 +333,30 @@ export class HostedAdmission {
       generation: this.generation,
       conservativeDefaults: true,
       measuredCapacity: false,
-      slots: {global: this.globalSlots, translation: this.translationSlots, capture: this.captureSlots, limits: {global: ADMISSION_LIMITS.globalSlots, perId: ADMISSION_LIMITS.perIdSlots, translation: ADMISSION_LIMITS.translationSlots, capture: ADMISSION_LIMITS.captureSlots}},
+      slots: {
+        global: this.globalSlots,
+        inquiry: this.globalSlots - this.nonInquirySlots,
+        nonInquiry: this.nonInquirySlots,
+        translation: this.translationSlots,
+        capture: this.captureSlots,
+        limits: {
+          global: ADMISSION_LIMITS.globalSlots,
+          nonInquiry: ADMISSION_LIMITS.nonInquirySlots,
+          perId: ADMISSION_LIMITS.perIdSlots,
+          translation: ADMISSION_LIMITS.translationSlots,
+          capture: ADMISSION_LIMITS.captureSlots,
+        },
+      },
       activeOperations: this.active.size,
       tombstones: this.tombstones.size,
       rounds: this.rounds.size,
       rateKeys: {expensiveIp: this.expensiveIp.size, expensiveId: this.expensiveId.size, statisticsIp: this.statisticsIp.size},
-      counts: {...this.counts},
+      counts: {
+        ...this.counts,
+        acceptedByCategory: {...this.counts.acceptedByCategory},
+        busyByCategory: {...this.counts.busyByCategory},
+        rateLimitedByCategory: {...this.counts.rateLimitedByCategory},
+      },
     };
   }
 }

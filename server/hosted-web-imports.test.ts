@@ -17,6 +17,32 @@ describe('hosted ephemeral import and signed resource boundary',()=>{
   // Mode bits express privacy only on POSIX; Windows relies on directory ACLs (see private-storage.ts).
   if(process.platform!=='win32'){chmodSync(join(dir,'state/resource-signing.key'),0o644);expect(()=>new HostedResourceTickets(join(dir,'state'))).toThrow('invalid');}
  });
+ it('reports each capture job terminal exactly once without changing the job result',async()=>{
+  const {tickets}=state();let now=1000;const events:Array<{outcome:string;elapsed:number}>=[];
+  const jobs=new HostedWebImports(tickets,{extractor:async()=>webFixture(),clock:()=>now,onTerminal:(outcome,startedAt,endedAt)=>{events.push({outcome,elapsed:endedAt-startedAt});}});
+  await jobs.start('owner','ip',token,{url:WEB_URL,operationId:'success'});now+=12;expect((await ready(jobs,'owner','success')).status).toBe('ready');jobs.release('owner','success',token);
+  const failing=new HostedWebImports(tickets,{extractor:async()=>{throw new Error('controlled failure');},clock:()=>now,onTerminal:(outcome,startedAt,endedAt)=>{events.push({outcome,elapsed:endedAt-startedAt});}});
+  await failing.start('owner','ip',token,{url:WEB_URL,operationId:'failure'});now+=7;expect((await ready(failing,'owner','failure')).status).toBe('failed');
+  let finish!:(value:Awaited<ReturnType<typeof webFixture>>)=>void;const pending=new Promise<Awaited<ReturnType<typeof webFixture>>>(resolve=>{finish=resolve;});
+  const cancelling=new HostedWebImports(tickets,{extractor:async()=>pending,clock:()=>now,onTerminal:(outcome,startedAt,endedAt)=>{events.push({outcome,elapsed:endedAt-startedAt});}});
+  await cancelling.start('owner','ip',token,{url:WEB_URL,operationId:'cancel'});now+=3;cancelling.cancel('owner','cancel',token);finish(await webFixture());await new Promise(resolve=>setTimeout(resolve,10));
+  expect(events).toEqual([{outcome:'success',elapsed:12},{outcome:'failed',elapsed:7},{outcome:'cancelled',elapsed:3}]);
+ });
+ it('separates a capture deadline from ordinary failure and user cancellation',async()=>{
+  const {tickets}=state();const events:string[]=[];
+  const jobs=new HostedWebImports(tickets,{extractor:async()=>new Promise(()=>{}),deadlineMs:5,onTerminal:outcome=>events.push(outcome)});
+  await jobs.start('owner','ip',token,{url:WEB_URL,operationId:'deadline'});
+  for(let i=0;i<50&&jobs.status('owner','deadline',token).status==='reading';i++)await new Promise(resolve=>setTimeout(resolve,2));
+  expect(jobs.status('owner','deadline',token).status).toBe('failed');
+  expect(events).toEqual(['timedOut']);
+ });
+ it('classifies a signed media-retry deadline as timedOut without changing the ticket contract',async()=>{
+  const {tickets}=state(),fixture=await webFixture();const doc=fixture.workspace.document;if(doc.kind!=='web')throw new Error();const media=doc.web.media[0];
+  const ticket=tickets.sign({v:1,documentId:doc.id,contentVersion:doc.web.contentVersion,mediaId:media.id,sourceUrl:media.sourceUrl!,extractorVersion:doc.web.extractorVersion});
+  const jobs=new HostedWebImports(tickets,{retryDeadlineMs:5,fetcher:async(_url,options)=>new Promise((_resolve,reject)=>options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true}))});
+  await expect(jobs.retry('owner','ip',token,{operationId:'retry-deadline',ticket},new AbortController().signal)).rejects.toMatchObject({status:408,code:'web_timeout'});
+  expect(jobs.memoryBytes).toBe(0);
+ });
  it('keeps one immutable owner/token preview with hash-bound bytes, signed retry metadata and no content files',async()=>{
   const {dir,tickets}=state(),jobs=new HostedWebImports(tickets,{extractor:async()=>webFixture()});
   await jobs.start('owner','ip',token,{url:WEB_URL,operationId:'op'});const s=await ready(jobs);expect(s.status).toBe('ready');const doc=s.preview!.workspace.document;if(doc.kind!=='web')throw new Error();const media=doc.web.media[0];expect(jobs.resource('owner','op',token,media.resourceId!).mime).toBe('image/png');expect(s.preview!.retryTickets?.[media.id]).toBeTruthy();

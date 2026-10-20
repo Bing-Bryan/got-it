@@ -2,13 +2,13 @@
 import { cp, mkdir, readFile, readdir, lstat, writeFile } from 'node:fs/promises';
 import { resolve, join, relative, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
-const roots = ['src', 'server', 'scripts', '.github', 'docs/updates',
+const roots = ['src', 'server', 'scripts', 'ops', '.github', 'docs/updates',
   ...['reading', 'explain', 'sources', 'question', 'pdf-reading', 'pdf-selection', 'library', 'web-reading'].map(name => `docs/images/${name}.png`),
   'docs/images/homepage-2026-10-19.png', 'docs/images/reading-2026-10-19.png',
   'docs/images/reading-2026-10-14.png', 'docs/images/pdf-reading-2026-10-14.png', 'docs/images/web-images-2026-10-14.png',
   'docs/release-checklist.md', 'docs/release-results.md', 'docs/ui-guidelines.md', 'docs/ui', 'SECURITY.md', 'LICENSE',
   'public/fonts', 'public/hosted-samples/companion-ai-report.md',
-  'README.md', 'README.en.md', 'package.json', 'package-lock.json', 'tsconfig.json', 'vite.config.ts',
+  'README.md', 'README.en.md', 'package.json', 'package-lock.json', 'tsconfig.json', 'vite.config.ts', 'vite.ops.config.ts',
   'index.html', '.env.example', '.gitignore', '.nvmrc'];
 const root = process.cwd();
 const dest = resolve(root, 'release', `got-it-${new Date().toISOString().replaceAll(/[:.]/g, '-')}`);
