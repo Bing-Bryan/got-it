@@ -1,6 +1,6 @@
 import {beforeEach,expect,it,vi} from 'vitest';
 vi.mock('./runtime-mode',()=>({HOSTED:true,trialId:()=> '123e4567-e89b-42d3-a456-426614174000'}));
-import {FEATURE_KEYS,flushUsage,noteAnswerComplete,noteAiStarted,noteMaterial,installUsage,noteCount,noteResultSaved,pendingBatches,setUsageEnabled,track,usageEnabled} from './hosted-usage';
+import {FEATURE_KEYS,flushUsage,noteAnswerComplete,noteAiStarted,noteImportOperation,noteMaterial,installUsage,noteCount,noteResultSaved,pendingBatches,setUsageEnabled,track,usageEnabled} from './hosted-usage';
 
 beforeEach(()=>{localStorage.clear();sessionStorage.clear();setUsageEnabled(false);setUsageEnabled(true);vi.restoreAllMocks();});
 
@@ -28,6 +28,28 @@ it('does not upload body, url, or identity fields', async () => {
   expect(Object.keys(body).sort()).toEqual(['batchId','channel','counts','createdAt','discarded','funnel','material','reach','schemaVersion']);
   expect(JSON.stringify(body)).not.toContain('operation-1');
   expect(JSON.stringify(body)).not.toMatch(/filename|https?:\/\/|"quote"/);
+});
+
+it('sends v3 import operations without URL, content or stable identity fields', async () => {
+  const fetcher = vi.fn().mockResolvedValue({status: 204, json: async () => ({})});
+  vi.stubGlobal('fetch', fetcher);
+  const operation = {
+    operationId: '123e4567-e89b-42d3-a456-426614174000',
+    startedAt: '2026-10-20T11:30:00.000Z',
+    outcome: 'failed' as const,
+    attempts: 2,
+    recovered: false,
+    errorCategory: 'timeout' as const,
+  };
+  noteImportOperation(operation);
+  noteImportOperation(operation);
+  await flushUsage();
+  expect(fetcher).toHaveBeenCalledOnce();
+  const body = JSON.parse(fetcher.mock.calls[0]![1].body);
+  expect(body.schemaVersion).toBe(3);
+  expect(body.importOperations).toEqual([operation]);
+  expect(JSON.stringify(body)).not.toMatch(/https?:\/\/|filename|title|body|quote|secret/i);
+  expect(pendingBatches()).toEqual([]);
 });
 
 it('acks a batch once and keeps the same id when the response is lost', async () => {

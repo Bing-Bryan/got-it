@@ -11,6 +11,8 @@ const REFRESH_MS = 15_000;
 const TIMEOUT_MS = 5_000;
 const CONNECTION_STALE_MS = 30_000;
 const CATEGORIES: RequestCategory[] = ['inquiry', 'translation', 'capture'];
+const IMPORT_ERROR_LABELS: Record<string, string> = {network: '网络', timeout: '超时', rate_limited: '限速', server_error: '服务端错误', rejected: '请求被拒绝', invalid_content: '内容无效', too_large: '内容过大', stale_operation: '操作过期', capacity: '容量/额度', unknown: '未知'};
+const importErrorLabel = (key: string) => IMPORT_ERROR_LABELS[key] ?? key;
 
 const sameQuery = (a: OpsQuery, b: OpsQuery) => a.from === b.from && a.to === b.to && a.channel === b.channel && a.material === b.material;
 
@@ -184,6 +186,7 @@ export function OperationsDashboard() {
   };
 
   const stats = data?.statistics ?? null;
+  const importOps = stats?.importOperations ?? null;
   const health = data?.health ?? null;
   const budget = data?.budget ?? null;
   const admission = data?.admission ?? null;
@@ -244,17 +247,33 @@ export function OperationsDashboard() {
                 <Pill>{stats.discarded ? `${stats.discarded} 个客户端批次被丢弃` : '无客户端丢弃记录'}</Pill>
               </div>
               {stats.v1.present ? <p className="ops-callout">{stats.v1.note} 检测到 v1 历史 {stats.v1.days} 天。</p> : null}
-              {!stats.hasData ? <div className="ops-empty"><p>该范围没有已送达的 v2 批次。</p><p className="ops-muted">这是真实空数据，不是加载失败；可能尚未有人访问、统计已关闭，或批次仍在 48 小时补报窗口内。</p></div> : <>
+              {!stats.hasData && !importOps?.hasData ? <div className="ops-empty"><p>该范围没有已送达的 v2 批次。</p><p className="ops-muted">这是真实空数据，不是加载失败；可能尚未有人访问、统计已关闭，或批次仍在 48 小时补报窗口内。</p></div> : <>
                 <div className="ops-metric-grid ops-metric-grid--counts">
-                  <Card label="导入开始" value={stats.counts.import_started ?? 0} />
-                  <Card label="导入成功" value={stats.counts.import_success ?? 0} />
-                  <Card label="导入失败" value={stats.counts.import_failed ?? 0} />
+                  <Card label="导入开始（旧事件）" value={stats.counts.import_started ?? 0} hint="v2 事件计数，不是操作/用户" />
+                  <Card label="导入成功（旧事件）" value={stats.counts.import_success ?? 0} hint="v2 事件计数，不是操作/用户" />
+                  <Card label="导入失败（旧事件）" value={stats.counts.import_failed ?? 0} hint="历史事件；旧 12 次不重算，不等于失败操作" />
                   <Card label="翻译完成" value={stats.counts.translation_complete ?? 0} />
                   <Card label="翻译部分" value={stats.counts.translation_partial ?? 0} />
                   <Card label="翻译失败" value={stats.counts.translation_failed ?? 0} />
                   <Card label="回答完成" value={stats.counts.answer_complete ?? 0} />
                   <Card label="结果保存" value={stats.counts.result_saved ?? 0} />
                   <Card label="原文收藏" value={stats.counts.bookmark_saved ?? 0} hint="不等于 AI 结果保存" />
+                </div>
+                <div className="ops-panel" aria-labelledby="import-ops-title">
+                  <h3 id="import-ops-title">网页导入操作终态（新口径）</h3>
+                  {!importOps || !importOps.hasData ? <p className="ops-callout">尚未收到新口径网页导入操作；旧 v2 事件仍按事件计数显示，不补造操作。</p> : <>
+                    <div className="ops-metric-grid ops-metric-grid--counts">
+                      <Card label="成功" value={importOps.totals.success} />
+                      <Card label="已有材料" value={importOps.totals.existing} />
+                      <Card label="最终失败" value={importOps.totals.failed} hint="每个操作只计一次" />
+                      <Card label="取消" value={importOps.totals.cancelled} />
+                      <Card label="过期" value={importOps.totals.expired} />
+                      <Card label="失败后成功" value={importOps.totals.recovered} hint="不增加最终失败" />
+                      <Card label="发生重试" value={importOps.totals.retried} />
+                    </div>
+                    <div className="ops-table-wrap"><table><caption className="ops-visually-hidden">新口径网页导入最终错误类别</caption><thead><tr><th scope="col">最终/可恢复错误类别</th><th scope="col">操作数</th></tr></thead><tbody>{Object.entries(importOps.errors).filter(([, count]) => count > 0).map(([key, count]) => <tr key={key}><th scope="row">{importErrorLabel(key)}</th><td>{count}</td></tr>)}{Object.values(importOps.errors).every(count => count === 0) ? <tr><td colSpan={2}>尚无最终错误类别</td></tr> : null}</tbody></table></div>
+                    <p className="ops-muted ops-small">{importOps.note} 新口径自本版本起算；{importOps.daysWithData} 天有操作数据。</p>
+                  </>}
                 </div>
                 <div className="ops-two-column">
                   <div className="ops-panel">

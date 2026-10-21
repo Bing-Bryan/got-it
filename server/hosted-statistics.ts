@@ -2,6 +2,7 @@ import {createHash} from 'node:crypto';
 import {existsSync, readFileSync} from 'node:fs';
 import {atomicJson, HostedError, utcDay} from './hosted-budget';
 import {FEATURE_KEYS} from '../src/lib/hosted-feature-keys';
+import {IMPORT_ATTEMPT_MAX, IMPORT_ERROR_CATEGORIES, IMPORT_OPERATION_MAX, IMPORT_OUTCOMES, type ImportErrorCategory, type ImportOperation, type ImportOutcome} from '../src/lib/web-import-observability';
 export {FEATURE_KEYS} from '../src/lib/hosted-feature-keys';
 
 const counts = ['0', '1', '2to5', '6plus'];
@@ -15,7 +16,10 @@ export const USAGE_COUNTS = ['import_started', 'import_success', 'import_existin
 export const USAGE_FUNNEL = ['visit_started', 'material_opened', 'ai_started', 'ai_completed', 'result_saved'] as const;
 export const USAGE_RECEIPT_MS = 48 * 60 * 60 * 1000;
 export const USAGE_RECEIPT_MAX = 50_000;
+export const IMPORT_OPERATION_RECEIPT_MAX = 50_000;
 const BATCH_KEYS = ['schemaVersion', 'batchId', 'createdAt', 'channel', 'material', 'counts', 'reach', 'funnel', 'discarded'] as const;
+const V3_BATCH_KEYS = [...BATCH_KEYS, 'importOperations'] as const;
+const OPERATION_KEYS = ['operationId', 'startedAt', 'outcome', 'attempts', 'recovered', 'errorCategory'] as const;
 
 export interface DailySummary { date: string; returnBucket: string; sources: string[]; features: Record<string, {count: string; onReturnDay: boolean}>; }
 export function parseSummary(v: unknown, now = Date.now()): DailySummary {
@@ -30,12 +34,15 @@ export function parseSummary(v: unknown, now = Date.now()): DailySummary {
 
 type Aggregates = {version: 1; days: Record<string, Record<string, number>>};
 type Receipt = {hash: string; expires: number};
-type V2 = {version: 2; days: Record<string, Record<string, number>>; receipts: Receipt[]};
+type V2 = {version: 2; days: Record<string, Record<string, number>>; receipts: Receipt[]; operations?: Record<string, Record<string, number>>; operationReceipts?: Receipt[]};
+type ParsedBatch = {schemaVersion: 2 | 3; batchId: string; createdAt: string; channel: typeof USAGE_CHANNELS[number]; material: typeof USAGE_MATERIALS[number]; counts: Record<typeof USAGE_COUNTS[number], number>; reach: Record<typeof USAGE_FUNNEL[number], 0 | 1>; funnel: Record<typeof USAGE_FUNNEL[number], 0 | 1>; discarded: number; importOperations: ImportOperation[]};
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-export function parseBatch(v: unknown, now = Date.now()) {
+export function parseBatch(v: unknown, now = Date.now()): ParsedBatch {
   const invalid = () => { throw new HostedError('统计批次格式无效'); };
-  if (!object(v) || !exact(v, BATCH_KEYS) || v.schemaVersion !== 2) return invalid();
+  if (!object(v) || (v.schemaVersion !== 2 && v.schemaVersion !== 3)) return invalid();
+  const schemaVersion = v.schemaVersion;
+  if (!exact(v, schemaVersion === 3 ? V3_BATCH_KEYS : BATCH_KEYS)) return invalid();
   if (typeof v.batchId !== 'string' || !uuid.test(v.batchId) || typeof v.createdAt !== 'string' || !Number.isFinite(Date.parse(v.createdAt))) return invalid();
   const created = Date.parse(v.createdAt);
   if (created > now) throw new HostedError('统计批次创建时间尚未到达', 400, 'batch_future');
@@ -45,7 +52,28 @@ export function parseBatch(v: unknown, now = Date.now()) {
   for (const value of Object.values(v.counts)) if (!Number.isSafeInteger(value) || Number(value) < 0 || Number(value) > 1000) return invalid();
   for (const value of [...Object.values(v.reach), ...Object.values(v.funnel)]) if (value !== 0 && value !== 1) return invalid();
   if (!Number.isSafeInteger(v.discarded) || Number(v.discarded) < 0 || Number(v.discarded) > 10_000) return invalid();
-  return v as {schemaVersion: 2; batchId: string; createdAt: string; channel: typeof USAGE_CHANNELS[number]; material: typeof USAGE_MATERIALS[number]; counts: Record<typeof USAGE_COUNTS[number], number>; reach: Record<typeof USAGE_FUNNEL[number], 0 | 1>; funnel: Record<typeof USAGE_FUNNEL[number], 0 | 1>; discarded: number};
+  let importOperations: ImportOperation[] = [];
+  if (schemaVersion === 3) {
+    if (!Array.isArray(v.importOperations) || v.importOperations.length > IMPORT_OPERATION_MAX) return invalid();
+    for (const item of v.importOperations) {
+      if (!object(item) || !exact(item, OPERATION_KEYS)) return invalid();
+      if (typeof item.operationId !== 'string' || !uuid.test(item.operationId) || typeof item.startedAt !== 'string' || !Number.isFinite(Date.parse(item.startedAt))) return invalid();
+      const started = Date.parse(item.startedAt);
+      if (started > now + 5 * 60_000) return invalid();
+      if (!IMPORT_OUTCOMES.includes(item.outcome as ImportOutcome)) return invalid();
+      if (!Number.isSafeInteger(item.attempts) || Number(item.attempts) < 1 || Number(item.attempts) > IMPORT_ATTEMPT_MAX || typeof item.recovered !== 'boolean') return invalid();
+      const outcome = item.outcome as ImportOutcome;
+      const category = item.errorCategory === null ? null : IMPORT_ERROR_CATEGORIES.includes(item.errorCategory as ImportErrorCategory) ? item.errorCategory as ImportErrorCategory : undefined;
+      if (category === undefined) return invalid();
+      if (outcome === 'failed' && !category) return invalid();
+      if ((outcome === 'cancelled' || outcome === 'expired') && (item.recovered || category)) return invalid();
+      if (item.recovered && (!['success', 'existing'].includes(outcome) || Number(item.attempts) < 2 || !category)) return invalid();
+      if (!item.recovered && category && outcome !== 'failed') return invalid();
+      importOperations.push({operationId: item.operationId, startedAt: new Date(started).toISOString(), outcome, attempts: Number(item.attempts), recovered: item.recovered, errorCategory: category});
+    }
+    if (importOperations.length && v.material !== 'web') return invalid();
+  }
+  return {schemaVersion, batchId: v.batchId, createdAt: v.createdAt, channel: v.channel as ParsedBatch['channel'], material: v.material as ParsedBatch['material'], counts: v.counts as ParsedBatch['counts'], reach: v.reach as ParsedBatch['reach'], funnel: v.funnel as ParsedBatch['funnel'], discarded: Number(v.discarded), importOperations};
 }
 
 export interface StatisticsReportQuery {from?:string;to?:string;channel?:string;material?:string;}
@@ -71,8 +99,11 @@ export class HostedStatistics {
     if (existsSync(v2Path)) {
       const v = JSON.parse(readFileSync(v2Path, 'utf8')) as V2;
       if (v.version !== 2 || !object(v.days) || !Array.isArray(v.receipts) || v.receipts.length > USAGE_RECEIPT_MAX || v.receipts.some(item => !item || !/^[0-9a-f]{64}$/.test(item.hash) || !Number.isFinite(item.expires))) throw new Error('Invalid hosted statistics v2 aggregate');
-      this.v2Corrupt = Object.values(v.days).some(day => !object(day) || Object.values(day).some(value => !Number.isSafeInteger(value) || value < 0));
-      this.v2 = v;
+      const operations = v.operations ?? {};
+      const operationReceipts = v.operationReceipts ?? [];
+      if (!object(operations) || !Array.isArray(operationReceipts) || operationReceipts.length > IMPORT_OPERATION_RECEIPT_MAX || operationReceipts.some(item => !item || !/^[0-9a-f]{64}$/.test(item.hash) || !Number.isFinite(item.expires))) throw new Error('Invalid hosted statistics operation aggregate');
+      this.v2Corrupt = Object.values(v.days).some(day => !object(day) || Object.values(day).some(value => !Number.isSafeInteger(value) || value < 0)) || Object.values(operations).some(day => !object(day) || Object.values(day).some(value => !Number.isSafeInteger(value) || value < 0));
+      this.v2 = {...v};
     }
     this.pruneReceipts();
   }
@@ -80,8 +111,8 @@ export class HostedStatistics {
   private scheduleReceipts(retryMs?: number) {
     if (this.receiptTimer) clearTimeout(this.receiptTimer);
     this.receiptTimer = undefined;
-    if (this.closed || !this.v2.receipts.length) return;
-    const nextExpiry = this.v2.receipts.reduce((expiry, receipt) => Math.min(expiry, receipt.expires), Infinity);
+    if (this.closed || (!this.v2.receipts.length && !(this.v2.operationReceipts?.length ?? 0))) return;
+    const nextExpiry = [...this.v2.receipts, ...(this.v2.operationReceipts ?? [])].reduce((expiry, receipt) => Math.min(expiry, receipt.expires), Infinity);
     const delay = retryMs ?? Math.max(1, Math.min(USAGE_RECEIPT_MS, nextExpiry - this.now()));
     this.receiptTimer = setTimeout(() => {
       this.receiptTimer = undefined;
@@ -91,8 +122,9 @@ export class HostedStatistics {
   }
   private pruneReceipts(now = this.now()) {
     const receipts = this.v2.receipts.filter(item => item.expires > now);
-    if (receipts.length !== this.v2.receipts.length) {
-      const next = {...this.v2, receipts};
+    const operationReceipts = (this.v2.operationReceipts ?? []).filter(item => item.expires > now);
+    if (receipts.length !== this.v2.receipts.length || operationReceipts.length !== (this.v2.operationReceipts ?? []).length) {
+      const next = {...this.v2, receipts, ...(this.v2.operationReceipts ? {operationReceipts} : {})};
       try { atomicJson(this.v2Path, next); } catch { this.scheduleReceipts(60_000); throw new HostedError('统计暂不可用', 503); }
       this.v2 = next;
     }
@@ -122,8 +154,7 @@ export class HostedStatistics {
     this.pruneReceipts(now);
     const batch = parseBatch(input, now);
     const hash = createHash('sha256').update(batch.batchId).digest('hex');
-    const known = this.v2.receipts.find(item => item.hash === hash);
-    if (known) return {accepted: true, duplicate: true};
+    if (this.v2.receipts.find(item => item.hash === hash)) return {accepted: true, duplicate: true};
     if (this.v2.receipts.length >= USAGE_RECEIPT_MAX) throw new HostedError('统计接收已满，请稍后重试', 503, 'statistics_capacity');
     const day = batch.createdAt.slice(0, 10);
     const aggregate = {...(this.v2.days[day] || {})};
@@ -132,12 +163,40 @@ export class HostedStatistics {
     for (const key of USAGE_COUNTS) add(key, batch.counts[key]);
     for (const key of USAGE_FUNNEL) { add(`reach:${key}`, batch.reach[key]); add(`funnel:${key}`, batch.funnel[key]); }
     add('discarded', batch.discarded);
-    const next: V2 = {version: 2, days: {...this.v2.days, [day]: aggregate}, receipts: [...this.v2.receipts, {hash, expires: now + USAGE_RECEIPT_MS}]};
+    const operations = {...(this.v2.operations ?? {})};
+    const operationReceipts = [...(this.v2.operationReceipts ?? [])];
+    const seen = new Set(operationReceipts.map(item => item.hash));
+    const fresh: {operation: ImportOperation; hash: string}[] = [];
+    for (const operation of batch.importOperations) {
+      // An operation can cross the retention boundary before its batch is sent.
+      // Drop only that observation; the batch and unrelated events remain accepted.
+      if (now - Date.parse(operation.startedAt) >= USAGE_RECEIPT_MS) continue;
+      const operationHash = createHash('sha256').update(operation.operationId).digest('hex');
+      if (seen.has(operationHash)) continue;
+      if (operationReceipts.length + fresh.length >= IMPORT_OPERATION_RECEIPT_MAX) throw new HostedError('操作统计接收已满，请稍后重试', 503, 'statistics_capacity');
+      seen.add(operationHash);
+      fresh.push({operation, hash: operationHash});
+    }
+    for (const {operation} of fresh) {
+      const operationDay = operation.startedAt.slice(0, 10);
+      const operationAggregate = {...(operations[operationDay] || {})};
+      const operationPrefix = `${batch.channel}:${batch.material}`;
+      const addOperation = (name: string) => { operationAggregate[`${operationPrefix}:${name}`] = (operationAggregate[`${operationPrefix}:${name}`] || 0) + 1; };
+      addOperation(`final:${operation.outcome}`);
+      addOperation(`attempts:${operation.attempts <= 1 ? '1' : operation.attempts <= 3 ? '2to3' : '4plus'}`);
+      if (operation.recovered) addOperation('recovered');
+      if (operation.attempts > 1) addOperation('retried');
+      if (operation.errorCategory) addOperation(`error:${operation.errorCategory}`);
+      operations[operationDay] = operationAggregate;
+    }
+    for (const item of fresh) operationReceipts.push({hash: item.hash, expires: now + USAGE_RECEIPT_MS});
+    const next: V2 = {...this.v2, days: {...this.v2.days, [day]: aggregate}, receipts: [...this.v2.receipts, {hash, expires: now + USAGE_RECEIPT_MS}], ...(batch.schemaVersion === 3 ? {operations, operationReceipts} : {})};
     try { atomicJson(this.v2Path, next); } catch { throw new HostedError('统计暂不可用', 503); }
     this.v2 = next;
     this.scheduleReceipts();
     return {accepted: true, duplicate: false};
   }
+
   report(query: StatisticsReportQuery = {}) {
     if (this.v2Corrupt) throw new HostedError('统计账本损坏，统计暂不可用', 503, 'statistics_corrupt');
     this.pruneReceipts();
@@ -156,6 +215,9 @@ export class HostedStatistics {
     const funnel = Object.fromEntries(USAGE_FUNNEL.map(key => [key, 0])) as Record<typeof USAGE_FUNNEL[number], number>;
     let discarded = 0;
     let daysWithData = 0;
+    const importTotals = {success: 0, existing: 0, failed: 0, cancelled: 0, expired: 0, recovered: 0, retried: 0};
+    const importErrors = Object.fromEntries(IMPORT_ERROR_CATEGORIES.map(category => [category, 0])) as Record<ImportErrorCategory, number>;
+    let importDaysWithData = 0;
     for (let cursor = fromMs; cursor <= toMs; cursor += DAY_MS) {
       const day = new Date(cursor).toISOString().slice(0, 10);
       const aggregate = this.v2.days[day];
@@ -174,6 +236,24 @@ export class HostedStatistics {
         if (name.startsWith('funnel:') && (USAGE_FUNNEL as readonly string[]).includes(name.slice(7))) { funnel[name.slice(7) as typeof USAGE_FUNNEL[number]] += value; dayData = true; continue; }
       }
       if (dayData) daysWithData += 1;
+    }
+    for (let cursor = fromMs; cursor <= toMs; cursor += DAY_MS) {
+      const day = new Date(cursor).toISOString().slice(0, 10);
+      const aggregate = this.v2.operations?.[day];
+      if (!aggregate) continue;
+      let operationDay = false;
+      for (const [key, value] of Object.entries(aggregate)) {
+        if (!Number.isSafeInteger(value) || value < 0) throw new HostedError('统计账本包含损坏计数，统计暂不可用', 503, 'statistics_corrupt');
+        const [entryChannel, entryMaterial, ...rest] = key.split(':');
+        if (channel !== 'all' && entryChannel !== channel) continue;
+        if (material !== 'all' && entryMaterial !== material) continue;
+        const name = rest.join(':');
+        if (name.startsWith('final:') && (IMPORT_OUTCOMES as readonly string[]).includes(name.slice(6))) { importTotals[name.slice(6) as keyof typeof importTotals] += value; operationDay = true; continue; }
+        if (name === 'recovered' || name === 'retried') { importTotals[name] += value; operationDay = true; continue; }
+        if (name.startsWith('error:') && (IMPORT_ERROR_CATEGORIES as readonly string[]).includes(name.slice(6))) { importErrors[name.slice(6) as ImportErrorCategory] += value; operationDay = true; continue; }
+        if (name.startsWith('attempts:')) { operationDay = true; continue; }
+      }
+      if (operationDay) importDaysWithData += 1;
     }
     const conversions = material === 'all' && channel !== 'all'
       ? USAGE_FUNNEL.slice(1).map((stage, index) => {
@@ -199,6 +279,14 @@ export class HostedStatistics {
           ? '转换率只在选定单一渠道、跨材料汇总且分母大于0时显示；当前为多渠道汇总。'
           : '转换率是已送达v2批次中相邻阶段的有序计数比，不是同一批人的精确转换；漏报、48小时内补报和机器人会影响结果。',
       discarded,
+      importOperations: {
+        schemaVersion: 1 as const,
+        hasData: importDaysWithData > 0,
+        daysWithData: importDaysWithData,
+        totals: importTotals,
+        errors: importErrors,
+        note: '新口径操作终态；每个 operationId 只计一次，按操作开始UTC日归属。与 v2 import_failed 事件计数不可相加或共用失败率分母。',
+      },
       v1: {present: Object.keys(this.state.days).length > 0, days: Object.keys(this.state.days).length, note: 'v1历史只提示存在，不与v2计数或分母合并。'},
       note: 'v2是已送达的匿名访问/事件增量，可能漏报、48小时内补报或包含机器人；访问阶段计数不是UV/PV、跨日留存或全量真实用户。',
     };

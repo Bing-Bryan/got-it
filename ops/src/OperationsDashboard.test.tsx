@@ -17,7 +17,8 @@ const payload = (channel = 'all', material = 'all'): OpsPayload => ({
   statistics: {
     schemaVersion: 2, generatedAt: '2026-10-20T12:00:00.000Z', range: {from: '2026-10-14', to: '2026-10-20', days: 7, daysWithData: 1},
     filters: {channel, material}, hasData: true,
-    counts: {answer_complete: 7, result_saved: 3, bookmark_saved: 2},
+    counts: {answer_complete: 7, result_saved: 3, bookmark_saved: 2, import_started: 15, import_success: 8, import_failed: 12},
+    importOperations: {schemaVersion: 1, hasData: true, daysWithData: 1, totals: {success: 4, existing: 1, failed: 2, cancelled: 1, expired: 1, recovered: 2, retried: 2}, errors: {network: 1, timeout: 1, rate_limited: 0, server_error: 0, rejected: 0, invalid_content: 0, too_large: 0, stale_operation: 0, unknown: 0}, note: '新口径操作终态；旧 v2 事件不可相加。'},
     reach: {visit_started: 10, material_opened: 9, ai_started: 8, ai_completed: 7, result_saved: 3},
     funnel: {visit_started: 10, material_opened: 9, ai_started: 8, ai_completed: 7, result_saved: 3},
     conversions: [{from: 'ai_started', to: 'ai_completed', count: 7, denominator: 8, rate: 87.5}],
@@ -63,6 +64,10 @@ describe('operations dashboard interaction states', () => {
     expect(host.textContent).toContain('8.0 GiB');
     expect(host.textContent).toContain('总槽 6');
     expect(host.textContent).toContain('不显示为正常或 0');
+    expect(host.textContent).toContain('网页导入操作终态（新口径）');
+    expect(host.textContent).toContain('导入失败（旧事件）');
+    expect(host.textContent).toContain('最终失败');
+    expect(host.textContent).toContain('失败后成功');
   });
 
   it('keeps the last successful values when a scheduled refresh fails', async () => {

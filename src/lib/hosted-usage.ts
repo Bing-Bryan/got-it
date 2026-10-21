@@ -1,5 +1,6 @@
 import {HOSTED} from './runtime-mode';
 import {FEATURE_KEYS} from './hosted-feature-keys';
+import {IMPORT_OPERATION_MAX, type ImportOperation} from './web-import-observability';
 export {FEATURE_KEYS} from './hosted-feature-keys';
 export type FeatureKey = typeof FEATURE_KEYS[number];
 
@@ -13,7 +14,7 @@ export type UsageCount = typeof USAGE_COUNTS[number];
 export type UsageStage = typeof USAGE_FUNNEL[number];
 type Counts = Record<UsageCount, number>;
 type Stages = Record<UsageStage, 0 | 1>;
-type Batch = {id: string; createdAt: string; channel: UsageChannel; material: UsageMaterial; counts: Counts; reach: Stages; funnel: Stages; discarded: number; delivery?: {attempts:number;nextAt:number}};
+type Batch = {id: string; createdAt: string; channel: UsageChannel; material: UsageMaterial; counts: Counts; reach: Stages; funnel: Stages; importOperations: ImportOperation[]; discarded: number; delivery?: {attempts:number;nextAt:number}};
 type Visit = {id: string; tab: string; channel: UsageChannel; day: string; last: number; material: UsageMaterial; reach: Record<UsageStage, boolean>; funnel: Record<UsageStage, boolean>; ai?: string; completedAi?: string};
 type Preference = {enabled: boolean; first?: string; days?: Record<string, {sent?: boolean; counts?: Record<string, number>; sources?: string[]}>};
 
@@ -36,6 +37,23 @@ function setDegraded(value: boolean) { if (degraded === value) return; degraded 
 let visit: Visit | undefined;
 let pending = new Map<string, Batch>();
 const accumulating = new Map<string, string>();
+const REPORTED_OPERATION_MAX = 1000;
+const reportedImportOperations = new Set<string>();
+const reportedOperationOrder: string[] = [];
+function rememberReportedOperation(id: string) {
+  if (reportedImportOperations.has(id)) return false;
+  reportedImportOperations.add(id);
+  reportedOperationOrder.push(id);
+  while (reportedOperationOrder.length > REPORTED_OPERATION_MAX) {
+    const oldest = reportedOperationOrder.shift();
+    if (oldest) reportedImportOperations.delete(oldest);
+  }
+  return true;
+}
+function clearReportedOperations() {
+  reportedImportOperations.clear();
+  reportedOperationOrder.length = 0;
+}
 let storageWork: Promise<void> = Promise.resolve();
 const persist = (work: () => Promise<void>) => { storageWork = storageWork.then(work).catch(() => { setDegraded(true); }); return storageWork; };
 function saveVisit() { try { if (visit) sessionStorage.setItem(VISIT, JSON.stringify(visit)); else sessionStorage.removeItem(VISIT); } catch { setDegraded(true); } }
@@ -53,7 +71,7 @@ export function usageDegraded() { return degraded; }
 export function setUsageEnabled(enabled: boolean) {
   const current = preference();
   current.enabled = enabled;
-  if (!enabled) { current.days = {}; pending.clear(); accumulating.clear(); retries.clear(); discarded = 0; visit = undefined; saveVisit(); expectedSaves.clear(); void persist(clearStore); }
+  if (!enabled) { current.days = {}; pending.clear(); accumulating.clear(); clearReportedOperations(); retries.clear(); discarded = 0; visit = undefined; saveVisit(); expectedSaves.clear(); void persist(clearStore); }
   writePreference(current);
 }
 
@@ -98,7 +116,7 @@ async function readStore() {
     });
     db.close();
     if (!usageEnabled()) return;
-    for (const row of rows) if (!pending.has(row.id)) {pending.set(row.id, row);if(row.delivery)retries.set(row.id,row.delivery);}
+    for (const row of rows) if (!pending.has(row.id)) {const normalized={...row, importOperations: Array.isArray(row.importOperations) ? row.importOperations : []}; pending.set(row.id, normalized);if(row.delivery)retries.set(row.id,row.delivery);}
   } catch { setDegraded(true); }
 }
 
@@ -144,7 +162,7 @@ function batchFor(material: UsageMaterial, channel: UsageChannel) {
   const key = `${visit?.id}:${material}:${channel}:${today()}`;
   let batch = pending.get(accumulating.get(key) ?? '');
   if (!batch) {
-    batch = {id: crypto.randomUUID(), createdAt: new Date().toISOString(), channel, material, counts: emptyCounts(), reach: emptyStages(), funnel: emptyStages(), discarded: 0};
+    batch = {id: crypto.randomUUID(), createdAt: new Date().toISOString(), channel, material, counts: emptyCounts(), reach: emptyStages(), funnel: emptyStages(), importOperations: [], discarded: 0};
     pending.set(batch.id, batch);
     accumulating.set(key, batch.id);
   }
@@ -224,6 +242,19 @@ export function confirmSavedAnswers(requestIds: string[]) {
   for (const id of requestIds) noteResultSaved(id);
 }
 
+export function noteImportOperation(operation: ImportOperation, material: UsageMaterial = 'web') {
+  if (!HOSTED) return;
+  const current = currentVisit();
+  if (!current || material !== 'web' || reportedImportOperations.has(operation.operationId)) return;
+  const key = `${current.id}:${material}:${current.channel}:${today()}`;
+  let batch = pending.get(accumulating.get(key) ?? '');
+  if (batch && batch.importOperations.length >= IMPORT_OPERATION_MAX) { accumulating.delete(key); batch = undefined; }
+  if (!batch) batch = batchFor(material, current.channel);
+  if (!rememberReportedOperation(operation.operationId)) return;
+  batch.importOperations.push(operation);
+  void remember(batch);
+}
+
 export function noteCount(key: UsageCount, material?: UsageMaterial) {
   const current = currentVisit();
   if (!current || !USAGE_COUNTS.includes(key)) return;
@@ -243,8 +274,9 @@ export function track(key: FeatureKey) {
 }
 
 async function send(batch: Batch) {
-  const {id, delivery: _delivery, ...rest} = batch;
-  const response = await fetch('/api/hosted/usage', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({schemaVersion: 2, batchId: id, ...rest}), keepalive: true});
+  const {id, delivery: _delivery, importOperations, ...rest} = batch;
+  const payload = importOperations.length ? {schemaVersion: 3, batchId: id, ...rest, importOperations} : {schemaVersion: 2, batchId: id, ...rest};
+  const response = await fetch('/api/hosted/usage', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload), keepalive: true});
   if (response.status === 204) { retries.delete(batch.id); pending.delete(batch.id); await persist(() => deleteStored(batch.id)); return; }
   if (response.status === 400) {
     const body = await response.json().catch(() => ({}));

@@ -38,6 +38,14 @@ export interface OpsPayload {
     filters: {channel: string; material: string};
     hasData: boolean;
     counts: Record<string, number>;
+    importOperations?: {
+      schemaVersion: 1;
+      hasData: boolean;
+      daysWithData: number;
+      totals: {success: number; existing: number; failed: number; cancelled: number; expired: number; recovered: number; retried: number};
+      errors: Record<string, number>;
+      note: string;
+    };
     reach: Record<string, number>;
     funnel: Record<string, number> | null;
     conversions: {from: string; to: string; count: number; denominator: number; rate: number | null}[] | null;

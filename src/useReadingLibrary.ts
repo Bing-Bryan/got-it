@@ -3,7 +3,8 @@ import { documentTranslationSource } from "./lib/document-translation";
 import { loadPdfTranslationSource } from "./lib/pdf-translation-loader";
 import { confidentlyChinese } from "./lib/translation-policy";
 import {HOSTED} from './lib/runtime-mode';
-import {confirmSavedAnswers,markMaterial,noteCount,track} from './lib/hosted-usage';
+import {confirmSavedAnswers,markMaterial,noteCount,noteImportOperation,track} from './lib/hosted-usage';
+import {classifyImportError, IMPORT_ATTEMPT_MAX, type ImportErrorCategory, type ImportOutcome} from './lib/web-import-observability';
 import {browserStorageStatus,restoreBrowserBackup} from './lib/browser-library';
 import {normalizeXArticleUrl} from "./lib/x-article-url";
 import {X_CAPTURE_MAX_BYTES, type XArticleCapture} from "./lib/x-article-capture";
@@ -35,6 +36,7 @@ function savedLabel(w: Workspace) { if(HOSTED)return "已保存到当前浏览�
 const emptyList: LibraryList = { entries: [], activeId: null, warnings: [], nativePicker: true };
 const message = (e: unknown) => e instanceof TypeError && /fetch|network|load/i.test(e.message) ? HOSTED?"无法连接体验服务，请检查网络后重试。":"无法连接本机阅读服务，请确认服务正在运行后重试。" : e instanceof Error ? e.message : "本机阅读操作失败，请重试。";
 const staleGeneration = (e: unknown) => { const code = (e as { code?: string })?.code; return code === "operation_stale" || code === "upgrade_required"; };
+type WebOperation = { operationId: string; creationKey: string; url: string; autoOpen?: boolean; autoStarted?: boolean; capture?: XArticleCapture; startedAt: string; attempts: number; failedAttempts: number; lastErrorCategory: ImportErrorCategory | null; retryPending: boolean; finalized: boolean };
 export function capturePosition(): ReadingPosition {
   const el = document.querySelector<HTMLElement>(".reader-scroll");
   if (!el) return { ratio: 0 };
@@ -118,7 +120,7 @@ export function useReadingLibrary(options: Options) {
   const [webImportSuccess, setWebImportSuccess] = useState(0);
   const [webJob, setWebJob] = useState<WebImportJob | null>(null);
   const [webError, setWebError] = useState("");
-  const webOperation = useRef<{ operationId: string; creationKey: string; url: string; autoOpen?: boolean; autoStarted?: boolean; capture?: XArticleCapture } | null>(null);
+  const webOperation = useRef<WebOperation | null>(null);
   const captureSequence = useRef(0);
   const webPoll = useRef<ReturnType<typeof setTimeout> | null>(null);
   const desiredFragment = useRef<string | null>(null);
@@ -542,6 +544,30 @@ export function useReadingLibrary(options: Options) {
     await transition(async()=>{await preserve();if(readonlyRef.current && historyId && entryRef.current)install(entryRef.current,"",false);else {desiredPosition.current=position();restorePending.current=true;}success=true;});
     return success;
   }
+  function finishWebOperation(operation: WebOperation, outcome: ImportOutcome, error?: unknown) {
+    if (operation.finalized) return;
+    operation.finalized = true;
+    if (operation.capture) return;
+    const category = outcome === 'failed' ? classifyImportError(error) : (outcome === 'success' || outcome === 'existing') && operation.failedAttempts > 0 ? operation.lastErrorCategory : null;
+    noteImportOperation({
+      operationId: operation.operationId,
+      startedAt: operation.startedAt,
+      outcome,
+      attempts: Math.max(1, Math.min(IMPORT_ATTEMPT_MAX, operation.attempts)),
+      recovered: (outcome === 'success' || outcome === 'existing') && operation.failedAttempts > 0,
+      errorCategory: category,
+    });
+  }
+  function recordWebAttemptFailure(operation: WebOperation, error: unknown) {
+    if (operation.capture || operation.finalized) return;
+    operation.failedAttempts += 1;
+    operation.lastErrorCategory = classifyImportError(error);
+  }
+  function beginWebRetry(operation: WebOperation) {
+    if (operation.capture || operation.finalized) return;
+    operation.attempts = Math.min(IMPORT_ATTEMPT_MAX, operation.attempts + 1);
+    operation.retryPending = false;
+  }
   async function cancelWebImport(close = false) {
     if (busyRef.current) return;
     captureSequence.current++;
@@ -550,6 +576,7 @@ export function useReadingLibrary(options: Options) {
     if (webPoll.current) { clearTimeout(webPoll.current); webPoll.current = null; }
     setWebJob(null); setWebError(""); if (close) setWebImportOpen(false);
     if (operation) {
+      finishWebOperation(operation, 'cancelled');
       noteCount('import_cancelled', operation.capture ? 'x' : 'web');
       try { await api(`/web-imports/${operation.operationId}/cancel`, {}); }
       catch { if (!close && !webOperation.current) setWebError("读取已停止，本机临时资源清理未确认；可重新读取，旧结果不会加入。"); }
@@ -559,7 +586,13 @@ export function useReadingLibrary(options: Options) {
     if (webOperation.current?.operationId !== operationId) return;
     if (result.operationId !== operationId) throw new Error("读取结果不匹配，请重新读取。");
     setWebJob(result);
-    if (result.status === "failed" || result.status === "expired") { setWebError(result.error || result.progress); noteCount('import_failed', webOperation.current.capture ? 'x' : 'web'); }
+    if (result.status === "failed" || result.status === "expired") {
+      const operation = webOperation.current;
+      if (result.status === "expired") finishWebOperation(operation, 'expired');
+      else finishWebOperation(operation, 'failed', {message: result.error || result.progress});
+      setWebError(result.error || result.progress);
+      noteCount('import_failed', operation.capture ? 'x' : 'web');
+    }
   }
   async function readWebUrl(input: string, autoOpen = false, capture?: XArticleCapture, presentation: 'dialog'|'inline' = 'dialog') {
     if (!ready || busyRef.current) return;
@@ -568,8 +601,9 @@ export function useReadingLibrary(options: Options) {
     const safe = safeWebUrl(input.trim()), url = safe ? normalizeXArticleUrl(safe) ?? safe : undefined;
     if (!url) { setWebError("请输入无登录凭据的公开 HTTP(S) 文章链接，不支持本机或私网地址。"); return; }
     const previous = webOperation.current;
+    if (previous) finishWebOperation(previous, 'cancelled');
     if (webPoll.current) clearTimeout(webPoll.current);
-    const operation = { operationId: crypto.randomUUID(), creationKey: crypto.randomUUID(), url, autoOpen, autoStarted: false, capture };
+    const operation = { operationId: crypto.randomUUID(), creationKey: crypto.randomUUID(), url, autoOpen, autoStarted: false, capture, startedAt: new Date().toISOString(), attempts: 1, failedAttempts: 0, lastErrorCategory: null, retryPending: false, finalized: false };
     webOperation.current = operation; setWebError("");
     noteCount('import_started', capture ? 'x' : 'web');
     setWebJob({ operationId: operation.operationId, status: "reading", progress: "正在读取文章…" });
@@ -582,18 +616,20 @@ export function useReadingLibrary(options: Options) {
         // A deploy clears the in-memory generation. The rejected request never
         // started work, so retrying once with the refreshed generation is safe.
         if (!staleGeneration(error) || webOperation.current !== operation) throw error;
+        beginWebRetry(operation);
+        recordWebAttemptFailure(operation, error);
         result = await send();
       }
       receiveWebJob(result, operation.operationId);
     }
-    catch (e) { if (webOperation.current === operation) { setWebError(message(e)); setWebJob({ operationId: operation.operationId, status: "failed", progress: "读取失败" }); noteCount('import_failed', capture ? 'x' : 'web'); } }
+    catch (e) { if (webOperation.current === operation) { finishWebOperation(operation, 'failed', e); setWebError(message(e)); setWebJob({ operationId: operation.operationId, status: "failed", progress: "读取失败" }); noteCount('import_failed', capture ? 'x' : 'web'); } }
   }
   useEffect(() => {
     if (webJob?.status !== "reading") return;
     const operationId = webJob.operationId;
     webPoll.current = setTimeout(async () => {
       try { receiveWebJob(await api<WebImportJob>(`/web-imports/${operationId}`), operationId); }
-      catch (e) { if (webOperation.current?.operationId === operationId) { setWebError(message(e)); setWebJob({ operationId, status: "failed", progress: "读取失败" }); noteCount('import_failed', webOperation.current.capture ? 'x' : 'web'); } }
+      catch (e) { const operation = webOperation.current; if (operation?.operationId === operationId) { finishWebOperation(operation, 'failed', e); setWebError(message(e)); setWebJob({ operationId, status: "failed", progress: "读取失败" }); noteCount('import_failed', operation.capture ? 'x' : 'web'); } }
     }, 450);
     return () => { if (webPoll.current) clearTimeout(webPoll.current); };
   }, [webJob]);
@@ -602,12 +638,13 @@ export function useReadingLibrary(options: Options) {
     captureSequence.current++;
     const operation = webOperation.current; webOperation.current = null;
     if (webPoll.current) clearTimeout(webPoll.current);
-    if (operation) void api(`/web-imports/${operation.operationId}/cancel`, {}).catch(() => {});
+    if (operation) { finishWebOperation(operation, 'cancelled'); void api(`/web-imports/${operation.operationId}/cancel`, {}).catch(() => {}); }
   }, []);
   type WebConfirmOutcome = "opened" | "stale" | "failed" | "inactive";
   async function confirmWebImport(allowPartial = false): Promise<WebConfirmOutcome> {
     const operation = webOperation.current, job = webJob;
     if (!operation || !job || !["ready", "existing"].includes(job.status) || job.operationId !== operation.operationId) return "inactive";
+    if (operation.retryPending) beginWebRetry(operation);
     let outcome: WebConfirmOutcome = "failed";
     await transition(async () => {
       setWebError("");
@@ -621,7 +658,7 @@ export function useReadingLibrary(options: Options) {
           if ((error as { status?: number })?.status === 404 || (error as { code?: string })?.code === "web_job_missing") { invalidateCandidate(); outcome = "stale"; }
           throw error;
         }
-        if (["expired", "cancelled"].includes(checked.status)) { invalidateCandidate(); outcome = "stale"; throw new Error(operation.capture ? "捕获作业已失效，请重新选择 X 文章文件。" : "读取作业已失效，请点击“阅读文章”重新读取。"); }
+        if (["expired", "cancelled"].includes(checked.status)) { invalidateCandidate(); finishWebOperation(operation, checked.status === 'expired' ? 'expired' : 'cancelled'); outcome = "stale"; throw new Error(operation.capture ? "捕获作业已失效，请重新选择 X 文章文件。" : "读取作业已失效，请点击“阅读文章”重新读取。"); }
         if (webOperation.current !== operation || checked.operationId !== operation.operationId || !["ready", "existing"].includes(checked.status)) throw new Error("预览已失效，请重新读取。");
         if (!checked.entryId && (!checked.preview || checked.preview.candidateId !== job.preview?.candidateId)) throw new Error("预览已失效，请重新读取。");
         if (checked.entryId) await api<LibraryEntry>(`/entries/${checked.entryId}`);
@@ -632,12 +669,13 @@ export function useReadingLibrary(options: Options) {
         opened = true;
         outcome = "opened";
         noteCount(checked.entryId ? 'import_existing' : 'import_success', operation.capture ? 'x' : 'web');
+        finishWebOperation(operation, checked.entryId ? 'existing' : 'success');
         setWebImportSuccess(sequence => sequence + 1);
         try { desiredFragment.current = decodeURIComponent(new URL(operation.url).hash.slice(1)) || null; } catch { desiredFragment.current = null; }
         webOperation.current = null; setWebJob(null); setWebImportOpen(false);
         await refresh(); await checkSource();
         if (e.webImportCreated === true && autoTranslate) { const text=e.workspace.document.kind === "web" ? buildTranslationSource(e.workspace.document.markdown,e.workspace.document.web).units.map(u=>u.text).join(" ") : ""; if(confidentlyEnglish(text)) setTimeout(()=>{ if(entryRef.current?.id===e.id)void translate(); },0); }
-      } catch (e) { if (!opened) noteCount('import_failed', operation.capture ? 'x' : 'web'); setWebError(message(e)); throw e; }
+      } catch (e) { if (!opened) { if (!operation.finalized) { if (outcome === 'stale') finishWebOperation(operation, 'expired'); else { recordWebAttemptFailure(operation, e); operation.retryPending = true; } } noteCount('import_failed', operation.capture ? 'x' : 'web'); } setWebError(message(e)); throw e; }
     });
     return outcome;
   }
