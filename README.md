@@ -2,7 +2,7 @@
 
 **简体中文** · [English](README.en.md)
 
-https://github.com/user-attachments/assets/4d9a777a-45bc-489b-a881-5175cc857f73
+https://github.com/user-attachments/assets/8ec2fd6d-f8bd-4fb7-b921-e6b796e13eaf
 
 ## 哪句不懂，划哪句
 
