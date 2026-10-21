@@ -1,4 +1,5 @@
 import {TranslationPrivacySettings} from "./TranslationPrivacySettings";
+import {ColorSchemeSetting} from "./ColorSchemeSetting";
 import {HOSTED} from './lib/runtime-mode';
 import {HostedDisclosure,HostedStorageControls,HostedSampleAttribution,HostedSamples} from './HostedControls';
 import {X_PUBLIC_SCOPE} from "./lib/x-article-url";
@@ -149,8 +150,8 @@ export function ReadingLibraryStatus({ library, onImport, hideWebSource = false,
   const saveBlocked = library.blocked || library.status === "阅读进度暂未保存";
   const duplicateImportError = (library.webImportOpen || library.webImportInline) && library.webError && library.error === library.webError;
   return <div className="library-state">
-    {HOSTED&&!hideHostedControls?<div className="hosted-library-controls"><HostedStorageControls hideSendDetails={!startPage} save={()=>library.saveNow()} onRestore={()=>onImport?.()}><TranslationPrivacySettings compact={!startPage} automatic={!!library.autoTranslate} onAutomaticChange={library.setAutoTranslation}/></HostedStorageControls>{library.entry?<HostedSampleAttribution hash={library.entry.workspace.document.contentHash}/>:null}</div>:null}
-    {!HOSTED&&!hideHostedControls?<HostedDisclosure label="保存与隐私" className="reader-local-privacy"><p>原文保持不变，材料与知识贴工作区保存在本机；密钥和登录凭据不进入阅读记录或导出。</p><TranslationPrivacySettings compact={!startPage} automatic={!!library.autoTranslate} onAutomaticChange={library.setAutoTranslation}/></HostedDisclosure>:null}
+    {HOSTED&&!hideHostedControls?<div className="hosted-library-controls"><HostedStorageControls hideSendDetails={!startPage} save={()=>library.saveNow()} onRestore={()=>onImport?.()}><TranslationPrivacySettings compact={!startPage} automatic={!!library.autoTranslate} onAutomaticChange={library.setAutoTranslation}/><ColorSchemeSetting/></HostedStorageControls>{library.entry?<HostedSampleAttribution hash={library.entry.workspace.document.contentHash}/>:null}</div>:null}
+    {!HOSTED&&!hideHostedControls?<HostedDisclosure label="保存与隐私" className="reader-local-privacy"><p>原文保持不变，材料与知识贴工作区保存在本机；密钥和登录凭据不进入阅读记录或导出。</p><TranslationPrivacySettings compact={!startPage} automatic={!!library.autoTranslate} onAutomaticChange={library.setAutoTranslation}/><ColorSchemeSetting/></HostedDisclosure>:null}
     {((library.error && !duplicateImportError) || saveBlocked) && !library.recovery ? <div role="alert" className="library-warning"><span>{library.error}{saveBlocked ? <small>当前内容仍保留，保存成功后才能离开。</small> : null}</span>
       {saveBlocked || !library.ready ? <button type="button" disabled={library.busy} onClick={() => void library.retry()}>{saveBlocked ? "重试保存" : "重新连接"}</button> : library.importError && onImport ? <button type="button" disabled={library.busy} onClick={onImport}>重新选择文件</button> : <button type="button" disabled={library.busy} onClick={library.clearError}>关闭提示</button>}
     </div> : null}

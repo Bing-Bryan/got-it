@@ -1,3 +1,4 @@
+import type { ActionUnavailable } from './lib/action-availability';
 import {readerSaveStatus} from "./lib/reader-save-status";
 import {HOSTED,hostedCapabilities} from './lib/runtime-mode';
 import {regionNeedsSmallerSelection,renderRegion} from './lib/pdf-region';
@@ -30,7 +31,7 @@ import './pdf-reader.css';
 GlobalWorkerOptions.workerSrc = workerUrl;
 type PdfDocument = Extract<DocumentSnapshot, {kind:'pdf'}>;
 type Viewport = ReturnType<PDFPageProxy['getViewport']>;
-interface Props { translation?:WebTranslationState; showTranslation?:boolean; bookmarkCompleted?:BookmarkCreate|null; bookmarks?:ReadingBookmark[]; onBookmarkStarted?:(request:BookmarkCreate)=>void; bookmarkVersion?:number;onBookmarkFailed?:(request:BookmarkCreate,error:string)=>void; revisionId?:string; onBookmarkSaved?:(result:BookmarkResult,request:BookmarkCreate)=>void; bookmarkTarget?:ReadingBookmark|null;onBookmarkLocated?:(success:boolean)=>void; toolbarHost?:HTMLElement|null; adjustmentHost?:HTMLElement|null; onReadingTime?:(hash:string,minutes:number|null)=>void; outlineTarget?:{item:PdfOutlineItem;nonce:number}|null; onCurrentPage?:(page:number)=>void; document:PdfDocument; entryId:string; inquiries:Inquiry[]; activeId?:string|null; target?:{id:string;nonce:number;returnToSource?:boolean}|null; onLocated?:(id:string,success:boolean,returnToSource?:boolean,target?:HTMLElement)=>void; initialPosition?:ReadingPosition; readOnly?:boolean; saveStatus?:string; hideSaveStatus?:boolean; saveBusy?:boolean; saveError?:boolean; onCreate?:(intent:ActiveInquiryIntent,draft:SelectionDraft,question?:string)=>void; onActivate?:(id:string)=>void; onReady?:()=>void; onView?:()=>void }
+interface Props {requestUnavailable?:ActionUnavailable;onRecover?:(target:"connection"|"save")=>void;actionsHidden?:boolean; translation?:WebTranslationState; showTranslation?:boolean; bookmarkCompleted?:BookmarkCreate|null; bookmarks?:ReadingBookmark[]; onBookmarkStarted?:(request:BookmarkCreate)=>void; bookmarkVersion?:number;onBookmarkFailed?:(request:BookmarkCreate,error:string)=>void; revisionId?:string; onBookmarkSaved?:(result:BookmarkResult,request:BookmarkCreate)=>void; bookmarkTarget?:ReadingBookmark|null;onBookmarkLocated?:(success:boolean)=>void; toolbarHost?:HTMLElement|null; adjustmentHost?:HTMLElement|null; onReadingTime?:(hash:string,minutes:number|null)=>void; outlineTarget?:{item:PdfOutlineItem;nonce:number}|null; onCurrentPage?:(page:number)=>void; document:PdfDocument; entryId:string; inquiries:Inquiry[]; activeId?:string|null; target?:{id:string;nonce:number;returnToSource?:boolean}|null; onLocated?:(id:string,success:boolean,returnToSource?:boolean,target?:HTMLElement)=>void; initialPosition?:ReadingPosition; readOnly?:boolean; saveStatus?:string; hideSaveStatus?:boolean; saveBusy?:boolean; saveError?:boolean; onCreate?:(intent:ActiveInquiryIntent,draft:SelectionDraft,question?:string)=>void|boolean|Promise<void|boolean>; onActivate?:(id:string)=>void; onReady?:()=>void; onView?:()=>void }
 interface SheetToolbar {page:number;ready:boolean;mode:'text'|'region';busy:boolean;start:()=>void;cancel:()=>void}
 const rectStyle=(r:PdfRect)=>({left:r[0],top:r[1],width:r[2]-r[0],height:r[3]-r[1]});
 const errorText=(e:unknown)=>e instanceof Error?e.message:'PDF 操作未完成，请重试。';
@@ -127,6 +128,8 @@ function PdfSheet(props:SheetProps) {
   // Origins of rotated text (e.g. a vertical margin stamp): their saved line boxes are horizontal guesses, so they keep the original.
   const [rotatedText,setRotatedText]=useState<Array<[number,number]>>([]);
   const [ocr,setOcr]=useState<Array<{id:string;data:PdfOcrData}>>([]),[selection,setSelection]=useState<{anchor:Anchor;preview:string}|null>(null),[quote,setQuote]=useState('');
+  const currentDraft=useRef({selection,box});currentDraft.current={selection,box};
+  const saveRecovery=useRef(false);
   bookmarkSelectionRef.current=selection?.anchor??null;
   const card=useRef<HTMLDivElement>(null);
   const root=useRef<HTMLDivElement>(null),surface=useRef<HTMLDivElement>(null),canvas=useRef<HTMLCanvasElement>(null),native=useRef<HTMLDivElement>(null),ocrLayer=useRef<HTMLDivElement>(null);
@@ -173,11 +176,12 @@ function PdfSheet(props:SheetProps) {
     window.addEventListener('scroll',place,true);window.addEventListener('resize',place);
     return()=>{observer.disconnect();window.removeEventListener('scroll',place,true);window.removeEventListener('resize',place);};
   },[box,selection,preview,viewport,width]);
-  useEffect(()=>{const escape=(event:KeyboardEvent)=>{if(event.key==='Escape')cancel();};window.addEventListener('keydown',escape);return()=>{window.removeEventListener('keydown',escape);operation.current?.abort();};},[]);
+  useEffect(()=>{const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'&&!document.querySelector('.provider-shell:not([hidden])'))cancel();};window.addEventListener('keydown',escape);return()=>{window.removeEventListener('keydown',escape);operation.current?.abort();};},[]);
   useEffect(()=>{const el=root.current;if(!el)return;const observer=new IntersectionObserver(entries=>setNear(entries[0].isIntersecting),{root:el.closest('.reader-scroll,.recovery-original'),rootMargin:'600px 0px'});observer.observe(el);return()=>observer.disconnect();},[]);
   useEffect(()=>{if(props.draftPage!==page)cancel();},[props.draftPage,page]);
   useEffect(()=>{if(!box&&!selection)return;const outside=(event:PointerEvent)=>{
     if(card.current?.contains(event.target as Node))return;
+    if(event.target instanceof Element&&(event.target.closest('.provider-control')||(saveRecovery.current&&event.target.closest('.library-state'))))return;
     if(props.toolbarHost?.contains(event.target as Node)||root.current?.closest('.pdf-reader')?.querySelector('.pdf-toolbar')?.contains(event.target as Node))return;
     const bounds=surface.current?.getBoundingClientRect();
     const rects=box?[box]:selection?.anchor.pdf?.rects??[];
@@ -297,14 +301,21 @@ function PdfSheet(props:SheetProps) {
       :{...base,quote:selected.quote,start:0,end:selected.quote.length,pdf:{...location,context:`${selected.quote.slice(0,1600)}\n所在原文段落：${paragraph.text.slice(0,2000)}`}};
     props.claim();setBox(null);setPreview('');setError('');setQuote(selected.quote);setSelection({anchor:a,preview:''});
   }
-  function create(intent:ActiveInquiryIntent,a:Anchor,question?:string){latest.current.onCreate?.(intent,{anchor:a,context:a.pdf?.context??a.quote,rect:{top:0,left:0,width:0,height:0}},question);setSelection(null);setBox(null);setPreview('');setStatus('');}
+  async function create(intent:ActiveInquiryIntent,a:Anchor,question?:string){
+    const source=latest.current.document,version=latest.current.showTranslation,draft=currentDraft.current;
+    if(!latest.current.onCreate)return false;
+    const accepted=await latest.current.onCreate(intent,{anchor:a,context:a.pdf?.context??a.quote,rect:{top:0,left:0,width:0,height:0}},question);
+    if(accepted===false)return false;
+    if(latest.current.document!==source||latest.current.showTranslation!==version||currentDraft.current.selection!==draft.selection||currentDraft.current.box!==draft.box)return true;
+    setSelection(null);setBox(null);setPreview('');setStatus('');return true;
+  }
   async function selectRegion(intent:ActiveInquiryIntent,question?:string){
-    if(HOSTED&&props.hostedImages!==true){if(props.hostedImages==='error')props.retryHostedImages();setError(hostedImageNotice(props.hostedImages));return;}
-    if(!box||!preview||!pageProxy.current||!viewport||busy)return;const rect=box,regionPage=pageProxy.current,controller=new AbortController();operation.current=controller;setBusy(true);setError('');setStatus('正在识别所选内容，随后开始处理…');
+    if(HOSTED&&props.hostedImages!==true){if(props.hostedImages==='error')props.retryHostedImages();setError(hostedImageNotice(props.hostedImages));return false;}
+    if(!box||!preview||!pageProxy.current||!viewport||busy)return false;const rect=box,regionPage=pageProxy.current,controller=new AbortController();operation.current=controller;setBusy(true);setError('');setStatus('正在识别所选内容，随后开始处理…');
     // One vector re-render of the selection serves both OCR and the uploaded image.
     let rendered:Awaited<ReturnType<typeof renderRegion>>;
     try{rendered=await renderRegion(regionPage,rect,HOSTED?HOSTED_IMAGE_MAX_BYTES:MAX_CROP_BYTES,controller.signal);controller.signal.throwIfAborted();}
-    catch(e){if(operation.current===controller){setError(errorText(controller.signal.aborted?controller.signal.reason??new Error('已取消。'):e));operation.current=null;setBusy(false);}return;}
+    catch(e){if(operation.current===controller){setError(errorText(controller.signal.aborted?controller.signal.reason??new Error('已取消。'):e));operation.current=null;setBusy(false);}return false;}
     let recognized:{id:string;text:string}|undefined;
     // OCR only aids the image, so it has its own deadline: a slow first download of the
     // language data (~30 MB) must not cancel the question. A user cancel still stops everything.
@@ -324,7 +335,7 @@ function PdfSheet(props:SheetProps) {
         const text=lines.map(l=>l.text).join('\n').slice(0,4000);recognized={id:saved.id,text:HOSTED?trimToBytes(text,HOSTED_OCR_CONTEXT_BYTES):text};
       }
     }catch(e){
-      if(controller.signal.aborted){if(operation.current===controller){setError(errorText(controller.signal.reason??new Error('已取消。')));operation.current=null;setBusy(false);}return;}
+      if(controller.signal.aborted){if(operation.current===controller){setError(errorText(controller.signal.reason??new Error('已取消。')));operation.current=null;setBusy(false);}return false;}
       // Reading the image still works when local OCR cannot start, times out or finds no text.
       setStatus('辅助文字识别未完成，将依据所选原图处理。');
     }finally{
@@ -341,8 +352,8 @@ function PdfSheet(props:SheetProps) {
       const query=new URLSearchParams({fileHash:props.document.pdf.resourceId,page:String(page),rect:JSON.stringify(rect)});
       const {id}=await(await libraryBinary(`/entries/${props.entryId}/crops?${query}`,bytes)).json();controller.signal.throwIfAborted();
       const location:PdfLocation={kind:'region',source:'image',fileHash:props.document.pdf.resourceId,page,rects:[rect],cropId:id,...(recognized?{ocrId:recognized.id,originalText:recognized.text,context:recognized.text}:{context:REGION_NO_TEXT_CONTEXT})};
-      create(intent,{documentId:props.document.id,blockId:`pdf-${page}-${id}`,headingPath:[`第 ${page} 页`],quote:`第 ${page} 页 · 所选区域`,prefix:'',suffix:'',start:0,end:0,matchStatus:'matched',pdf:location},question);
-    }catch(e){if(operation.current===controller)setError(errorText(e));}
+      return await create(intent,{documentId:props.document.id,blockId:`pdf-${page}-${id}`,headingPath:[`第 ${page} 页`],quote:`第 ${page} 页 · 所选区域`,prefix:'',suffix:'',start:0,end:0,matchStatus:'matched',pdf:location},question);
+    }catch(e){if(operation.current===controller)setError(errorText(e));return false;}
     finally{if(operation.current===controller){operation.current=null;setBusy(false);}}
   }
   const marks=props.inquiries.filter(i=>i.anchor.pdf?.page===page&&i.anchor.pdf.fileHash===props.document.pdf.resourceId);
@@ -367,11 +378,11 @@ function PdfSheet(props:SheetProps) {
       {box&&viewport?<div className="pdf-draft-box" style={rectStyle(screenRect(viewport,box))}/>:null}
       </div>
     </div></div>
-    {(preview&&box)||selection?<div ref={card} className="pdf-selection-card selection-surface" role="region" aria-label="选区操作" onPointerUp={e=>e.stopPropagation()}>
+    {(preview&&box)||selection?<div ref={card} hidden={props.actionsHidden} inert={props.actionsHidden} className="pdf-selection-card selection-surface" role="region" aria-label="选区操作" onPointerUp={e=>e.stopPropagation()}>
       {selection?<div className="selection-quote pdf-selected-quote">“{quote}”</div>:<div className="pdf-selection-preview"><img src={preview} alt="本次选择的原页区域" /></div>}
       {HOSTED&&!selection&&props.hostedImages!==true?<p className="pdf-region-capability" role="status">{hostedImageNotice(props.hostedImages)}</p>:null}
       {!selection&&box&&props.hostedImages===true&&regionNeedsSmallerSelection(box)?<p className="pdf-region-capability" role="status">选区较大，图中细小文字可能读不准；可缩小框选范围。</p>:null}
-      <SelectionActions bookmark={selection&&!selection.anchor.translation&&props.revisionId&&props.onBookmarkSaved&&!props.readOnly?<BookmarkAction entryId={props.entryId} revisionId={props.revisionId} anchor={selection.anchor} disabled={busy} iconOnly onSaved={props.onBookmarkSaved} onStarted={request=>{const anchor=bookmarkSelectionRef.current;if(anchor)bookmarkOperationRef.current={anchor,operationId:request.operationId};props.onBookmarkStarted?.(request);}} version={props.bookmarkVersion} onFailed={props.onBookmarkFailed}/>:null} className="pdf-card-actions" disabled={busy||props.readOnly||(HOSTED&&!selection&&props.hostedImages!==true)} onClose={cancel} onSelect={(intent,question)=>{if(selection)create(intent,selection.anchor,question);else void selectRegion(intent,question);}}/>
+      <SelectionActions bookmark={selection&&!selection.anchor.translation&&props.revisionId&&props.onBookmarkSaved&&!props.readOnly?<BookmarkAction entryId={props.entryId} revisionId={props.revisionId} anchor={selection.anchor} disabled={busy} iconOnly onSaved={props.onBookmarkSaved} onStarted={request=>{const anchor=bookmarkSelectionRef.current;if(anchor)bookmarkOperationRef.current={anchor,operationId:request.operationId};props.onBookmarkStarted?.(request);}} version={props.bookmarkVersion} onFailed={props.onBookmarkFailed}/>:null} className="pdf-card-actions" saveWarning={props.saveError} unavailable={props.requestUnavailable??(busy?{reason:"saving",message:status||"正在处理所选内容，请稍候。"}:undefined)} onRecover={target=>{saveRecovery.current=target==="save";props.onRecover?.(target);}} disabled={!!props.requestUnavailable||busy||props.readOnly||(HOSTED&&!selection&&props.hostedImages!==true)} onClose={cancel} onSelect={(intent,question)=>selection?create(intent,selection.anchor,question):selectRegion(intent,question)}/>
       {busy?<p role="status">{status}</p>:null}
     </div>:null}
   </section>;

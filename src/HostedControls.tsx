@@ -7,7 +7,7 @@ import {FEATURE_KEYS,usageDegraded,usageEnabled,setUsageEnabled,track} from './l
 export function HostedSettings(){
   const [cap,setCap]=useState<HostedCapabilities|null>(null),[error,setError]=useState('');
   useEffect(()=>{let current=true;hostedCapabilities().then(c=>{if(current)setCap(c);}).catch(()=>{if(current)setError('额度暂时无法读取');});return()=>{current=false;};},[]);
-  return <div className="hosted-settings"><strong>体验版默认模型 · {cap?.model??'deepseek-flash'}</strong><p role="status">{error||(!cap?'正在读取额度…':cap.quota.globalExhausted?'今日体验额度已用完':`今日剩余 ${cap.quota.remaining} / ${cap.quota.browserLimit} 次`)}{cap?` · 重置时间 ${new Date(cap.quota.resetAt).toLocaleString()}`:''}</p></div>;
+  return <div className="hosted-settings"><strong>体验版默认模型 · {cap?.model??'deepseek-flash'}</strong><p role="status">{error||(!cap?'正在读取额度…':cap.available===false?'体验服务暂时不可用':cap.quota.globalExhausted?'今日体验额度已用完':`今日剩余 ${cap.quota.remaining} / ${cap.quota.browserLimit} 次`)}{cap?` · 重置时间 ${new Date(cap.quota.resetAt).toLocaleString()}`:''}</p></div>;
 }
 export function HostedUsageSettings(){
   const [enabled,setEnabled]=useState(usageEnabled),[statisticsUnavailable,setStatisticsUnavailable]=useState(usageDegraded);

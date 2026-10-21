@@ -5,7 +5,7 @@
 @layer controls {
   :root {
     --control-radius: 8px;
-    --control-font-size: 12px;
+    --control-font-size: var(--font-ui);
     --control-height: 32px;
     --control-icon-size: 16px;
     --control-icon-stroke: 1.8;
@@ -15,7 +15,7 @@
     --control-pressed: #b8c2fa;
     --control-primary-pressed: #343ba0;
     --control-disabled-bg: var(--soft);
-    --control-disabled-fg: var(--muted-2);
+    --control-disabled-fg: var(--disabled-fg);
     --control-disabled-border: var(--line);
     --control-danger-soft: #fff0f0;
     --control-danger-hover: #fbe0e2;

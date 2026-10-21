@@ -1,14 +1,17 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ArrowUp, MessageCircle } from 'lucide-react';
 
 /** A deliberate, optional input; opening it never invokes a model. */
 export function QuestionComposer({ onSubmit, disabled = false, hideTrigger = false, followUp = false, inline = false, prompt, initialOpen = false, onClose, hideBackButton = false, onOpenChange, onCancel }: {
-  onSubmit: (question: string) => void; disabled?: boolean; hideTrigger?: boolean; followUp?: boolean; inline?: boolean; prompt?: string; initialOpen?: boolean; onClose?: () => void; hideBackButton?: boolean; onOpenChange?: (open: boolean) => void; onCancel?: () => void;
+  onSubmit: (question: string) => void | boolean | Promise<void | boolean>; disabled?: boolean; hideTrigger?: boolean; followUp?: boolean; inline?: boolean; prompt?: string; initialOpen?: boolean; onClose?: () => void; hideBackButton?: boolean; onOpenChange?: (open: boolean) => void; onCancel?: () => void;
 }) {
   const [open, setOpen] = useState(initialOpen), [question, setQuestion] = useState('');
+  const submitting = useRef(false);
+  const [pending,setPending]=useState(false);
+  const latestQuestion = useRef(question); latestQuestion.current=question;
   const changeOpen = (next: boolean) => { setOpen(next); onOpenChange?.(next); };
   if (!open) return <>{prompt ? <span className="question-prompt">{prompt}</span> : null}{hideTrigger ? null : <button className={`question-toggle${inline ? ' question-input-trigger' : ' secondary-action'}`} type="button" disabled={disabled} onClick={() => changeOpen(true)}>{inline ? <><MessageCircle size={14} aria-hidden="true"/><span>问一问</span></> : followUp ? '继续追问…' : '问一问'}</button>}</>;
-  const input = <textarea autoFocus aria-label={followUp ? '追问内容' : '自定义问题'} maxLength={2000} rows={inline ? 1 : 3} value={question} onChange={e => {
+  const input = <textarea disabled={pending} autoFocus aria-label={followUp ? '追问内容' : '自定义问题'} maxLength={2000} rows={inline ? 1 : 3} value={question} onChange={e => {
     setQuestion(e.target.value);
     if (inline) { e.currentTarget.style.height = '32px'; e.currentTarget.style.height = `${Math.min(120, e.currentTarget.scrollHeight)}px`; }
   }} placeholder={inline ? '输入想问的问题' : undefined} onKeyDown={e => {
@@ -20,14 +23,19 @@ export function QuestionComposer({ onSubmit, disabled = false, hideTrigger = fal
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); changeOpen(false); onCancel?.(); onClose?.(); }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); }
   }}/>;
-  return <form className={`question-composer${inline ? ' question-inline' : ''}`} onSubmit={event => {
+  return <form aria-busy={pending} className={`question-composer${inline ? ' question-inline' : ''}`} onSubmit={async event => {
     event.preventDefault();
-    if (disabled || !question.trim()) return;
-    onSubmit(question.trim()); setQuestion(''); changeOpen(false); onClose?.();
+    if (disabled || !question.trim() || submitting.current) return;
+    const submittedQuestion=question;
+    submitting.current=true;setPending(true);
+    let accepted;
+    try { accepted = await onSubmit(question.trim()); } catch { return; } finally { submitting.current=false;setPending(false); }
+    if (accepted === false || latestQuestion.current!==submittedQuestion) return;
+    setQuestion(''); changeOpen(false); onClose?.();
   }}>
-    {inline ? <>{hideBackButton ? null : <button className="question-back" type="button" onClick={() => { changeOpen(false); onCancel?.(); onClose?.(); }}>返回</button>}{input}<button className="question-send" type="submit" aria-label="发送问题" title="发送问题（Enter）；Shift+Enter 换行，Esc 关闭" disabled={disabled || !question.trim()}><ArrowUp size={19} strokeWidth={2.5} aria-hidden="true" /></button></> : <>
+    {inline ? <>{hideBackButton ? null : <button className="question-back" type="button" onClick={() => { changeOpen(false); onCancel?.(); onClose?.(); }}>返回</button>}{input}<button className="question-send" type="submit" aria-label="发送问题" title="发送问题（Enter）；Shift+Enter 换行，Esc 关闭" disabled={pending || disabled || !question.trim()}><ArrowUp size={19} strokeWidth={2.5} aria-hidden="true" /></button></> : <>
       {followUp ? <label>继续问这个问题{input}</label> : input}
-      <div className="question-composer-actions"><button type="button" onClick={() => { changeOpen(false); onCancel?.(); onClose?.(); }}>取消</button><button type="submit" title="Enter 发送；Shift+Enter 换行" disabled={disabled || !question.trim()}>发送问题</button></div>
+      <div className="question-composer-actions"><button type="button" onClick={() => { changeOpen(false); onCancel?.(); onClose?.(); }}>取消</button><button type="submit" title="Enter 发送；Shift+Enter 换行" disabled={pending || disabled || !question.trim()}>发送问题</button></div>
     </>}
   </form>;
 }

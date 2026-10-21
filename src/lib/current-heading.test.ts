@@ -1,0 +1,7 @@
+import {expect,it} from 'vitest';import {currentHeadingIndex,scrolledToEnd} from './current-heading';
+const view=(top:number,bottom:number,atEnd=false)=>({top,bottom,atEnd});
+it('marks the first heading while the article top is visible, as when entering from the start page',()=>{expect(currentHeadingIndex([180,327,512,716,950],view(140,900))).toBe(0);});
+it('keeps the previous marker while the reader is hidden and every heading reports zero layout',()=>{expect(currentHeadingIndex([0,0,0,0,0],view(0,0))).toBeNull();expect(currentHeadingIndex([],view(140,900))).toBeNull();});
+it('follows the last heading that passed the reading top and skips headings without a node',()=>{expect(currentHeadingIndex([-500,-10,null,700],view(140,900))).toBe(1);expect(currentHeadingIndex([-500,null,150,700],view(140,900))).toBe(2);});
+it('marks the last visible heading only at a real scroll end, so short final sections can become current',()=>{const tops=[-400,-10,175,379,613];expect(currentHeadingIndex(tops,view(140,900))).toBe(1);expect(currentHeadingIndex(tops,view(140,900,true))).toBe(4);expect(currentHeadingIndex([-400,-10,175,895],view(140,900,true))).toBe(2);});
+it('treats only scrollable content at its bottom as the end, never a document that fits the viewport',()=>{expect(scrolledToEnd({scrollTop:337,scrollHeight:1098,clientHeight:761})).toBe(true);expect(scrolledToEnd({scrollTop:300,scrollHeight:1098,clientHeight:761})).toBe(false);expect(scrolledToEnd({scrollTop:0,scrollHeight:700,clientHeight:761})).toBe(false);});

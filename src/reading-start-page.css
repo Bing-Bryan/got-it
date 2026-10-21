@@ -470,3 +470,38 @@
 @media(max-width:360px) {
  .start-how-steps li:first-child b,.start-how-steps li:last-child b { max-width:2em; white-space:normal; overflow-wrap:normal; }
 }
+
+/* The canvas belongs to the scrolling home surface, below its interactive content. */
+.reading-start-page { position:relative; isolation:isolate; }
+.start-edge-texture { position:absolute; top:0; left:0; z-index:0; pointer-events:none; user-select:none; }
+.start-edge-texture[hidden] { display:none; }
+.start-shell { position:relative; z-index:1; }
+/* Let the texture fade through only the outer fifth of the two outer cards. */
+@media(min-width:1200px) {
+ .reading-start-page:has(>.start-edge-texture:not([hidden])) .start-feature:first-child .start-feature-card { background:linear-gradient(to right,rgba(243,243,241,.55),#f3f3f1 20%); }
+ .reading-start-page:has(>.start-edge-texture:not([hidden])) .start-feature:last-child .start-feature-card { background:linear-gradient(to left,rgba(243,243,241,.55),#f3f3f1 20%); }
+ .reading-start-page:has(>.start-edge-texture:not([hidden])) .start-feature:has(.start-feature-trigger:is(:hover,:focus-visible)) .start-feature-card { background:#efeff5; }
+ .reading-start-page:has(>.start-edge-texture:not([hidden])) .start-feature:has(.start-feature-trigger:active) .start-feature-card { background:var(--accent-soft); }
+}
+
+/* Returning readers get one neutral resume entry, same weight as “看看怎么用”, never a filled call to action. */
+.reading-start-page .start-resume-button { display:inline-flex; align-items:center; gap:8px; max-width:100%; min-height:34px; padding:5px 12px; border:1px solid var(--line-strong); border-radius:8px; background:var(--paper); color:var(--text); font-size:13px; }
+.reading-start-page .start-resume-button:hover:not(:disabled) { background:var(--accent-soft); color:var(--accent); }
+.reading-start-page .start-resume-button:active:not(:disabled) { background:var(--accent-press); }
+.start-resume-button .start-resume-label,.start-resume-button .start-position { flex:none; white-space:nowrap; }
+.start-resume-button .start-resume-label { color:var(--muted); }
+.start-resume-button .start-document-title { min-width:0; }
+.start-resume-button>svg { flex:none; color:var(--accent); }
+@media(max-width:440px) {
+ /* A pasted URL needs the full width; the file entry moves below with a horizontal divider. */
+ .start-import-row { flex-direction:column; }
+ .start-import-divider { margin:2px 8px; }
+ .reading-start-page .start-file-button { min-height:40px; }
+ .reading-start-page .start-resume-button { gap:6px; padding:4px 9px; font-size:12px; }
+}
+@media(max-width:440px) and (max-height:700px) {
+ /* Short phones keep the one-screen start page: the import stays on one row, as before. */
+ .start-import-row { flex-direction:row; }
+ .start-import-divider { margin:7px 6px; }
+ .reading-start-page .start-resume-button { min-height:30px; padding-block:2px; }
+}

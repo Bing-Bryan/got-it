@@ -23,6 +23,13 @@ GitHub Actions 对三个系统执行这些检查。远程执行结果出来前�
 
 完整检查另执行 `node --test scripts/prepare-public.node-test.mjs scripts/ci-change-scope.node-test.mjs`，用临时真实 Git 提交验证检测边界；这不依赖安装应用测试框架。README/PNG 分支只完成范围检测，不代表应用检查通过，人工仍须核对图片内容、路径和公开安全。
 
+### 下次正常发布待办：Vite 安全修复
+
+- 本项只是下一次正常构建/发布的检查待办，不代表已上线，也不要求为它单独重启当前生产。
+- 下次正常构建/发布必须使用已修复 lock 中的 Vite 8.3.3（或后续已验证的修复版本）；从干净安装开始，不借用旧依赖缓存或旧 runtime。
+- 安装后核对实际 Vite 版本，再重跑 `npm audit --audit-level=high`、`npm run build`、`npm run test:release` 和既有发布材料检查。
+- 保留当时最新已验收功能与统计/预算口径；不要用旧公开快照覆盖生产。
+
 ## 真人 / 真实浏览器门槛（发布候选版本）
 
 1. 使用隔离的 `GOT_IT_DATA_DIR` 和独立浏览器入口；记录系统、Node、浏览器、Codex 版本。

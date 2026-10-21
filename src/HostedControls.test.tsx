@@ -59,3 +59,8 @@ it('keeps the anonymous usage opt-out inside 保存与隐私',async()=>{
   expect(toggle.checked).toBe(false);expect(JSON.parse(localStorage.getItem('got-it.usage.v1')??'{}').enabled).toBe(false);
  }finally{await act(async()=>root.unmount());host.remove();}
 });
+it('reports unavailable service from actual capability state even with remaining quota',async()=>{
+ vi.mocked(hostedCapabilities).mockResolvedValue({model:'deepseek-flash',available:false,quota:{remaining:3,browserLimit:30,resetAt:'2026-10-21'}} as any);
+ const host=document.body.appendChild(document.createElement('div')),root=createRoot(host);
+ try{await act(async()=>{root.render(<HostedSettings/>);await new Promise(r=>setTimeout(r,0));});expect(host.querySelector('[role=status]')?.textContent).toContain('体验服务暂时不可用');expect(host.textContent).not.toContain('今日剩余 3');}finally{await act(async()=>root.unmount());host.remove();}
+});

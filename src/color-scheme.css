@@ -1,0 +1,100 @@
+/* Dark appearance (neutral, user-reviewed 2026-10-21). Light keeps every existing rule untouched;
+   this file only redefines tokens and the few hand-tuned colors under :root[data-color-scheme="dark"].
+   PDF page canvases, the PDF translation overlay that sits on them, and article images keep their original colors. */
+:root[data-color-scheme="dark"] {
+  color-scheme: dark;
+  color: #f2f2f4;
+  background: #1e1f23;
+  --paper: #17181b;
+  --panel: #1e1f23;
+  --soft: #26272c;
+  --line: #33343a;
+  --line-strong: #45464d;
+  --ink: #f2f2f4;
+  --text: #dcdce0;
+  --reading-ink: #e4e4e8;
+  --muted: #a3a7b1;
+  --subtle: #7d818b;
+  --accent: #8f95ff;
+  --accent-strong: #b3b7ff;
+  --accent-muted: #6d6fb8;
+  --accent-soft: #252848;
+  --accent-line: #3a3f75;
+  --accent-press: #474d8f;
+  --mark: #3b3d6e;
+  --intent-violet: #b394f0;
+  --success: #6fd3a0;
+  --success-soft: #173226;
+  --warning: #f0b75e;
+  --warning-soft: #352914;
+  --warning-line: #5a4522;
+  --danger: #ff8f84;
+  --danger-soft: #3a1d1d;
+  --danger-line: #6a3434;
+  --on-accent: #111216;
+  --disabled-fg: #8b8f99;
+  --reading-paper: #17181b;
+  --reading-desk: #1e1f23;
+  --reading-card: #17181b;
+  --reading-muted: #26272c;
+  --reading-line: #33343a;
+  --reading-line-strong: #45464d;
+  --reading-selection: #6f75d680;
+  --control-pressed: #474d8f;
+  --control-primary-pressed: #c5c8ff;
+  --control-danger-soft: #3a1d1d;
+  --control-danger-hover: #4a2424;
+  --control-danger-pressed: #5c2c2c;
+  --control-danger-border: #6a3434;
+}
+
+/* Text on filled accent controls: white stays readable on the light accent only. */
+:root[data-color-scheme="dark"] :is(.user-message > span, .followup-composer > button, .primary-action, .toast, .pdf-toolbar button[aria-pressed=true], .web-import-dialog .web-import-confirm) { color: var(--on-accent); }
+:root[data-color-scheme="dark"] :is(.markdown-width-slider, .pdf-zoom-slider)::-webkit-slider-thumb { border-color: var(--paper); }
+:root[data-color-scheme="dark"] :is(.markdown-width-slider, .pdf-zoom-slider)::-moz-range-thumb { border-color: var(--paper); }
+
+/* Floating width control and the PDF translation notice sit on the reader, not on a PDF page. */
+:root[data-color-scheme="dark"] .reading-adjustment .reading-adjustment-trigger { background: color-mix(in srgb, var(--paper) 95%, transparent); }
+:root[data-color-scheme="dark"] .pdf-translation-note { background: var(--warning-soft); color: var(--warning); }
+
+/* The marker-pen highlight keeps its shape with darker violet ends. */
+:root[data-color-scheme="dark"] .focus-stickies-highlight {
+  background-color: #34366a;
+  background-image:
+    linear-gradient(to right, #4b4c8f, #474a89 15.4%, #3e4079 46.2%, #34366a),
+    linear-gradient(to left, #4a4b8d, #46488a 16.7%, #3e4079 50%, #34366a);
+}
+
+/* Start page: its own scoped palette, mirrored here so the landing matches the reader. */
+:root[data-color-scheme="dark"] .reading-start-page {
+  color-scheme: dark;
+  --paper: #17181b; --desk: #1e1f23; --card: #1e1f23; --ink: #f2f2f4; --text: #dcdce0;
+  --muted: #a3a7b1; --faint: #8f939d; --line: #33343a; --line-strong: #45464d;
+  --accent: #8f95ff; --accent-strong: #b3b7ff; --accent-soft: #252848; --accent-press: #474d8f;
+  --focus: rgba(143, 149, 255, .7);
+}
+:root[data-color-scheme="dark"] .reading-start-page button:disabled { color: #8b8f99; }
+:root[data-color-scheme="dark"] .reading-start-page .start-demo-tabs button:hover { background: #2a2c4a; }
+:root[data-color-scheme="dark"] .start-demo-label { border-color: var(--accent-line); }
+:root[data-color-scheme="dark"] :is(.start-dialog-content [role=alert], .start-error, .start-inline-import [role=alert]) { color: var(--danger); }
+:root[data-color-scheme="dark"] .start-card-answer { color: var(--text); }
+:root[data-color-scheme="dark"] .start-feature-card { background: #1e1f23; }
+:root[data-color-scheme="dark"] .start-feature:has(.start-feature-trigger:is(:hover,:focus-visible)) .start-feature-card { background: #25262c; }
+:root[data-color-scheme="dark"] .reading-start-page:has(>.start-edge-texture:not([hidden])) .start-feature:first-child .start-feature-card { background: linear-gradient(to right, rgba(30, 31, 35, .55), #1e1f23 20%); }
+:root[data-color-scheme="dark"] .reading-start-page:has(>.start-edge-texture:not([hidden])) .start-feature:last-child .start-feature-card { background: linear-gradient(to left, rgba(30, 31, 35, .55), #1e1f23 20%); }
+:root[data-color-scheme="dark"] .reading-start-page:has(>.start-edge-texture:not([hidden])) .start-feature:has(.start-feature-trigger:is(:hover,:focus-visible)) .start-feature-card { background: #25262c; }
+:root[data-color-scheme="dark"] .start-how-steps { border-color: var(--line); background: #1e1f23; }
+:root[data-color-scheme="dark"] .reading-start-page .start-url-form button.start-read-ready { color: var(--on-accent); }
+:root[data-color-scheme="dark"] .reading-start-page .start-url-form button.start-read-ready:active { background: #c5c8ff; }
+:root[data-color-scheme="dark"] .start-title-selection::before {
+  background-color: #34366a;
+  background-image: linear-gradient(to right, #4b4c8f, #474a89 15.4%, #3e4079 46.2%, #34366a), linear-gradient(to left, #4a4b8d, #46488a 16.7%, #3e4079 50%, #34366a);
+  border-color: #8f95ff;
+}
+
+/* Appearance setting inside 保存与隐私. */
+.color-scheme-setting { border: 0; border-top: 1px solid var(--line); margin: 12px 0 0; padding: 12px 0 0; min-width: 0; }
+.color-scheme-setting legend { padding: 0; font-size: var(--font-ui, 13px); font-weight: 600; color: var(--ink); }
+.color-scheme-options { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; }
+.color-scheme-options label { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; font-size: var(--font-ui, 13px); color: var(--text); cursor: pointer; }
+.color-scheme-options input { accent-color: var(--accent); margin: 0; }

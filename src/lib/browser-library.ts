@@ -15,11 +15,13 @@ import { bookmarkPosition, bookmarkQuote, bookmarkSearchScore, type ReadingBookm
 import { canonical, readingKey, type RecoveryRecord, type ReadingDraft } from './reading-recovery';
 
 const DB='got-it.browser-library.v1';
+let namespace='';
+export function setBrowserLibraryNamespace(value:string){const next=typeof value==='string'?value.trim():'';namespace=/^share-[A-Za-z0-9_-]{32}$/.test(next)?next:'';}
 type Resource={id:string;bytes:Uint8Array;type:string};
 type State={id:'library';webRetryTickets?:Record<string,Record<string,string>>;entries:LibraryEntry[];activeId:string|null;bookmarks:ReadingBookmark[];bookmarkRevision:number;resources:Resource[];recoveries:RecoveryRecord[];sampleImages:Record<string,{url:string;id:string}[]>;outlines:Record<string,PdfOutline>};
 const empty=():State=>({id:'library',entries:[],activeId:null,bookmarks:[],bookmarkRevision:0,resources:[],recoveries:[],sampleImages:{},outlines:{}});
 export class BrowserStorageError extends Error { constructor(message:string,public status=400){super(message);} }
-function db():Promise<IDBDatabase>{return new Promise((resolve,reject)=>{const r=indexedDB.open(DB,1);r.onupgradeneeded=()=>r.result.createObjectStore('state',{keyPath:'id'});r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(new Error('浏览器阅读库无法打开，请检查存储权限。'));r.onblocked=()=>reject(new Error('其他标签正在更新阅读库，请关闭后重试。'));});}
+function db():Promise<IDBDatabase>{return new Promise((resolve,reject)=>{const r=indexedDB.open(namespace?`${DB}.${namespace}`:DB,1);r.onupgradeneeded=()=>r.result.createObjectStore('state',{keyPath:'id'});r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(new Error('浏览器阅读库无法打开，请检查存储权限。'));r.onblocked=()=>reject(new Error('其他标签正在更新阅读库，请关闭后重试。'));});}
 /** Resolve only on transaction completion, including browser quota/commit failures. */
 async function transaction<T>(write:boolean,action:(state:State)=>T):Promise<T>{const database=await db();return new Promise((resolve,reject)=>{const tx=database.transaction('state',write?'readwrite':'readonly'),store=tx.objectStore('state');let value:T;let failure:unknown;const r=store.get('library');r.onsuccess=()=>{try{const state:State=r.result??empty();value=action(state);if(write)store.put(state);}catch(e){failure=e;tx.abort();}};tx.oncomplete=()=>{database.close();resolve(value);};tx.onabort=tx.onerror=()=>{database.close();reject(failure??new BrowserStorageError(tx.error?.name==='QuotaExceededError'?'浏览器存储空间不足，当前草稿已保留，请释放空间或备份后重试。':'浏览器保存失败，当前草稿已保留，请重试。'));};});}
 export async function sha256(bytes:Uint8Array|string){const input=typeof bytes==='string'?new TextEncoder().encode(bytes):bytes;return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(input)))).map(n=>n.toString(16).padStart(2,'0')).join('');}

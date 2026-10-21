@@ -340,6 +340,27 @@ it('shows two neutral selection actions and optional questions without requestin
  selection.removeAllRanges();delete (Range.prototype as any).getBoundingClientRect;
 });
 
+it('hovering a source mark only hints its list entry and never opens, saves, scrolls or generates',async()=>{
+ await mount();
+ await act(async()=>new Promise<void>(resolve=>window.requestAnimationFrame(()=>resolve())));
+ await click('#intent-tab-explain');
+ const saved=JSON.stringify(testWorkspace());
+ vi.mocked(HTMLElement.prototype.scrollIntoView).mockClear();
+ const mark=host.querySelector<HTMLElement>('mark[data-inquiry-id="explain"]')!;
+ await act(async()=>{mark.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));});
+ expect(host.querySelector('.category-items [data-inquiry-id="explain"]')!.getAttribute('data-source-hover')).toBe('true');
+ expect(host.querySelector('.answer-markdown')).toBeNull();
+ expect(JSON.stringify(testWorkspace())).toBe(saved);
+ expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+ expect(stream).not.toHaveBeenCalled();
+ await act(async()=>{mark.closest('p')!.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));});
+ expect(host.querySelector('[data-source-hover]')).toBeNull();
+ await act(async()=>{mark.dispatchEvent(new MouseEvent('mouseover',{bubbles:true}));});
+ expect(host.querySelector('[data-source-hover]')).not.toBeNull();
+ await act(async()=>{mark.dispatchEvent(new MouseEvent('mouseout',{bubbles:true,relatedTarget:document.body}));});
+ expect(host.querySelector('[data-source-hover]')).toBeNull();
+ expect(JSON.stringify(testWorkspace())).toBe(saved);
+});
 it('category keyboard focus only previews a valid anchor and never saves, scrolls or generates',async()=>{
  w.inquiries.push({...w.inquiries[0],id:'missing',anchor:{...w.inquiries[0].anchor,blockId:'missing',quote:'不存在'}});
  await mount();

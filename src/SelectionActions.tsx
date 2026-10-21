@@ -1,3 +1,5 @@
+import { ActionAvailability } from './ActionAvailability';
+import type { ActionUnavailable } from './lib/action-availability';
 import {HOSTED} from './lib/runtime-mode';
 import {HostedSendDisclosure} from './HostedControls';
 import { Lightbulb, ShieldCheck, X } from 'lucide-react';
@@ -6,18 +8,21 @@ import { useState, type ReactNode } from 'react';
 import type { ActiveInquiryIntent } from './types';
 
 /** Shared selection actions for Markdown text, PDF text and PDF regions. */
-export function SelectionActions({ onSelect, onClose, disabled, bookmark, className = '' }: {
-  onSelect: (intent: ActiveInquiryIntent, question?: string) => void;
+export function SelectionActions({ onSelect, onClose, disabled, bookmark, unavailable, onRecover, saveWarning, className = '' }: {
+  onSelect: (intent: ActiveInquiryIntent, question?: string) => void | boolean | Promise<void | boolean>;
   onClose: () => void;
   disabled?: boolean;
   bookmark?: ReactNode;
   className?: string;
+  unavailable?: ActionUnavailable;
+  saveWarning?:boolean;
+  onRecover?: (target:'connection'|'save')=>void;
 }) {
   const [questionOpen, setQuestionOpen] = useState(false);
-  return <>{HOSTED?<HostedSendDisclosure compact/>:null}<div className="selection-operation-row">{bookmark?<div className="selection-bookmark-container">{bookmark}</div>:null}<div className={`selection-actions ${className}`}>
+  return <ActionAvailability unavailable={unavailable} onRecover={onRecover} saveWarning={saveWarning}>{HOSTED?<HostedSendDisclosure compact/>:null}<div className="selection-operation-row">{bookmark?<div className="selection-bookmark-container">{bookmark}</div>:null}<div className={`selection-actions ${className}`}>
     <button type="button" data-intent="explain" disabled={disabled} onClick={() => onSelect('explain')}><Lightbulb size={14} aria-hidden="true"/>解释一下</button>
     <button type="button" data-intent="verify" disabled={disabled} onClick={() => onSelect('verify')}><ShieldCheck size={14} aria-hidden="true"/>查找来源</button>
     <QuestionComposer inline hideBackButton onCancel={onClose} onOpenChange={setQuestionOpen} disabled={disabled} onSubmit={question => onSelect('ask', question)}/>
     {questionOpen ? null : <button className="selection-close" type="button" aria-label="关闭" title="关闭选区" onClick={onClose}><X size={14} aria-hidden="true"/></button>}
-  </div></div></>;
+  </div></div></ActionAvailability>;
 }

@@ -1,11 +1,18 @@
+import { ActionAvailability } from "./ActionAvailability";
+import { actionUnavailable, type ActionUnavailable } from "./lib/action-availability";
 import {readerSaveStatus} from "./lib/reader-save-status";
 import {PdfReaderBoundary,reloadAfterPreserving} from './PdfReaderBoundary';
 import {InquiryStreamError} from './lib/inquiry-stream';
-import {loadSampleImages} from './lib/browser-library';
+import {loadSampleImages,setBrowserLibraryNamespace} from './lib/browser-library';
 import {HOSTED,hostedCapabilities} from './lib/runtime-mode';
 import {HostedSettings,HostedSendDisclosure} from './HostedControls';
 import {installUsage,track,markMaterial,noteAiStarted} from './lib/hosted-usage';
 import {revealBookmarkRanges} from './lib/bookmark-navigation';
+import {currentHeadingIndex,scrolledToEnd} from './lib/current-heading';
+import {snapSelectionToWords} from './lib/selection-snap';
+import { useCollapsibleReaderTools, isScrollKey } from './useCollapsibleReaderTools';
+import { useAlignedReaderHeaders } from './useAlignedReaderHeaders';
+import { readerToolsNeedAttention } from './lib/reader-tools-attention';
 import { selectionContext,selectionRequestError } from './lib/inquiry-selection';
 import { DocumentBookmarks } from './DocumentBookmarks';
 import { useDocumentBookmarks } from './useDocumentBookmarks';
@@ -35,10 +42,20 @@ import { useSidebar } from "./useSidebar";
 import { useResultPanel } from "./useResultPanel";
 import { AssistantMessage } from "./AssistantMessage";
 export { AssistantMessage } from "./AssistantMessage";
+
+async function waitForShare(predicate: () => boolean, timeout = 12_000) {
+  const started = Date.now();
+  while (!predicate()) {
+    if (Date.now() - started > timeout) return false;
+    await new Promise<void>((resolve) => setTimeout(resolve, 120));
+  }
+  return true;
+}
 import { PanelResizeHandle } from "./PanelResizeHandle";
 import { CodexLogin } from "./CodexLogin";
 import { useSaveStatus } from "./useSaveStatus";
 import { capturePosition, restorePosition, useReadingLibrary } from "./useReadingLibrary";
+import { loadShareArticles, loadShareManifest, shareTokenFromLocation } from "./lib/share-reading";
 import { ReadingLibraryNavigation, ReadingLibraryStatus } from "./ReadingLibraryView";
 import { readDocumentFile } from "./lib/reading-document";
 import { migrateHighlightAnchors } from "./lib/anchor-migration";
@@ -171,6 +188,11 @@ function App() {
     return { ...loaded, modelDefaultsVersion: 4, modelPreferences: loaded.modelDefaultsVersion === 4 ? loaded.modelPreferences : Object.fromEntries((["explain", "verify", "entity", "why", "ask"] as const).map(intent => [intent, modelConfig(intent)])), activeProviderId: HOSTED?"deepseek":"codex" };
   });
   const [readingView,setReadingView]=useState<'start'|'reading'>(()=>initialReadingView(()=>sessionStorage,(performance.getEntriesByType?.('navigation')[0] as PerformanceNavigationTiming|undefined)?.type));
+  const [shareToken] = useState(() => shareTokenFromLocation());
+  const [shareBoot, setShareBoot] = useState<"opening" | "error" | "off">(shareToken ? "opening" : "off");
+  const [shareError, setShareError] = useState("");
+  const shareStarted = useRef(false);
+  const shareFirstName = useRef("");
   const enterReading=useCallback(()=>{setReadingView('reading');try{sessionStorage.setItem(START_VIEW_KEY,'reading');}catch{/* Session view is optional, never a saved-content claim. */}},[]);
   const workspaceRef = useRef(workspace);
   workspaceRef.current = workspace;
@@ -184,13 +206,15 @@ function App() {
   const [bookmarkCompleted,setBookmarkCompleted]=useState<BookmarkCreate|null>(null);
   const bookmarkDraftRef=useRef(bookmarkDraft);bookmarkDraftRef.current=bookmarkDraft;
   const [inquirySelectionError,setInquirySelectionError]=useState('');
+  const selectionSaveRecovery = useRef(false);
   const [selectionDraft, setSelectionDraft] = useState<SelectionDraft | null>(null);
   useEffect(() => {
     if (!selectionDraft&&!bookmarkDraft) return;
     const dismissSelection = (event: PointerEvent) => {
-      if (event.button !== 0 || (event.target instanceof Element && event.target.closest('.selection-toolbar'))) return;
+      if (event.button !== 0 || (event.target instanceof Element && (event.target.closest('.selection-toolbar, .provider-control') || (selectionSaveRecovery.current && event.target.closest('.library-state'))))) return;
       // Dismiss before focus changes; otherwise the first click only blurs the
       // textarea and mouseup can reopen the toolbar from the old DOM selection.
+      selectionSaveRecovery.current=false;
       window.getSelection()?.removeAllRanges();
       setSelectionDraft(null);setBookmarkDraft(null);setInquirySelectionError('');
     };
@@ -200,6 +224,8 @@ function App() {
   const [deleteMode, setDeleteMode] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [focusedInquiryId, setFocusedInquiryId] = useState<string | null>(null);
+  // Pointer over a source mark lightly hints its list entry; it never opens, scrolls or requests anything.
+  const [hoveredMarkId, setHoveredMarkId] = useState<string | null>(null);
   const [providerOpen, setProviderOpen] = useState(false);
   const [settingsIntent, setSettingsIntent] = useState<InquiryIntent>("explain");
   const providerControlRef = useRef<HTMLDivElement>(null);
@@ -223,7 +249,7 @@ function App() {
   useEffect(() => {
     if (!providerOpen) return;
     const outside = (event: PointerEvent) => { if (!providerControlRef.current?.contains(event.target as Node)) setProviderOpen(false); };
-    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { setProviderOpen(false); providerControlRef.current?.querySelector<HTMLButtonElement>(".provider-trigger")?.focus(); } };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setProviderOpen(false); providerControlRef.current?.querySelector<HTMLButtonElement>(".provider-trigger")?.focus(); } };
     document.addEventListener("pointerdown", outside); document.addEventListener("keydown", escape);
     return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
   }, [providerOpen]);
@@ -231,6 +257,7 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [pdfTarget,setPdfTarget] = useState<{id:string;nonce:number;returnToSource?:boolean}|null>(null);
   const frameRef = useRef<HTMLDivElement>(null);
+  useAlignedReaderHeaders(frameRef);
   useReadingViewport(frameRef);
   const sidebar = useSidebar();
   const resultPanel = useResultPanel();
@@ -264,6 +291,7 @@ function App() {
   const toastTimerRef = useRef<number | null>(null);
 
   const installLibraryWorkspace = useCallback((next: Workspace,entryId?:string) => {
+    selectionSaveRecovery.current=false;
     navigationSequence.current++;
     const pending=bookmarkPreparing.current;
     if(!pending||pending.entryId!==entryId||pending.documentId!==next.document.id){bookmarkPreparing.current=null;setBookmarkTarget(null);setBookmarksOpen(false);}
@@ -279,12 +307,67 @@ function App() {
     const next = restoreWorkspace(workspaceRef.current) ?? workspaceRef.current;
     workspaceRef.current = next; setWorkspace(next); return next;
   }, []);
+  setBrowserLibraryNamespace(shareToken ? `share-${shareToken}` : '');
   const library = useReadingLibrary({ workspace, readingVisible:readingView==='reading', onOpened:enterReading, onEmptied:()=>{setReadingView('start');try{sessionStorage.setItem(START_VIEW_KEY,'start');}catch{}}, install: installLibraryWorkspace, interrupt: interruptForSwitch, getWorkspace: () => workspaceRef.current, update: (next) => { workspaceRef.current=next;setWorkspace(next); } });
   const recoveryPriority=library.blocked||!!library.recovery||library.recoveries.some(r=>r.state==='pending'&&r.hasDifferences!==false);
-  const showStart=(!library.ready||!library.entry||readingView==='start')&&!recoveryPriority;
+  const libraryRef = useRef(library);
+  libraryRef.current = library;
+  const showStart=(!library.ready||!library.entry||readingView==='start')&&!recoveryPriority&&shareBoot!=="opening";
   useEffect(()=>{if(recoveryPriority)enterReading();},[recoveryPriority,enterReading]);
+  useEffect(() => {
+    if (!shareToken || !library.ready || shareStarted.current) return;
+    shareStarted.current = true;
+    setReadingView("reading");
+    void (async () => {
+      const controller = new AbortController();
+      const abortTimer = window.setTimeout(() => controller.abort(), 25_000);
+      try {
+        const manifest = await loadShareManifest(shareToken, { signal: controller.signal });
+        const articles = await loadShareArticles(manifest, shareToken, { signal: controller.signal });
+        shareFirstName.current = articles[0]?.filename ?? "";
+        const shareNames = new Set(articles.map(article => article.filename));
+        const hadShareEntries = articles.some(article => libraryRef.current.list.entries.some(entry => entry.filename === article.filename));
+        for (const article of articles) {
+          if (libraryRef.current.list.entries.some(entry => entry.filename === article.filename)) continue;
+          let added = false;
+          for (let attempt = 0; attempt < 2 && !added; attempt++) {
+            if (!(await waitForShare(() => !libraryRef.current.busy))) break;
+            await libraryRef.current.importFile(new File([article.markdown], article.filename, { type: "text/markdown" }));
+            added = await waitForShare(
+              () => libraryRef.current.list.entries.some(entry => entry.filename === article.filename),
+              attempt === 0 ? 8_000 : 12_000,
+            );
+          }
+          if (!added) throw new Error(`《${article.title}》没有成功加入阅读库。已加入的文章会保留，刷新页面会继续。`);
+        }
+        if (!(await waitForShare(() => !libraryRef.current.busy))) throw new Error("阅读库正在切换文章，请稍后重试。");
+        const first = articles[0] && libraryRef.current.list.entries.find(entry => entry.filename === articles[0].filename);
+        if (!first) throw new Error("没有找到分享的第一篇文章。");
+        const current = libraryRef.current.entry;
+        const currentSummary = current && libraryRef.current.list.entries.find(entry => entry.id === current.id);
+        const currentIsShare = !!currentSummary && shareNames.has(currentSummary.filename);
+        if ((!hadShareEntries || !currentIsShare) && current?.id !== first.id) await libraryRef.current.open(first.id);
+        setShareBoot(value => value === "opening" ? "off" : value);
+      } catch (error) {
+        setShareError(error instanceof DOMException && error.name === "AbortError"
+          ? "分享内容读取超时，请刷新页面重试。"
+          : error instanceof Error ? error.message : "分享内容打开失败，请刷新重试。");
+        setShareBoot(value => value === "opening" ? "error" : value);
+      } finally {
+        window.clearTimeout(abortTimer);
+      }
+    })();
+  }, [shareToken, library.ready]);
+  useEffect(() => {
+    if (!shareToken || shareBoot !== "opening") return;
+    const timer = window.setTimeout(() => {
+      setShareError("打开分享超时，请刷新页面重试。");
+      setShareBoot(value => value === "opening" ? "error" : value);
+    }, 30_000);
+    return () => window.clearTimeout(timer);
+  }, [shareToken, shareBoot]);
   useLayoutEffect(()=>{if(!showStart)library.rendered();},[showStart,documentLoadId]);
-  async function returnToStart(){if(!library.ready||library.busy)return;if(await library.returnToStart()){setReadingView('start');try{sessionStorage.setItem(START_VIEW_KEY,'start');}catch{}setBookmarksOpen(false);setMobileSidebarOpen(false);setMobilePanelOpen(false);setSelectionDraft(null);setBookmarkDraft(null);window.getSelection()?.removeAllRanges();requestAnimationFrame(()=>document.querySelector<HTMLElement>(".reading-start-page")?.focus({preventScroll:true}));}}
+  async function returnToStart(){if(shareToken){if(!library.ready||library.busy)return;const target=libraryRef.current.list.entries.find(entry=>entry.filename===shareFirstName.current)??libraryRef.current.list.entries[0];if(target)await libraryRef.current.open(target.id);return;}if(!library.ready||library.busy)return;if(await library.returnToStart()){setReadingView('start');try{sessionStorage.setItem(START_VIEW_KEY,'start');}catch{}setBookmarksOpen(false);setMobileSidebarOpen(false);setMobilePanelOpen(false);setSelectionDraft(null);setBookmarkDraft(null);window.getSelection()?.removeAllRanges();requestAnimationFrame(()=>document.querySelector<HTMLElement>(".reading-start-page")?.focus({preventScroll:true}));}}
   const documentBookmarks=useDocumentBookmarks(library.entry?.id,bookmarkVersion);
   const activeBookmarkRevision=library.historyId||library.entry?.revisionId;
   const currentBookmarks=documentBookmarks.bookmarks.filter(bookmark=>bookmark.revisionId===activeBookmarkRevision);
@@ -296,6 +379,27 @@ function App() {
   }
   useEffect(()=>{if(HOSTED&&library.entry){const doc=workspace.document;markMaterial(doc.id.startsWith('sample-')?'sample':doc.kind==='pdf'?'pdf':doc.kind==='web'?doc.web.extractorVersion.startsWith('x-')?'x':'web':'markdown');}},[library.entry?.id,workspace.document.id]);
   const saveStatus = useSaveStatus(library.status, workspace.document.id + ":" + documentLoadId);
+  const toolbarSaveStatus = readerSaveStatus(library.blocked ? library.status : saveStatus, workspace.document, library.blocked);
+  // A stored failed translation is a lasting fact like a partial import; only a run that just ended in failure keeps the row open.
+  const toolsDocumentKey = workspace.document.id + ":" + documentLoadId;
+  useEffect(() => setHoveredMarkId(null), [toolsDocumentKey]);
+  const hoveredMarkInquiry = hoveredMarkId ? workspace.inquiries.find(inquiry => inquiry.id === hoveredMarkId) : undefined;
+  const [freshTranslationFailure, setFreshTranslationFailure] = useState<string | null>(null);
+  const translationWasRunning = useRef(false);
+  useEffect(() => {
+    const state = workspace.webTranslation;
+    if (translationWasRunning.current && !library.translationRunning && (state?.status === "failed" || (state?.status === "interrupted" && state.error))) setFreshTranslationFailure(toolsDocumentKey);
+    translationWasRunning.current = library.translationRunning;
+  }, [library.translationRunning, workspace.webTranslation, toolsDocumentKey]);
+  const toolsAttention = readerToolsNeedAttention({ blocked: library.blocked, busy: library.busy, translationRunning: library.translationRunning, error: library.error, draftWarning: library.draftWarning, notice: library.notice, recovery: !!library.recovery,
+    unreadableRecovery: library.recoveries.some(r => r.state === "pending" && r.savedRecordUnavailable), saveStatus: toolbarSaveStatus, sourceStatus: workspace.document.kind === "web" ? undefined : library.check?.status, translation: freshTranslationFailure === toolsDocumentKey ? workspace.webTranslation : undefined, translationNotice: workspace.translationNotice });
+  // Never fold away keyboard focus, an open disclosure or any alert the row is showing; a tapped button keeping focus does not count.
+  const canFoldReaderTools = useCallback(() => {
+    const tools = document.querySelector(".reader-tools");
+    if (!tools || tools.querySelector("details[open], [role=\"alert\"]")) return false;
+    try { return !tools.querySelector(":focus-visible"); } catch { return !tools.matches(":focus-within"); }
+  }, []);
+  const readerTools = useCollapsibleReaderTools({ enabled: !showStart && workspace.document.kind !== "pdf" && !toolsAttention, resetKey: toolsDocumentKey, canFold: canFoldReaderTools });
 
   const [sampleImages,setSampleImages]=useState<Record<string,string>>({});
   useEffect(()=>{let active=true;setSampleImages({});if(HOSTED)void loadSampleImages(workspace.document.contentHash).then(images=>{if(active)setSampleImages(images);}).catch(()=>{});return()=>{active=false;};},[workspace.document.contentHash]);
@@ -354,20 +458,19 @@ function App() {
     let frame = 0;
     const update = () => {
       frame = 0;
-      const top = scroll.getBoundingClientRect().top + 28;
-      let active = rendered.outline[0]?.id ?? null;
-      for (const item of rendered.outline) {
-        const node = document.getElementById(item.id);
-        if (node && node.getBoundingClientRect().top <= top) active = item.id;
-        else if (node) break;
-      }
-      setCurrentHeading(active);
+      const bounds = scroll.getBoundingClientRect();
+      const tops = rendered.outline.map(item => document.getElementById(item.id)?.getBoundingClientRect().top ?? null);
+      const index = currentHeadingIndex(tops, { top: bounds.top, bottom: bounds.bottom, atEnd: scrolledToEnd(scroll) });
+      if (index !== null) setCurrentHeading(rendered.outline[index]?.id ?? null);
     };
     const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
+    // The reader stays mounted under the start page; re-measure once it gains layout or reflows after font loading.
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(schedule);
+    observer?.observe(scroll); if (articleRef.current) observer?.observe(articleRef.current);
     schedule(); scroll.addEventListener('scroll', schedule, { passive: true });
     window.addEventListener('resize', schedule);
-    return () => { cancelAnimationFrame(frame); scroll.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); };
-  }, [rendered.outline, workspace.document.id, documentLoadId]);
+    return () => { cancelAnimationFrame(frame); observer?.disconnect(); scroll.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule); };
+  }, [rendered.outline, workspace.document.id, documentLoadId, showStart]);
 
 
   const markdownMinutes = useMemo(() => renderedReadingMinutes(rendered.html), [rendered.html]);
@@ -420,7 +523,7 @@ function App() {
   useEffect(() => { if (!providerOpen) setSettingsIntent(tabIntent === "why" ? "explain" : tabIntent); }, [tabIntent, providerOpen]);
   const currentModel = resolveModelConfig(settingsIntent, workspace.modelPreferences, codexModels);
   const selectedModelInfo = codexModels.find(model => model.model === currentModel.model);
-  const modelReady = workspace.activeProviderId !== "codex" || (!modelsLoading && !modelsError && supportsConfig(codexModels, resolveModelConfig(tabIntent, workspace.modelPreferences, codexModels)));
+  const modelReady = HOSTED ? providers.find(p=>p.id===workspace.activeProviderId)?.availability === "connected" : workspace.activeProviderId !== "codex" || (!modelsLoading && !modelsError && supportsConfig(codexModels, resolveModelConfig(tabIntent, workspace.modelPreferences, codexModels)));
 
   const activeProvider = useMemo(
     () =>
@@ -428,6 +531,19 @@ function App() {
       providers.find((item) => item.id === "codex") ?? FALLBACK_PROVIDERS[0],
     [providers, workspace.activeProviderId],
   );
+
+  const saveWarning=library.blocked||library.status==="阅读进度暂未保存";
+  const selectionUnavailable = actionUnavailable({readOnly:!!library.historyId||!!library.recovery,ready:library.ready,busy:library.busy,saveFailed:library.blocked,invalidSelection:!selectionDraft,generating:!!selectionDraft && workspace.inquiries.some(i=>i.status==='answering'&&sameAnchor(i.anchor,selectionDraft.anchor)),modelReady,hosted:HOSTED});
+  const recoverAction = (target:'connection'|'save') => {
+    if(target==='connection') {setProviderOpen(true);if(HOSTED)void refreshProviders();return;}
+    selectionSaveRecovery.current=true;
+    const status=frameRef.current?.querySelector<HTMLElement>('.reader-tools .library-state');
+    const warning=status?.querySelector<HTMLElement>('.library-warning');
+    const details=status?.querySelector<HTMLDetailsElement>('details');
+    if(details&&!warning)details.open=true;
+    const focus=(warning??details??status)?.querySelector<HTMLElement>('button,summary');
+    focus?.focus({preventScroll:true});
+  };
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -646,6 +762,8 @@ function App() {
         setSelectionDraft(null);setBookmarkDraft(null);
         return;
       }
+      // Grow half-selected words before anchoring, so the highlight, draft and saved anchor share one range.
+      snapSelectionToWords(selection,article);
       const bookmark=createBookmarkDraft(selection,article,workspace);
       if('error' in bookmark){setBookmarkDraft(null);setSelectionDraft(null);showToast(bookmark.error);return;}
       setBookmarkDraft(bookmark);
@@ -655,24 +773,24 @@ function App() {
 
   const createInquiry = useCallback(
     async (intent: ActiveInquiryIntent, draftOverride?: SelectionDraft, customQuestion?: string, contextHistory?: Inquiry["contextHistory"]) => {
-      if (library.readOnly || library.busy || !library.ready) return;
+      if (library.readOnly || library.busy || !library.ready) return false;
       const draft = draftOverride ?? selectionDraft;
-      if (!draft) return;
-      if(HOSTED&&!library.entry){const sourceId=workspaceRef.current.document.id,visit=navigationSequence.current,selection=bookmarkDraftRef.current,nativeSelection=window.getSelection()?.toString();try{await library.ensureEntry();}catch(error){showToast(readError(error));return;}if(workspaceRef.current.document.id!==sourceId||navigationSequence.current!==visit||(!draftOverride&&(bookmarkDraftRef.current!==selection||window.getSelection()?.toString()!==nativeSelection)))return;}
-      if (workspace.activeProviderId === "codex" && (modelsLoading || modelsError || !codexModels.length)) { showToast("请先等待模型列表加载完成，或刷新连接后再试。"); return; }
+      if (!draft) return false;
+      if(HOSTED&&!library.entry){const sourceId=workspaceRef.current.document.id,visit=navigationSequence.current,selection=bookmarkDraftRef.current,nativeSelection=window.getSelection()?.toString();try{await library.ensureEntry();}catch(error){showToast(readError(error));return false;}if(workspaceRef.current.document.id!==sourceId||navigationSequence.current!==visit||(!draftOverride&&(bookmarkDraftRef.current!==selection||window.getSelection()?.toString()!==nativeSelection)))return false;}
+      if (workspace.activeProviderId === "codex" && (modelsLoading || modelsError || !codexModels.length)) { showToast("请先等待模型列表加载完成，或刷新连接后再试。"); return false; }
       const matches = workspace.inquiries.filter(i => sameAnchor(i.anchor, draft.anchor));
-      if (intent === "ask" && (!customQuestion?.trim() || customQuestion.length > 2000)) return;
+      if (intent === "ask" && (!customQuestion?.trim() || customQuestion.length > 2000)) return false;
       const existing = intentHistory(matches, intent).find(i => intent !== "ask" || i.question === customQuestion?.trim());
       if (existing) {
         updateWorkspace(current => ({ ...current, activeInquiryId: existing.id, visitedInquiryIds: rememberInquiry(current, existing.id), activeTab: { anchorInquiryId: existing.id, intent: categoryIntent(intent) } }));
-        setSelectionDraft(null);setBookmarkDraft(null); setMobilePanelOpen(true); openResultPanel(); window.getSelection()?.removeAllRanges(); return;
+        setSelectionDraft(null);setBookmarkDraft(null); setMobilePanelOpen(true); openResultPanel(); window.getSelection()?.removeAllRanges(); return true;
       }
-      if (matches.some(i => i.status === "answering") || [...pendingCreations.current.values()].some(a => sameAnchor(a, draft.anchor))) return;
+      if (matches.some(i => i.status === "answering") || [...pendingCreations.current.values()].some(a => sameAnchor(a, draft.anchor))) return false;
       const createdAt = now();
       const id = newId("inquiry");
       const question = intent === "ask" ? customQuestion!.trim() : draft.anchor.segments ? INTENT_META[intent].prompt('这段完整选区') : INTENT_META[intent].prompt(selectedQuote(draft.anchor));
       const context=selectionContext(articleRef.current,draft.anchor,intent,question);
-      const requestError=selectionRequestError(draft.anchor,question,context,intent);if(requestError){showToast(requestError);return;}
+      const requestError=selectionRequestError(draft.anchor,question,context,intent);if(requestError){showToast(requestError);return false;}
       const userMessage: ThreadMessage = {
         id: newId("message"),
         role: "user",
@@ -716,6 +834,7 @@ function App() {
       window.getSelection()?.removeAllRanges();
       pendingCreations.current.set(id, draft.anchor);
       void askProvider(id, request).finally(() => pendingCreations.current.delete(id));
+      return true;
     },
     [askProvider, workspace.inquiries, selectionDraft, updateWorkspace, workspace.activeProviderId, workspace.document.filename, modelsLoading, modelsError, codexModels, showToast, openResultPanel],
   );
@@ -761,17 +880,17 @@ function App() {
   );
 
   const submitCustomQuestion = (question: string) => {
-    if (!activeInquiry || groupBusy || !modelReady) return;
+    if (!activeInquiry || groupBusy || !modelReady) return false;
     if (activeInquiry.intent !== 'ask') {
-      createInquiry('ask', {anchor:activeInquiry.anchor,context:readingContext(articleRef.current, activeInquiry.anchor),rect:{top:0,left:0,width:0,height:0}}, question, copyContextHistory(activeInquiry.messages));
-      return;
+      return createInquiry('ask', {anchor:activeInquiry.anchor,context:readingContext(articleRef.current, activeInquiry.anchor),rect:{top:0,left:0,width:0,height:0}}, question, copyContextHistory(activeInquiry.messages));
     }
-    if (!question.trim() || question.length > 2000 || requests.current.has(activeInquiry.id)) return;
+    if (!question.trim() || question.length > 2000 || requests.current.has(activeInquiry.id)) return false;
     const nextContext=selectionContext(articleRef.current,activeInquiry.anchor,'ask',question);
-    const nextError=selectionRequestError(activeInquiry.anchor,question,nextContext,'ask');if(nextError){showToast(nextError);return;}
+    const nextError=selectionRequestError(activeInquiry.anchor,question,nextContext,'ask');if(nextError){showToast(nextError);return false;}
     const history = [...(activeInquiry.contextHistory ?? []), ...activeInquiry.messages].filter(m => m.content.trim()).slice(-8).map(({role,content}) => ({role,content:content.slice(0,3000)}));
     updateInquiry(activeInquiry.id, i => ({...i,status:'answering',lastError:undefined,messages:[...i.messages,{id:newId('message'),role:'user',content:question.trim(),createdAt:now()}]}));
     void askProvider(activeInquiry.id, {providerId:workspace.activeProviderId,intent:'ask',operation:'ask',explanationMode:'auto',readingScope:activeInquiry.anchor.scope,quote:selectedQuote(activeInquiry.anchor),context:nextContext,documentTitle:workspace.document.filename,question:question.trim(),history});
+    return true;
   };
 
   const retryInquiry = useCallback(() => {
@@ -1004,7 +1123,7 @@ function App() {
   return (
     <div
       ref={frameRef}
-      className={`app-frame ${showStart ? "start-mode" : ""} ${bookmarksOpen ? "bookmarks-mode" : ""} ${!sidebar.pinned ? "sidebar-collapsed" : ""} ${sidebar.peek ? "sidebar-peek" : ""} ${!resultPanel.expanded ? "result-collapsed" : ""} ${mobileSidebarOpen ? "sidebar-open" : ""} ${mobilePanelOpen ? "panel-open" : ""}`}
+      className={`app-frame ${showStart ? "start-mode" : ""} ${bookmarksOpen ? "bookmarks-mode" : ""} ${!sidebar.pinned ? "sidebar-collapsed" : ""} ${sidebar.peek ? "sidebar-peek" : ""} ${!resultPanel.expanded ? "result-collapsed" : ""} ${mobileSidebarOpen ? "sidebar-open" : ""} ${mobilePanelOpen ? "panel-open" : ""} ${shareToken ? "share-mode" : ""}`}
       onDragEnter={(event) => {
         event.preventDefault();
         setIsDragging(true);
@@ -1020,6 +1139,22 @@ function App() {
         if (mobileDrawerOpen) { sidebarDrawer.close(); resultDrawer.close(); return; }
         sidebar.close(); resultPanel.close(); sidebarDrawer.close(); resultDrawer.close(); } }}
     >
+      {shareToken && shareBoot !== "off" ? (
+        <div className={`share-boot${shareBoot === "error" ? " is-error" : ""}`} role={shareBoot === "error" ? "alert" : "status"}>
+          <div className="share-boot-card">
+            <span className="share-boot-brand">got it</span>
+            {shareBoot === "opening" ? <>
+              <span className="share-boot-spinner" aria-hidden="true" />
+              <strong>正在打开分享的文章</strong>
+              <p>第一次打开需要把文章存到当前浏览器，请稍等。</p>
+            </> : <>
+              <strong>分享内容没有打开</strong>
+              <p>{shareError}</p>
+              <button type="button" onClick={() => window.location.reload()}>重新加载</button>
+            </>}
+          </div>
+        </div>
+      ) : null}
       <input
         ref={fileInputRef}
         type="file"
@@ -1081,8 +1216,8 @@ function App() {
       </aside>
 
       {showStart?<ReadingStartPage library={library} workspace={workspace} onFile={()=>{if(library.list.nativePicker)void library.choose();else fileInputRef.current?.click();}} onContinue={enterReading} onNote={id=>{enterReading();requestAnimationFrame(()=>openAnchor(id));}} onBookmarks={()=>void openBookmarks()} onLocateBookmark={locateBookmark} bookmarkVersion={bookmarkVersion} connectionControl={providerControl} covered={bookmarksOpen}/>:null}
-      <main className="reader-column" aria-hidden={bookmarksOpen||undefined} inert={bookmarksOpen||(sidebar.narrow && mobileSidebarOpen) || (resultPanel.narrow && mobilePanelOpen)}>
-        <header className="reader-toolbar">
+      <main className={`reader-column${readerTools.collapsed ? " reader-column--tools-collapsed" : ""}`} aria-hidden={bookmarksOpen||undefined} inert={bookmarksOpen||(sidebar.narrow && mobileSidebarOpen) || (resultPanel.narrow && mobilePanelOpen)}>
+        <header className="reader-toolbar" onFocus={readerTools.expand}>
           <div className="toolbar-title">
             <button
               className="icon-button drawer-navigation-trigger"
@@ -1096,7 +1231,7 @@ function App() {
               <PanelLeftOpen size={18} />
             </button>
             <FileText size={15} />
-            <div>
+            <div onClick={readerTools.expand}>
               <strong title={workspace.document.filename}>{workspace.document.filename}</strong>
               <span className="document-metadata">{workspace.document.isDemo ? "示例文档" : workspace.document.kind === "web" ? (workspace.document.web.retrieval?.provider === "fxtwitter" ? "X 公开接口保存副本" : workspace.document.web.extractorVersion === "x-browser-visible-v1" ? "X 页面保存副本" : workspace.document.web.coverage === "public-excerpt" ? "网页公开部分副本" : "网页保存副本") : (HOSTED?"浏览器阅读副本":"本地文档")} · {workspace.document.kind === "pdf" ? `${workspace.document.pdf.pages.length} 页 PDF` : workspace.document.markdown.length < 1000 ? `${workspace.document.markdown.length} 字符` : `${Math.round(workspace.document.markdown.length / 1000)}k 字符`}{readingMinutes !== null ? <span className="reading-time"> · 预计阅读 {readingMinutes} 分钟</span> : null}</span>
             </div>
@@ -1125,7 +1260,7 @@ function App() {
         <WebTranslationControls key={workspace.document.id+":"+documentLoadId} workspace={workspace} library={library} saveStatus={saveStatus} showSaveStatus={false} onSide={side => { setSelectionDraft(null);setBookmarkDraft(null);setInquirySelectionError('');window.getSelection()?.removeAllRanges(); const position = capturePosition();updateWorkspace(current=>({...current,readingSide:side})); requestAnimationFrame(()=>restorePosition(position)); }} />
         </div>
         <div className="reader-tools-trailing">
-        <div className="library-save-status" role="status">{readerSaveStatus(library.blocked ? library.status : saveStatus,workspace.document,library.blocked)}{library.busy ? " · 正在处理…" : ""}</div>
+        <div className="library-save-status" role="status">{toolbarSaveStatus}{library.busy ? " · 正在处理…" : ""}</div>
         <div ref={setAdjustmentHost} className="reader-adjustment-layer">
           {workspace.document.kind !== "pdf" ? <div key={workspace.document.id+":"+documentLoadId} className="reading-adjustment-dock"><MarkdownWidthControls width={markdownWidth.width} measuredPercent={markdownWidth.measuredPercent} error={markdownWidth.error} onChange={markdownWidth.change}/></div> : null}
         </div>
@@ -1133,7 +1268,7 @@ function App() {
         <div ref={setPdfToolbarHost} className="reader-status-host" />
         </div>
         <div className="reader-viewport" ref={readerViewportRef}>
-        <div key={workspace.document.id+":"+documentLoadId} className={`reader-scroll${workspace.document.kind === "pdf" ? " reader-scroll--pdf" : ""}`} onScroll={() => { if (!markdownWidth.adjusting.current) library.scrolled(); }}>
+        <div key={workspace.document.id+":"+documentLoadId} className={`reader-scroll${workspace.document.kind === "pdf" ? " reader-scroll--pdf" : ""}`} onWheel={readerTools.noteUserScroll} onTouchMove={readerTools.noteUserScroll} onKeyDown={event => { if (isScrollKey(event)) readerTools.noteUserScroll(); }} onScroll={event => { readerTools.onScroll(event.currentTarget); if (!markdownWidth.adjusting.current) library.scrolled(); }}>
           {workspace.document.isDemo && !HOSTED ? (
             <div className="demo-document-note">
               <Sparkles size={15} />
@@ -1141,7 +1276,7 @@ function App() {
               <button type="button" onClick={() => void library.choose()}>换成我的文档</button>
             </div>
           ) : null}
-          {workspace.document.kind === "pdf" && library.entry ? <PdfReaderBoundary key={workspace.document.id+documentLoadId} onReload={()=>reloadAfterPreserving(library.returnToStart,()=>window.location.reload())}><Suspense fallback={<p className="pdf-status">正在加载 PDF 阅读器…</p>}><PdfReader translation={workspace.webTranslation} showTranslation={workspace.readingSide==="translated"} toolbarHost={pdfToolbarHost} adjustmentHost={adjustmentHost} onReadingTime={receivePdfMinutes} outlineTarget={pdfDirectoryTarget?.documentId===workspace.document.id?pdfDirectoryTarget:null} onCurrentPage={setPdfCurrentPage} key={workspace.document.id+documentLoadId} document={workspace.document} revisionId={library.entry.revisionId} onBookmarkSaved={finishBookmarkSave} bookmarkCompleted={bookmarkCompleted} bookmarks={currentBookmarks} bookmarkVersion={bookmarkVersion} onBookmarkStarted={beginBookmarkSave} onBookmarkFailed={bookmarkFeedback.failed} bookmarkTarget={bookmarkTarget} onBookmarkLocated={success=>{if(!bookmarkTarget||bookmarkPreparing.current?.nonce!==bookmarkTarget.locateNonce)return;bookmarkPreparing.current=null;if(!success){showToast("无法定位收藏原文，摘录仍保留。");setBookmarksOpen(true);}else setBookmarksOpen(false);setBookmarkTarget(null);}} entryId={library.entry.id} inquiries={workspace.inquiries} activeId={workspace.activeInquiryId} target={pdfTarget} onLocated={finishSourceNavigation} initialPosition={library.initialPosition} readOnly={library.readOnly} hideSaveStatus saveStatus={saveStatus} saveBusy={library.busy} saveError={library.blocked||library.status==="阅读进度暂未保存"} onCreate={createInquiry} onActivate={openAnchor} onReady={library.rendered} onView={library.scrolled}/></Suspense></PdfReaderBoundary> : <article
+          {workspace.document.kind === "pdf" && library.entry ? <PdfReaderBoundary key={workspace.document.id+documentLoadId} onReload={()=>reloadAfterPreserving(library.returnToStart,()=>window.location.reload())}><Suspense fallback={<p className="pdf-status">正在加载 PDF 阅读器…</p>}><PdfReader translation={workspace.webTranslation} showTranslation={workspace.readingSide==="translated"} toolbarHost={pdfToolbarHost} adjustmentHost={adjustmentHost} onReadingTime={receivePdfMinutes} outlineTarget={pdfDirectoryTarget?.documentId===workspace.document.id?pdfDirectoryTarget:null} onCurrentPage={setPdfCurrentPage} key={workspace.document.id+documentLoadId} document={workspace.document} revisionId={library.entry.revisionId} onBookmarkSaved={finishBookmarkSave} bookmarkCompleted={bookmarkCompleted} bookmarks={currentBookmarks} bookmarkVersion={bookmarkVersion} onBookmarkStarted={beginBookmarkSave} onBookmarkFailed={bookmarkFeedback.failed} bookmarkTarget={bookmarkTarget} onBookmarkLocated={success=>{if(!bookmarkTarget||bookmarkPreparing.current?.nonce!==bookmarkTarget.locateNonce)return;bookmarkPreparing.current=null;if(!success){showToast("无法定位收藏原文，摘录仍保留。");setBookmarksOpen(true);}else setBookmarksOpen(false);setBookmarkTarget(null);}} entryId={library.entry.id} inquiries={workspace.inquiries} activeId={workspace.activeInquiryId} target={pdfTarget} onLocated={finishSourceNavigation} initialPosition={library.initialPosition} readOnly={library.readOnly} hideSaveStatus saveStatus={saveStatus} saveBusy={library.busy} saveError={library.blocked||library.status==="阅读进度暂未保存"} onCreate={createInquiry} requestUnavailable={actionUnavailable({readOnly:!!library.historyId||!!library.recovery,ready:library.ready,busy:library.busy,saveFailed:library.blocked,modelReady,hosted:HOSTED})} onRecover={recoverAction} actionsHidden={providerOpen} onActivate={openAnchor} onReady={library.rendered} onView={library.scrolled}/></Suspense></PdfReaderBoundary> : <article
             ref={articleRef}
             className="markdown-article"
             data-reading-side={workspace.readingSide ?? "original"}
@@ -1150,6 +1285,8 @@ function App() {
             data-width-mode={markdownWidth.width === null ? "recommended" : "custom"}
             style={markdownWidth.width === null ? undefined : { width: `min(100%, max(360px, ${markdownWidth.width}%))` }}
             onMouseUp={handleArticleMouseUp}
+            onMouseOver={event => setHoveredMarkId((event.target as Element).closest?.<HTMLElement>("mark[data-inquiry-id]")?.dataset.inquiryId ?? null)}
+            onMouseLeave={() => setHoveredMarkId(null)}
             onClick={handleArticleClick}
             dangerouslySetInnerHTML={{ __html: rendered.html }}
           />}
@@ -1202,7 +1339,7 @@ function App() {
           </div></div>
         <nav hidden={!!activeInquiry} className="category-items" aria-label={`${INTENT_META[tabIntent].label}条目`}>
           {categoryItems.length ? categoryItems.map(item => <div className="category-row" key={item.id}>
-            <button className="category-open" type="button" data-inquiry-id={item.id} aria-current={activeInquiry?.id === item.id ? "true" : undefined} onFocus={() => setFocusedInquiryId(item.id)} onBlur={() => setFocusedInquiryId(null)} onClick={() => jumpToInquiry(item.id)}>
+            <button className="category-open" type="button" data-inquiry-id={item.id} data-source-hover={hoveredMarkInquiry && (item.id === hoveredMarkInquiry.id || sameAnchor(item.anchor, hoveredMarkInquiry.anchor)) ? "true" : undefined} aria-current={activeInquiry?.id === item.id ? "true" : undefined} onFocus={() => setFocusedInquiryId(item.id)} onBlur={() => setFocusedInquiryId(null)} onClick={() => jumpToInquiry(item.id)}>
               <span>{item.intent === "ask" ? item.question : selectedQuote(item.anchor)}{item.intent === "ask" ? <small className="question-anchor">{selectedQuote(item.anchor)}</small> : null}</span><small>{inquiryCategoryStatus(item)}</small>{categoryItems.filter(other => other.anchor.quote === item.anchor.quote).length > 1 ? <small className="inquiry-identity">{new Date(item.messages.at(-1)?.createdAt ?? item.updatedAt).toLocaleDateString()} · {(item.messages.filter(message => message.role === "assistant").at(-1)?.content || item.question).replace(/[#*_`]/g, "").slice(0, 56)}</small> : null}
             </button>
             {deleteMode ? <button className={`category-delete${pendingDeleteId === item.id ? " confirming" : ""}`} type="button" data-delete-inquiry-id={item.id}
@@ -1210,9 +1347,9 @@ function App() {
               title={pendingDeleteId === item.id ? "再次点击，删除此知识贴及全部回答" : "删除此知识贴"}
               onBlur={() => setPendingDeleteId(null)} onClick={() => deleteInquiry(item.id)}><Trash2 size={16} fill={pendingDeleteId === item.id ? "currentColor" : "none"} aria-hidden="true" /></button> : null}
           </div>) : <p>{tabIntent === "ask" ? "可以向全文提问，也可以选中原文问一问。" : <>还没有{INTENT_META[tabIntent].label}条目。在原文选中文字，再选择“{INTENT_META[tabIntent].label}”即可创建。</>}</p>}
-          {tabIntent === "ask" ? <div className="document-question-entry">
+          {tabIntent === "ask" ? <div className="document-question-entry"><ActionAvailability unavailable={actionUnavailable({readOnly:!!library.historyId||!!library.recovery,ready:library.ready,busy:library.busy,saveFailed:library.blocked,generating:documentQuestionBusy,modelReady,hosted:HOSTED})} onRecover={recoverAction} saveWarning={saveWarning}>
             {documentQuestionOpen ? <QuestionComposer initialOpen disabled={documentQuestionBusy || library.readOnly || library.busy || !library.ready || !modelReady} onClose={() => setDocumentQuestionOpen(false)} onSubmit={question => createInquiry("ask", { anchor: documentAnchor(workspace.document), context: "", rect: { top: 0, left: 0, width: 0, height: 0 } }, question)} /> : <button className="document-question-trigger" type="button" disabled={documentQuestionBusy || library.readOnly || library.busy || !library.ready || !modelReady} onClick={() => setDocumentQuestionOpen(true)}><span aria-hidden="true">＋</span>向全文提问</button>}
-          </div> : null}
+          </ActionAvailability></div> : null}
         </nav>
         {activeInquiry && activeInquiry.anchor.scope !== "document" && group.length > 1 ? <nav className="anchor-requests" aria-label="这处原文的已有结果"><small>这处原文</small>{(['explain','verify','ask','why'] as InquiryIntent[]).flatMap(intent => {
           const items = intentHistory(group, intent);
@@ -1224,6 +1361,9 @@ function App() {
           <InquiryPanel
             key={activeInquiry.id}
             inquiry={activeInquiry}
+            unavailable={actionUnavailable({readOnly:!!library.historyId||!!library.recovery,ready:library.ready,busy:library.busy,saveFailed:library.blocked,generating:groupBusy,modelReady,hosted:HOSTED})}
+            onRecover={recoverAction}
+            saveWarning={saveWarning}
             groupBusy={groupBusy || library.readOnly || library.busy}
             groupGenerating={groupBusy}
             modelReady={modelReady && !library.readOnly && !library.busy}
@@ -1247,8 +1387,11 @@ function App() {
       {bookmarkDraft && !bookmarksOpen ? (
         <SelectionToolbar
           draft={bookmarkDraft}
-          hidden={mobileDrawerOpen}
+          hidden={mobileDrawerOpen || providerOpen}
           hint={inquirySelectionError}
+          unavailable={selectionUnavailable}
+          onRecover={recoverAction}
+          saveWarning={saveWarning}
           bookmark={(library.entry||HOSTED)&&!library.readOnly?<BookmarkAction prepareEntry={!library.entry?library.ensureEntry:undefined} entryId={library.entry?.id??""} revisionId={library.entry?.revisionId??""} anchor={bookmarkDraft.anchor} iconOnly onSaved={finishBookmarkSave} version={bookmarkVersion} onStarted={beginBookmarkSave} onFailed={bookmarkFeedback.failed}/>:null}
           onSelect={(intent, question) => createInquiry(intent, undefined, question)}
           disabled={!selectionDraft || !modelReady || workspace.inquiries.some(i => i.status === "answering" && sameAnchor(i.anchor, selectionDraft.anchor)) || library.readOnly || library.busy}
@@ -1356,13 +1499,19 @@ function SelectionToolbar({
   disabled,
   bookmark,
   hint,
+  unavailable,
+  onRecover,
+  saveWarning,
   hidden = false,
 }: {
   draft: BookmarkDraft;
   hidden?: boolean;
   hint?:string;
+  unavailable?:ActionUnavailable;
+  saveWarning?:boolean;
+  onRecover?:(target:"connection"|"save")=>void;
   bookmark?: ReactNode;
-  onSelect: (intent: ActiveInquiryIntent, question?: string) => void;
+  onSelect: (intent: ActiveInquiryIntent, question?: string) => void | boolean | Promise<void | boolean>;
   disabled?: boolean;
   onClose: () => void;
 }) {
@@ -1379,16 +1528,25 @@ function SelectionToolbar({
       style={{ left, top }}
       onMouseDown={(event) => { if (!(event.target instanceof HTMLTextAreaElement)) event.preventDefault(); }}
     >
-      <div className="selection-understanding"><div className="selection-quote">“{bookmarkQuote(draft.anchor)}”</div>
+      {/* The source highlight shows what is selected, so the quote only appears once 问一问 takes focus and the native highlight is gone. */}
+      <div className="selection-understanding" role="group" aria-label={`选中的原文：${selectionLabel(bookmarkQuote(draft.anchor))}`}><div className="selection-quote selection-quote--ask" aria-hidden="true">“{bookmarkQuote(draft.anchor)}”</div>
       {hint?<p className="bookmark-selection-hint">{hint}</p>:null}
-      <SelectionActions bookmark={bookmark} onSelect={onSelect} onClose={onClose} disabled={disabled}/></div>
+      <SelectionActions bookmark={bookmark} onSelect={onSelect} onClose={onClose} disabled={disabled} unavailable={unavailable} onRecover={onRecover} saveWarning={saveWarning}/></div>
     </div>
   );
+}
+
+function selectionLabel(quote: string) {
+  const chars = [...quote];
+  return chars.length > 80 ? `${chars.slice(0, 80).join("")}…` : quote;
 }
 
 interface InquiryPanelProps {
   onCancel: () => void;
   modelReady: boolean;
+  unavailable?:ActionUnavailable;
+  saveWarning?:boolean;
+  onRecover?:(target:"connection"|"save")=>void;
   groupBusy: boolean;
   groupGenerating: boolean;
   inquiry: Inquiry;
@@ -1401,6 +1559,9 @@ interface InquiryPanelProps {
 }
 
 function InquiryPanel({
+  unavailable,
+  onRecover,
+  saveWarning,
   onCancel,
   modelReady,
   groupBusy,
@@ -1445,7 +1606,7 @@ function InquiryPanel({
           ) : null}
         </div>
 
-      <footer className="inquiry-actions compact-actions">
+      <ActionAvailability unavailable={unavailable} onRecover={onRecover} saveWarning={saveWarning}><footer className="inquiry-actions compact-actions">
         {verificationRetryVisible ? (
           <button className="secondary-action verify-again-action" type="button" disabled={!!recheckDisabledReason} title={recheckDisabledReason} aria-describedby={recheckDisabledReason ? "recheck-unavailable" : undefined} onClick={onRetry}>重试</button>
         ) : inquiry.intent === "entity" ? (
@@ -1458,7 +1619,7 @@ function InquiryPanel({
         ) : null}
         {inquiry.status === "answering" ? <button className="secondary-action stop-action" type="button" onClick={onCancel}>停止本次请求</button> : null}
       <QuestionComposer prompt={inquiry.intent === "explain" || inquiry.intent === "why" || inquiry.intent === "verify" ? "还是不懂？" : undefined} disabled={groupBusy || !modelReady} hideTrigger={inquiry.intent !== "ask" && (groupGenerating || latestRequestFailed)} followUp={inquiry.intent === "ask"} onSubmit={onQuestion} />
-      </footer>
+      </footer></ActionAvailability>
       {inquiry.intent === "entity" && followUpDisabledReason ? <p className="recheck-unavailable" id="followup-unavailable">{followUpDisabledReason}</p> : null}
       {verificationRetryVisible && recheckDisabledReason ? <p className="recheck-unavailable" id="recheck-unavailable">{recheckDisabledReason}</p> : null}
           {inquiry.intent !== "verify" && inquiry.messages.filter(message => message.role === "assistant" && message.id !== latestAssistant?.id).length ? <details className="answer-history"><summary>历史回答</summary>{inquiry.messages.filter(message => message.role === "assistant" && message.id !== latestAssistant?.id).map(message => <AssistantMessage key={message.id} message={message} history verification={inquiry.intent === "verify"} entity={inquiry.intent === "entity"} />)}</details> : null}

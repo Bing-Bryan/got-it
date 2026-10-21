@@ -1,12 +1,12 @@
 @layer reader-base {
-.pdf-outline-note {font-size:11px;color:var(--text-muted,#777);line-height:1.5;margin:8px 0;}
-.pdf-outline-error button {border:1px solid var(--border,#ddd);background:var(--surface,var(--paper));border-radius:6px;padding:5px 8px;font-size:11px;color:inherit;cursor:pointer;}
+.pdf-outline-note {font-size:var(--font-meta);color:var(--text-muted,var(--muted));line-height:1.5;margin:8px 0;}
+.pdf-outline-error button {border:1px solid var(--border,var(--line));background:var(--surface,var(--paper));border-radius:6px;padding:5px 8px;font-size:var(--font-meta);color:inherit;cursor:pointer;}
 .pdf-outline button:disabled {opacity:.5;cursor:default;}
 .pdf-outline-item {display:flex;align-items:baseline;gap:8px;width:100%;text-align:left;}
 .pdf-outline-item span {flex:1;min-width:0;overflow-wrap:anywhere;}
-.pdf-outline-item small {font-size:10px;color:var(--text-muted,#777);font-variant-numeric:tabular-nums;flex-shrink:0;}
-.pdf-outline-item[aria-current=location] {background:#eeedff;color:#5d56d8;border-radius:6px;}
-.pdf-outline-error {font-size:11px;color:#a23b32;overflow-wrap:anywhere;}
+.pdf-outline-item small {font-size:var(--font-meta);color:var(--text-muted,var(--muted));font-variant-numeric:tabular-nums;flex-shrink:0;}
+.pdf-outline-item[aria-current=location] {background:var(--accent-soft);color:var(--accent);border-radius:6px;}
+.pdf-outline-error {font-size:var(--font-meta);color:var(--danger);overflow-wrap:anywhere;}
 .pdf-outline-item { align-items: flex-start; }
 .pdf-outline-item span { overflow: hidden; white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .pdf-outline-item small { padding-top: 2px; min-width: 16px; text-align: right; }
