@@ -2248,8 +2248,8 @@
     },
     {
       "path": "package-lock.json",
-      "bytes": 168040,
-      "sha256": "b5375feb81128f5513dcf0586909c1bc5157b08bd764edc1ef3de54e4be5f81f"
+      "bytes": 168088,
+      "sha256": "1ca9127a1ba0f15dc82371e869153fd222b8c11c8fcda985ce317772d1cd5fce"
     },
     {
       "path": "tsconfig.json",
