@@ -2,6 +2,8 @@
 
 [简体中文](README.md) · **English**
 
+https://github.com/user-attachments/assets/4d9a777a-45bc-489b-a881-5175cc857f73
+
 ## If a line doesn't make sense, select it
 
 Select text or box a PDF region to ask, check sources, and keep what you learn beside the passage
@@ -11,8 +13,6 @@ Select text or box a PDF region to ask, check sources, and keep what you learn b
 Open the website and start reading. No installation needed.
 
 An unfamiliar concept, a difficult argument, or a figure worth checking shouldn't mean leaving the article and switching tools. Bring Markdown files, PDFs, and public web articles into one reading library. Work through the question in front of you, then carry on reading.
-
-![Current homepage: central imports and three real reading examples](docs/images/homepage-2026-10-19.png)
 
 ### Choose the help you need for the passage
 

@@ -2358,13 +2358,13 @@
     },
     {
       "path": "README.md",
-      "bytes": 1785,
-      "sha256": "febd2104b8dc552462474aa47c0d805fb18450bbb92ba7593af2c681db55d978"
+      "bytes": 1767,
+      "sha256": "fe2cb158ae28f3bf1a0146ce3e671235f35ec15de889b87b048f925850a33c1c"
     },
     {
       "path": "README.en.md",
-      "bytes": 1960,
-      "sha256": "cdd17cf243aad5904088964ffb2d35a42580d1629f7c6e4a20e2455fdab48743"
+      "bytes": 1934,
+      "sha256": "067f838f7354d8e2e90419de37c6f9dcaea1d19c44b37bbbd15e4cbbbe22dc7d"
     },
     {
       "path": "package.json",
