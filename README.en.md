@@ -2,7 +2,7 @@
 
 [简体中文](README.md) · **English**
 
-https://github.com/user-attachments/assets/8ec2fd6d-f8bd-4fb7-b921-e6b796e13eaf
+https://github.com/user-attachments/assets/ea04e976-8479-4c21-86e0-1cb752521340
 
 ## If a line doesn't make sense, select it
 

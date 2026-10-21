@@ -2359,12 +2359,12 @@
     {
       "path": "README.md",
       "bytes": 1767,
-      "sha256": "59469a4fa4087a0052b4bb8af07146d75e8e0830220528ad0827affd5836a5c8"
+      "sha256": "94edbdffb480ff49a49e7512eb19382b01792a02d47d400990771d5071207c9c"
     },
     {
       "path": "README.en.md",
       "bytes": 1934,
-      "sha256": "fcca6dc62bb46772f7e74f53ee78eff9b306e638c31b92eb406fb29c107eacd9"
+      "sha256": "3ddd5482e2036dfda82f13b85aa4173ff7d6c439400ca81438271df9e5d3a3a9"
     },
     {
       "path": "package.json",
