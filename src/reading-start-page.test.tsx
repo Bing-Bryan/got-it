@@ -76,9 +76,12 @@ it('uses existing file, web, resume and library callbacks with no implicit impor
  await openLibrary();await act(async()=>host.querySelector<HTMLButtonElement>('.start-library-row')!.click());expect(library.open).toHaveBeenCalledWith('other');
  await act(async()=>host.querySelector<HTMLButtonElement>('[data-tab=bookmarks]')!.click());await act(async()=>host.querySelector<HTMLButtonElement>('.start-library-body>.start-text-button')!.click());expect(onBookmarks).toHaveBeenCalledOnce();expect(host.querySelector('dialog')).toBeNull();
 });
-it('keeps local storage/privacy truthful and preserves the existing connection control',async()=>{
+it('keeps local storage/privacy truthful, puts appearance in the header and preserves the existing connection control',async()=>{
  const library=baseLibrary();root=createRoot(host);await act(async()=>root!.render(<ReadingStartPage library={library} workspace={createPlaceholderWorkspace()} onFile={vi.fn()} onContinue={vi.fn()} onNote={vi.fn()} onBookmarks={vi.fn()} connectionControl={<button className="test-connection">现有连接</button>}/>));
- expect(host.querySelector('.test-connection')).not.toBeNull();await act(async()=>host.querySelectorAll<HTMLButtonElement>('.start-nav-button')[1].click());
+ expect(host.querySelector('.test-connection')).not.toBeNull();
+ expect(host.querySelector('.start-header-actions .color-scheme-menu .color-scheme-trigger')?.getAttribute('aria-label')).toBe('切换为深色');
+ await act(async()=>host.querySelectorAll<HTMLButtonElement>('.start-nav-button')[1].click());
+ expect(host.querySelector('.start-privacy-dialog .color-scheme-setting')).toBeNull();
  expect(host.textContent).toContain('保存在本机');expect(host.textContent).not.toContain('哪些内容会发送');expect(host.textContent).not.toContain('有限上下文');expect(host.textContent).not.toContain('下载完整备份');expect(host.textContent).not.toContain('已用空间');expect(library.saveNow).not.toHaveBeenCalled();
 });
 it('keeps import errors visible inside the drawer and preserves the real sample import',async()=>{

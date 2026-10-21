@@ -8,8 +8,8 @@
     },
     {
       "path": "src/App.tsx",
-      "bytes": 113414,
-      "sha256": "1dfcec7d2808412cdae80af7916ecbfedc06f5b215135fcbca6522797b9943c0"
+      "bytes": 113601,
+      "sha256": "e312cb6cf408b16117548ede681fe2f662294d435bebd88b26eb6d8a20025045"
     },
     {
       "path": "src/AssistantMessage.test.tsx",
@@ -37,14 +37,14 @@
       "sha256": "e836821b6caee031119c58b6a269275fe550c4eb89193bace85e53c330615481"
     },
     {
-      "path": "src/ColorSchemeSetting.test.tsx",
-      "bytes": 1787,
-      "sha256": "1f55319460b6e89ade196e963e5ad93240d58bcad62f799d96644d642b63a7b5"
+      "path": "src/ColorSchemeMenu.test.tsx",
+      "bytes": 4297,
+      "sha256": "a2ed547f528101c26e27421acde1d87834b95b6f6364bc1409d0686e69125c0e"
     },
     {
-      "path": "src/ColorSchemeSetting.tsx",
-      "bytes": 1139,
-      "sha256": "7ff54510d8f5238c353137e7556c171f050cc9fa826921e9cb557722680d070e"
+      "path": "src/ColorSchemeMenu.tsx",
+      "bytes": 1433,
+      "sha256": "1991c0ffcf77ce395bbb926055f7820042b171ec5f0177f778ce3a92a38752c9"
     },
     {
       "path": "src/CompactSources.test.tsx",
@@ -98,8 +98,8 @@
     },
     {
       "path": "src/PdfReader.tsx",
-      "bytes": 43673,
-      "sha256": "1ec3dd3fa59f6f698c180df636f8e40385cc4e4b84adf7991e3802604f87abb4"
+      "bytes": 43650,
+      "sha256": "bef4b9858d60d93fcef610fea71a465617f6c21a7b2e87fb9f4e6911471b150f"
     },
     {
       "path": "src/PdfReaderBoundary.tsx",
@@ -148,8 +148,8 @@
     },
     {
       "path": "src/ReadingLibraryView.tsx",
-      "bytes": 18984,
-      "sha256": "70c47e8a85734ea04215646eee30d20f02b011e80fec600af6415dff19df0a5b"
+      "bytes": 18885,
+      "sha256": "78e5ed27e110c2957406c4a9aebabb8a01f421e7526b810656917297db11e5cb"
     },
     {
       "path": "src/ReadingRecoveryView.tsx",
@@ -158,8 +158,8 @@
     },
     {
       "path": "src/ReadingStartPage.tsx",
-      "bytes": 18627,
-      "sha256": "b6bf2e047ae241fbcb7cd6565749acd507b283fb34d420094b9b0cb3ea88f07e"
+      "bytes": 18618,
+      "sha256": "6ab902e152434016b7148c7b1e6a52de316d9a7a014dcade52a629b69820acbe"
     },
     {
       "path": "src/SelectionActions.tsx",
@@ -408,13 +408,13 @@
     },
     {
       "path": "src/lib/color-scheme.test.ts",
-      "bytes": 2324,
-      "sha256": "278a90b9a526b06154a794080fc63ca68b930d28e1639cc48b0bc3ed970dd846"
+      "bytes": 3828,
+      "sha256": "8fc0f3504c8272426f52bd69080097eb84cb2d742604f9cf7dff7ded1f1b52d5"
     },
     {
       "path": "src/lib/color-scheme.ts",
-      "bytes": 2629,
-      "sha256": "2107892dd5967c9a4909e5daae1e39da944c21ac36c9f015c852bd5a278514f8"
+      "bytes": 3380,
+      "sha256": "6f3d67691ff778c2ca843eb9452624165d75a5a9463edd3681b939a141540f9a"
     },
     {
       "path": "src/lib/current-heading.test.ts",
@@ -1048,8 +1048,8 @@
     },
     {
       "path": "src/pdf-reader.test.tsx",
-      "bytes": 28692,
-      "sha256": "5a2ac607e294b49a900b1a7eb4d6e73d3c37f29c2448d5e84cf02fc851e88dec"
+      "bytes": 28801,
+      "sha256": "42d38fca547a9190414c786436fdd6ee84097ef8d01f38888ac4bd1d30219a11"
     },
     {
       "path": "src/question-composer.test.tsx",
@@ -1093,13 +1093,13 @@
     },
     {
       "path": "src/reading-start-page.css",
-      "bytes": 46138,
-      "sha256": "85d733e8e9eba28a057cbd5107e22aa63a5c00839e4448775051abeffff39264"
+      "bytes": 46968,
+      "sha256": "1b2e6d67284e8e2bf55ef4e6ad5111885192aff0202fa3bbe0e4f250eb686e41"
     },
     {
       "path": "src/reading-start-page.test.tsx",
-      "bytes": 45321,
-      "sha256": "3e3141c63af7c1f17763b0407570c3f3faa04ed118865ec95494d04c7408bfb3"
+      "bytes": 45588,
+      "sha256": "79fd3569273e5b5ba050eb4773dff2caf978e04074e27f92f9772affee2658ca"
     },
     {
       "path": "src/request-status.test.tsx",
@@ -1113,8 +1113,8 @@
     },
     {
       "path": "src/styles.css",
-      "bytes": 134938,
-      "sha256": "1780bc035d3838c808544e9e67dbf62c7d434ae9041f60eb7a4c9ad98a0d4145"
+      "bytes": 137921,
+      "sha256": "f2936efdb0a37e4c4144cb356c183061b280bcf2eb4baaddb093ec91c84e780f"
     },
     {
       "path": "src/test-support/library.ts",
@@ -2318,8 +2318,8 @@
     },
     {
       "path": "docs/ui-guidelines.md",
-      "bytes": 37299,
-      "sha256": "29ebf9c30215d12699f7c61ebcbb69a0a1ccb217b5a4562c17a62dbb823f14b7"
+      "bytes": 39051,
+      "sha256": "0a9a74805242f91bf20036771ed5151136c109e15212bac88e8251f9c1e8d8a5"
     },
     {
       "path": "docs/ui/button-states.html",

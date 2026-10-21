@@ -161,7 +161,7 @@ it('keeps truthful save states and shows instructions inline without a help popu
  }
 
  expect(host.querySelector('.pdf-help')).toBeNull();expect(host.querySelectorAll('.pdf-sheet .pdf-status')).toHaveLength(0);
- expect(host.querySelector('.pdf-help-button')).toBeNull();expect(host.querySelector('.pdf-inline-help')?.textContent).toBe('文字可直接拖选；图片可框选，再选择功能。');
+ expect(host.querySelector('.pdf-help-button')).toBeNull();expect(host.querySelector('.pdf-inline-help')?.textContent).toBe('文字可直接划选；图片可框选预览');expect(host.querySelector('.pdf-inline-help')?.getAttribute('title')).toBe('文字可直接划选；图片可框选预览');
  expect(mocks.worker).not.toHaveBeenCalled();expect(mocks.request).not.toHaveBeenCalled();
  await act(async()=>root.render(<PdfReader {...props} saveStatus="保存失败" saveError/>));
  expect(host.querySelector('.pdf-save-state')?.textContent).toBe('未保存');

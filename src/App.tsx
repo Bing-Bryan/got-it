@@ -24,6 +24,7 @@ import { BookmarkAction } from './BookmarkAction';
 import { BookmarksView } from './BookmarksView';
 import type { ReadingBookmark } from './lib/bookmark-types';
 import { WebTranslationControls } from "./WebTranslationControls";
+import { ColorSchemeMenu } from "./ColorSchemeMenu";
 import { translatedRendering, canonicalTranslationDraft, selectedQuote, translationContext } from "./lib/translation-reading";
 import brandIcon from "./assets/got-it-icon.svg";
 import { useResponsiveDrawer } from "./useResponsiveDrawer";
@@ -211,7 +212,7 @@ function App() {
   useEffect(() => {
     if (!selectionDraft&&!bookmarkDraft) return;
     const dismissSelection = (event: PointerEvent) => {
-      if (event.button !== 0 || (event.target instanceof Element && (event.target.closest('.selection-toolbar, .provider-control') || (selectionSaveRecovery.current && event.target.closest('.library-state'))))) return;
+      if (event.button !== 0 || (event.target instanceof Element && (event.target.closest('.selection-toolbar, .provider-control, .color-scheme-menu, .color-scheme-popover') || (selectionSaveRecovery.current && event.target.closest('.library-state'))))) return;
       // Dismiss before focus changes; otherwise the first click only blurs the
       // textarea and mouseup can reopen the toolbar from the old DOM selection.
       selectionSaveRecovery.current=false;
@@ -1254,10 +1255,11 @@ function App() {
           </div>
         </header>
 
-        <div className={`reader-tools${HOSTED ? " reader-tools--hosted" : ""}${workspace.document.kind === "web" ? " reader-tools--web" : ""}`}>
+        <div className={`reader-tools${HOSTED ? " reader-tools--hosted" : ""}${workspace.document.kind === "web" ? " reader-tools--web" : ""}${workspace.document.kind === "pdf" ? " reader-tools--pdf" : ""}`}>
         <div className="reader-tools-leading">
         <ReadingLibraryStatus library={library} hideWebSource={workspace.document.kind === "web"} onImport={() => fileInputRef.current?.click()} />
         <WebTranslationControls key={workspace.document.id+":"+documentLoadId} workspace={workspace} library={library} saveStatus={saveStatus} showSaveStatus={false} onSide={side => { setSelectionDraft(null);setBookmarkDraft(null);setInquirySelectionError('');window.getSelection()?.removeAllRanges(); const position = capturePosition();updateWorkspace(current=>({...current,readingSide:side})); requestAnimationFrame(()=>restorePosition(position)); }} />
+        <ColorSchemeMenu/>
         </div>
         <div className="reader-tools-trailing">
         <div className="library-save-status" role="status">{toolbarSaveStatus}{library.busy ? " · 正在处理…" : ""}</div>

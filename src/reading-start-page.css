@@ -292,9 +292,16 @@
 .start-inline-import>div { display:flex; gap:8px; }
 .start-inline-scope { margin:8px 0 0; text-align:left; color:var(--muted); font-size:11px; line-height:1.7; }
 .start-sample-prompt { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; column-gap:2px; row-gap:5px; }
-.reading-start-page .start-how-button { text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:5px; min-height:30px; margin-left:14px; padding:4px 10px; border:1px solid var(--line-strong); border-radius:7px; font-size:12px; color:var(--text); }
+.reading-start-page .start-how-button { position:relative; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:5px; min-height:32px; margin-left:14px; padding:4px 0; border:0; border-radius:7px; background:transparent; font-size:12px; color:var(--text); }
+.start-how-button::before { content:""; position:absolute; inset:-6px -8px; border-radius:7px; }
+.reading-start-page .start-how-button:hover { background:transparent; color:var(--accent); }
+.reading-start-page .start-how-button:active { background:transparent; color:var(--accent-strong); }
+.start-header-actions .color-scheme-menu { margin-inline:2px; }
+.start-header .color-scheme-trigger,
+.start-header .color-scheme-trigger:hover,
+.start-header .color-scheme-trigger:active { border:0; background:transparent; }
 @media(max-width:440px) {
- .reading-start-page .start-how-button { min-height:28px; margin-left:8px; padding:3px 7px; font-size:11px; }
+ .reading-start-page .start-how-button { min-height:32px; margin-left:8px; padding:4px 0; font-size:11px; }
 }
 
 /* Emphasize the material entry and keep its divider separate from the hover plate. */
@@ -504,4 +511,10 @@
  .start-import-row { flex-direction:row; }
  .start-import-divider { margin:7px 6px; }
  .reading-start-page .start-resume-button { min-height:30px; padding-block:2px; }
+}
+
+/* Touch and compact phones keep both auxiliary actions at the 44px target after all density overrides. */
+@media (pointer: coarse), (max-width: 440px) {
+  .reading-start-page .start-sample-prompt .start-text-button,
+  .reading-start-page .start-sample-prompt .start-how-button { min-height: 44px; }
 }

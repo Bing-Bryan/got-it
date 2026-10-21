@@ -1,20 +1,33 @@
-/** Light / dark / follow-system appearance. A browser-only preference: never in workspace exports, never a request. */
-export type ColorSchemePreference = "light" | "dark" | "system";
+/** Light / dark appearance. A browser-only preference: never in workspace exports, never a request. */
+export type ColorSchemePreference = "light" | "dark";
 export const COLOR_SCHEME_KEY = "got-it.color-scheme.v1";
 const CHANGE_EVENT = "got-it:color-scheme";
+const LEGACY_SYSTEM = "system";
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 
+// Only used when the browser refuses to persist an explicit choice (including one-time
+// legacy "system" normalisation), so the current visit does not silently change later.
+let sessionPreference: ColorSchemePreference | null = null;
+
 export function readColorScheme(storage: Pick<Storage, "getItem"> | null = safeStorage()): ColorSchemePreference {
+  if (sessionPreference) return sessionPreference;
   try {
     const value = storage?.getItem(COLOR_SCHEME_KEY);
-    return value === "dark" || value === "system" ? value : "light";
+    if (value === "light" || value === "dark") return value;
+    if (value !== LEGACY_SYSTEM) return "light";
+    // Legacy "system" is resolved exactly once, then stored as an explicit choice when possible.
+    const mapped: ColorSchemePreference = systemPrefersDark() ? "dark" : "light";
+    sessionPreference = mapped;
+    try {
+      const writable = storage as (Pick<Storage, "getItem"> & Partial<Pick<Storage, "setItem">>) | null;
+      if (!writable?.setItem) return mapped;
+      writable.setItem(COLOR_SCHEME_KEY, mapped);
+      sessionPreference = null;
+    } catch { /* Keep this visit's one-time mapping. */ }
+    return mapped;
   } catch {
     return "light";
   }
-}
-
-export function resolveColorScheme(preference: ColorSchemePreference, systemDark: boolean): "light" | "dark" {
-  return preference === "system" ? (systemDark ? "dark" : "light") : preference;
 }
 
 function systemPrefersDark() {
@@ -22,24 +35,32 @@ function systemPrefersDark() {
 }
 
 export function applyColorScheme(preference: ColorSchemePreference, root: HTMLElement = document.documentElement) {
-  root.dataset.colorScheme = resolveColorScheme(preference, systemPrefersDark());
+  root.dataset.colorScheme = preference;
 }
 
 export function writeColorScheme(preference: ColorSchemePreference) {
-  try { safeStorage()?.setItem(COLOR_SCHEME_KEY, preference); } catch { /* Appearance still applies for this visit. */ }
+  sessionPreference = null;
+  const storage = safeStorage();
+  if (!storage) sessionPreference = preference;
+  else try { storage.setItem(COLOR_SCHEME_KEY, preference); } catch { sessionPreference = preference; }
   applyColorScheme(preference);
   window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: preference }));
 }
 
-/** Applies the saved preference once and keeps “follow system” and other tabs in sync. Returns a cleanup. */
+/** Applies the saved choice once and syncs later explicit changes from other tabs. No system listener. */
 export function startColorScheme(): () => void {
+  sessionPreference = null;
   applyColorScheme(readColorScheme());
-  const query = window.matchMedia?.(DARK_QUERY);
-  const systemChanged = () => { if (readColorScheme() === "system") applyColorScheme("system"); };
-  const storageChanged = (event: StorageEvent) => { if (event.key === COLOR_SCHEME_KEY) applyColorScheme(readColorScheme()); };
-  query?.addEventListener?.("change", systemChanged);
+  const storageChanged = (event: StorageEvent) => {
+    if (event.key !== COLOR_SCHEME_KEY && event.key !== null) return;
+    // Storage is the source of truth across tabs; normalize a legacy "system" once.
+    sessionPreference = null;
+    const preference = readColorScheme();
+    applyColorScheme(preference);
+    window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: preference }));
+  };
   window.addEventListener("storage", storageChanged);
-  return () => { query?.removeEventListener?.("change", systemChanged); window.removeEventListener("storage", storageChanged); };
+  return () => window.removeEventListener("storage", storageChanged);
 }
 
 export function onColorSchemeChange(listener: (preference: ColorSchemePreference) => void): () => void {

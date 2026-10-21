@@ -92,7 +92,7 @@ export default function PdfReader(props:Props) {
   const toolbarNode = <div className="pdf-toolbar" aria-label="PDF 阅读工具栏">
       <span className="pdf-page-number" aria-live="off">第 {currentPage} / {props.document.pdf.pages.length} 页</span>
       {!props.readOnly?<><button type="button" className="pdf-select-mode" aria-pressed={activeToolbar?.mode==='region'} disabled={!activeToolbar?.ready} onClick={()=>{if(activeToolbar?.busy||activeToolbar?.mode==='region')activeToolbar.cancel();else activeToolbar?.start();}}>{activeToolbar?.busy?'取消识别':activeToolbar?.mode==='region'?'取消框选':'框选内容'}</button>{activeToolbar?.mode==='region'||activeToolbar?.busy?<span className="pdf-mode-hint">{activeToolbar.busy?'识别中…':'拖动框选'}</span>:null}</>:<span className="pdf-mode-hint">只读</span>}
-      <span className="pdf-inline-help" title="文字可直接拖选；图片可框选，再选择功能。">{HOSTED?"文字可直接拖选；图片可框选预览，读图能力尚未通过验证。":"文字可直接拖选；图片可框选，再选择功能。"}</span>
+      <span className="pdf-inline-help" title="文字可直接划选；图片可框选预览">文字可直接划选；图片可框选预览</span>
       {!props.hideSaveStatus ? <span className={`pdf-save-state ${props.saveError?'failed':''}`} role="status" title={props.saveStatus}>{saveLabel}</span> : null}
     </div>;
   const adjustmentNode = <div className="reading-adjustment-dock reading-adjustment-dock--pdf"><PdfZoomControls scale={zoom.scale} automatic={zoom.manual===null} onChange={zoom.change}/></div>;
@@ -182,7 +182,7 @@ function PdfSheet(props:SheetProps) {
   useEffect(()=>{if(!box&&!selection)return;const outside=(event:PointerEvent)=>{
     if(card.current?.contains(event.target as Node))return;
     if(event.target instanceof Element&&(event.target.closest('.provider-control')||(saveRecovery.current&&event.target.closest('.library-state'))))return;
-    if(props.toolbarHost?.contains(event.target as Node)||root.current?.closest('.pdf-reader')?.querySelector('.pdf-toolbar')?.contains(event.target as Node))return;
+    if(props.toolbarHost?.contains(event.target as Node)||root.current?.closest('.pdf-reader')?.querySelector('.pdf-toolbar')?.contains(event.target as Node)||(event.target instanceof Element&&event.target.closest('.color-scheme-menu, .color-scheme-popover')))return;
     const bounds=surface.current?.getBoundingClientRect();
     const rects=box?[box]:selection?.anchor.pdf?.rects??[];
     if(bounds&&viewport&&rects.some(r=>{const sr=screenRect(displayViewport!,r);return event.clientX>=bounds.left+sr[0]&&event.clientX<=bounds.left+sr[2]&&event.clientY>=bounds.top+sr[1]&&event.clientY<=bounds.top+sr[3];}))return;
