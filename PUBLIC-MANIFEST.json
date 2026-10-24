@@ -1898,8 +1898,8 @@
     },
     {
       "path": "server/x-article-public.ts",
-      "bytes": 27897,
-      "sha256": "04ddee44767ae1786cd1a379ff576e243d8d0799ae39c5abedbdea57fc578275"
+      "bytes": 28538,
+      "sha256": "9ac49985fba005e376ad85d49404fe4284be2bb09abb21c0c721c3f76f7d032c"
     },
     {
       "path": "server/x-media-retry.test.ts",
@@ -1908,8 +1908,8 @@
     },
     {
       "path": "server/x-public-post.test.ts",
-      "bytes": 21149,
-      "sha256": "e720129a2f31e7d68914650fa3ea98a0b495b2580e82e41d2b916a5f63e0763e"
+      "bytes": 22501,
+      "sha256": "48f44003d21776056dfd1f4bf7063e709483d460e88f975dc628f03460a6e754"
     },
     {
       "path": "scripts/ci-change-scope.mjs",
@@ -2088,8 +2088,8 @@
     },
     {
       "path": "ops/src/format.test.ts",
-      "bytes": 1813,
-      "sha256": "e2ed5da0bbee639e3f46576e7b6e9fef23dea5dae99ed3cad43420e62d30e895"
+      "bytes": 1913,
+      "sha256": "14f03f121ca91a8acb0d5dcd931eff5f6743918f811277feb576570e4c0a43cd"
     },
     {
       "path": "ops/src/format.ts",

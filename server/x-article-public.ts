@@ -9,6 +9,15 @@ const bad=()=>new WebError('FxTwitter 返回的文章身份或正文结构无法
 const unsupported=()=>new WebError('文章包含暂不支持的表格、代码或嵌入内容，请在原网页查看。','x_public_content_unsupported');
 const record=(v:unknown):v is Record<string,any>=>!!v&&typeof v==='object'&&!Array.isArray(v);
 const digits=(v:unknown)=>typeof v==='string'&&/^\d{1,30}$/.test(v);
+// FxTwitter now echoes the embedded post permalink beside tweetId; it is metadata, not rendered or fetched.
+function tweetSource(value:unknown,tweetId:string):boolean{
+ if(typeof value!=='string'||value.length>200)return false;
+ try{const u=new URL(value);
+  if(u.protocol!=='https:'||u.username||u.password||u.port||u.search||u.hash||!['x.com','www.x.com','twitter.com','www.twitter.com'].includes(u.hostname))return false;
+  const m=/^\/(?:i\/web|i|[A-Za-z0-9_]{1,15})\/status\/(\d{1,30})\/?$/.exec(u.pathname);
+  return !!m&&m[1]===tweetId;
+ }catch{return false;}
+}
 export function xPublicEndpoint(input:string):URL {
  const normalized=normalizeXArticleUrl(input);if(!normalized)throw bad();return new URL(`https://api.fxtwitter.com/2/status/${new URL(normalized).pathname.split('/').at(-1)}`);
 }
@@ -27,7 +36,7 @@ export function adaptXPublicArticle(input:unknown,source:string,expectedStatusId
   if(v.type==='TWEMOJI'&&(Object.keys(v.data).some(k=>k!=='url')||!safeWebUrl(v.data.url)||!/^https:\/\/abs\.twimg\.com\/emoji\/v2\/svg\/[0-9a-f-]+\.svg$/.test(v.data.url)))throw bad();
   if(v.type==='MEDIA'&&(!Array.isArray(v.data.mediaItems)||!v.data.mediaItems.length||v.data.mediaItems.length>100||v.data.mediaItems.some((m:unknown)=>!record(m)||!['DraftTweetImage','AmplifyVideo'].includes(m.mediaCategory)||!digits(m.mediaId)||!media.has(m.mediaId))))throw bad();
   if(v.type==='MARKDOWN')markdownNode(v.data);
-  if(v.type==='TWEET'&&(Object.keys(v.data).some(k=>!['entityKey','tweetId'].includes(k))||!digits(v.data.tweetId)))throw bad();
+  if(v.type==='TWEET'&&(Object.keys(v.data).some(k=>!['entityKey','tweetId','url'].includes(k))||!digits(v.data.tweetId)||v.data.url!==undefined&&!tweetSource(v.data.url,v.data.tweetId)))throw bad();
   if(v.type==='DIVIDER'&&Object.keys(v.data).some(k=>k!=='entityKey'))throw bad();entities.set(e.key,v);
  }
  let rangeCount=0,totalText=0;

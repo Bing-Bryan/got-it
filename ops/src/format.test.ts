@@ -7,7 +7,8 @@ describe('operations dashboard formatting and query bounds', () => {
     expect(defaultQuery(now)).toEqual({from: '2026-10-14', to: '2026-10-20', channel: 'all', material: 'all'});
     expect(queryValid(defaultQuery(now))).toBeNull();
     expect(queryValid({from: '2026-09-19', to: '2026-10-20', channel: 'all', material: 'all'})).toContain('31');
-    expect(queryValid({from: '2026-10-21', to: '2026-10-22', channel: 'all', material: 'all'})).toContain('今天');
+    const future = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+    expect(queryValid({from: future(1), to: future(2), channel: 'all', material: 'all'})).toContain('今天');
     expect(queryValid({from: '2026-10-20', to: '2026-10-01', channel: 'all', material: 'all'})).toContain('不能晚于');
   });
 
