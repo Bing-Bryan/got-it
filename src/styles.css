@@ -2934,7 +2934,6 @@ a:focus-visible {
 .hosted-disclosure-panel p:last-child { margin-bottom: 0; }
 .hosted-disclosure-panel button { min-height: 32px; }
 .hosted-disclosure-panel a { color: var(--blue); text-decoration: underline; }
-.selection-surface .hosted-send-disclosure { padding: 4px 12px 8px; }
 .document-question-entry .hosted-send-disclosure { padding: 4px 0 8px; }
 .hosted-disclosure-panel .hosted-send-disclosure { padding: 10px 0 0; }
 

@@ -3,6 +3,7 @@ import {webcrypto} from 'node:crypto';
 import {beforeEach,describe,expect,it} from 'vitest';
 import {browserBinary,browserRequest,browserBackup,restoreBrowserBackup,sha256} from './browser-library';
 import {createInitialWorkspace} from '../sample';
+import {webWorkspace} from '../test-support/web';
 import type {LibraryEntry,LibraryList} from './library-types';
 import {canonical} from './reading-recovery';
 Object.defineProperty(globalThis,'crypto',{value:webcrypto,configurable:true});
@@ -65,4 +66,24 @@ it('keeps removed materials, notes and resources in backups while restoring only
  await expect(browserRequest(`/entries/${e.id}/activate`,{})).rejects.toThrow('已移出');await expect(browserRequest('/entries',{workspace:e.workspace,creationKey:e.creationKey,activate:true})).rejects.toThrow('已移出');await expect(browserRequest(`/entries/${e.id}/visibility`,{expectedVersion:hidden.version})).rejects.toThrow('明确选择');expect((await browserRequest<LibraryList>()).entries).toHaveLength(0);await expect(browserRequest(`/entries/${e.id}/visibility`,{expectedVersion:e.version,removed:false})).rejects.toMatchObject({status:409});
  const backup=await browserBackup();await clear();await restoreBrowserBackup(backup);expect((await browserRequest<LibraryList>()).entries).toEqual([]);expect((await browserRequest<LibraryList>()).activeId).toBeNull();
  expect((await browserRequest<LibraryEntry>(`/entries/${e.id}`)).workspace).toEqual(e.workspace);await browserRequest(`/entries/${e.id}/visibility`,{expectedVersion:hidden.version,removed:false});expect((await browserRequest<LibraryList>()).entries.map(e=>e.id)).toEqual([e.id]);
+});
+
+it('stores, deduplicates and restores an image bookmark only with its authorized resource',async()=>{
+ const base=await add(),raw=JSON.parse(await browserBackup()),w=webWorkspace();
+ if(w.document.kind!=='web')throw Error();
+ const bytes=new Uint8Array(123);bytes.set([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a],0);const resourceId=await sha256(bytes),media={...w.document.web.media[0],resourceId,mime:'image/png' as const,bytes:bytes.length};
+ w.document.web.media[0]=media;w.document.id=raw.payload.entries[0].workspace.document.id;w.document.filename='web-with-image';
+ raw.payload.entries[0].workspace=w;raw.payload.resources.push({id:resourceId,type:'image/png',base64:Buffer.from(bytes).toString('base64')});raw.sha256=await sha256(canonical(raw.payload));
+ await clear();await restoreBrowserBackup(JSON.stringify(raw));
+ const current=await browserRequest<LibraryEntry>('/entries/'+base.id);
+ const {createImageAnchor}=await import('./image-actions');
+ const anchor=createImageAnchor({documentId:current.workspace.document.id,revisionId:current.revisionId,media})!;
+ const request={operationId:crypto.randomUUID(),entryId:current.id,revisionId:current.revisionId,anchor};
+ const saved=await browserRequest<any>('/bookmarks',request);expect(saved.created).toBe(true);expect(saved.bookmark.excerpt).toBe('Architecture');
+ expect((await browserRequest<any>('/bookmarks',{...request,operationId:crypto.randomUUID()})).created).toBe(false);
+ expect((await browserRequest<any>('/bookmarks/lookup',{entryId:current.id,revisionId:current.revisionId,anchor})).bookmark.id).toBe(saved.bookmark.id);
+ await expect(browserRequest('/bookmarks',{...request,operationId:crypto.randomUUID(),anchor:{...anchor,start:1}})).rejects.toThrow('收藏锚点');
+ const backup=await browserBackup();await clear();await restoreBrowserBackup(backup);
+ expect((await browserRequest<any>('/bookmarks?entryId='+current.id)).bookmarks[0].anchor.image.mediaId).toBe(media.id);
+ expect((await browserRequest<any>('/bookmarks/'+saved.bookmark.id+'/location')).revisionId).toBe(current.revisionId);
 });

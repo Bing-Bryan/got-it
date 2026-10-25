@@ -140,3 +140,32 @@ it('retains ordinary hosted context capacity with the stronger scope contract',a
  const {READING_MATERIALS_HEADER}=await import('./prompt-materials');
  expect(JSON.parse(prompt.split(READING_MATERIALS_HEADER)[1]).context).toBe(input.context);
 });
+
+describe('hosted web image quick actions',()=>{
+  const webBody=(image:unknown,extra:Record<string,unknown>={})=>({requestId:'request-1',intent:'explain',quote:'Architecture',context:'图片说明：Architecture',question:'这张图说明什么？',history:[],image,...extra});
+  it('parses a web-image kind separately from a PDF region and uses the image prompt',async()=>{
+    const parsed=parseHostedInquiry(webBody({data:pngHeader(120,80),kind:'web-image'}),{images:true});
+    expect(parsed.hostedImage).toMatchObject({kind:'web-image',width:120,height:80});
+    mock.chunks=[chunk('{"answer":"一张架构图","sources":[],"evidenceStatus":"not-applicable"}','stop'),usage];
+    await createHostedRunner('fixture')(parsed,new AbortController().signal,()=>{});
+    const content=(mock.calls.at(-1) as {messages:{content:{type:string;text?:string}[]}[]}).messages[0].content;
+    expect(content[0].text).toContain('网页正文中明确选择的一张图片');
+    expect(content[0].text).not.toContain('PDF 中框选');
+    expect(content[1]).toMatchObject({type:'image_url'});
+    expect(parseHostedInquiry(regionBody({data:pngHeader(100,100)}),{images:true}).hostedImage!.kind).toBe('region');
+  });
+  it('rejects unknown image kinds and empty web-image search text',()=>{
+    expect(()=>parseHostedInquiry(webBody({data:pngHeader(10,10),kind:'video'}),{images:true})).toThrow(expect.objectContaining({code:'invalid_image'}));
+    expect(()=>parseHostedInquiry(webBody({data:pngHeader(10,10),kind:'web-image'},{intent:'verify',context:'',question:''}),{images:true})).toThrow(expect.objectContaining({code:'query_empty'}));
+    expect(()=>parseHostedInquiry(webBody({data:pngHeader(10,10),kind:'web-image'},{intent:'verify',context:'',question:'   '}),{images:true})).toThrow(expect.objectContaining({code:'query_empty'}));
+  });
+  it('uses the web image alt or caption context for search, not a PDF placeholder',async()=>{
+    const queries:string[]=[];const search=async(q:string)=>{queries.push(q);return [];};
+    mock.chunks=[chunk('not JSON','stop')];
+    const parsed=parseHostedInquiry(webBody({data:pngHeader(100,100),kind:'web-image'},{intent:'verify',question:'',context:'Architecture 图表'}),{images:true});
+    const run=createHostedVerificationRunner('fixture',search as never,async()=>{throw new Error('no read');});
+    await run(parsed,new AbortController().signal,()=>{}).catch(()=>{});
+    expect(queries).toEqual(['Architecture 图表']);
+    expect(hostedVerificationPrompt(parsed,[])).toContain('网页正文中明确选择的一张图片');
+  });
+});

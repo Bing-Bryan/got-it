@@ -4,6 +4,7 @@ export interface BookmarkAnchor extends Anchor {segments?: Anchor[]}
 export function bookmarkSegments(anchor:BookmarkAnchor):Anchor[]{return anchor.segments??[anchor];}
 export function bookmarkQuote(anchor:BookmarkAnchor){return bookmarkSegments(anchor).map(a=>a.translation?.quote??a.quote).join('\n');}
 export function bookmarkContext(anchor:BookmarkAnchor){const segments=bookmarkSegments(anchor),first=segments[0].translation??segments[0],last=segments.at(-1)!.translation??segments.at(-1)!;return {before:first.prefix,after:last.suffix};}
+export function bookmarkIsImage(anchor:BookmarkAnchor|undefined|null){return !!anchor?.image;}
 export function combineBookmarkAnchors(segments:Anchor[]):BookmarkAnchor {if(segments.length===1)return segments[0];const quote=segments.map(a=>a.quote).join('\n');const {translation:_,pdf:__,...first}=segments[0];return {...first,quote,start:0,end:quote.length,prefix:segments[0].prefix,suffix:segments.at(-1)!.suffix,segments};}
 export interface ReadingBookmark {
   id: string; version: 1; createdAt: string; creationOperationId: string;
@@ -17,10 +18,13 @@ export interface BookmarkPage { bookmarks: ReadingBookmark[]; total: number; rev
 export const BOOKMARK_LIMITS = { excerpt: 100_000, context: 240, records: 20_000, query: 1000 } as const;
 export function bookmarkPosition(value: Pick<ReadingBookmark,'entryId'|'revisionId'|'anchor'>) {
   const a=value.anchor,t=a.translation;
-  return JSON.stringify([value.entryId,value.revisionId,a.documentId,a.blockId,a.start,a.end,
+  const position:[unknown,...unknown[]]=[value.entryId,value.revisionId,a.documentId,a.blockId,a.start,a.end,
     a.pdf ? [a.pdf.fileHash,a.pdf.page,a.pdf.rects,a.pdf.source,a.pdf.ocrId??null] : null,
     t ? [t.translationId,t.version,t.sourceVersion,t.blockId,t.start,t.end] : null,
-    ...(a.segments?[a.segments.map(s=>[s.blockId,s.start,s.end,s.translation?[s.translation.translationId,s.translation.version,s.translation.sourceVersion,s.translation.start,s.translation.end]:null])]:[])]);
+    ...(a.segments?[a.segments.map(s=>[s.blockId,s.start,s.end,s.translation?[s.translation.translationId,s.translation.version,s.translation.sourceVersion,s.translation.start,s.translation.end]:null])]:[])];
+  // Keep the historical text/PDF key byte-for-byte; image identity is appended only for new records.
+  if(a.image)position.push([a.image.mediaId,a.image.resourceId]);
+  return JSON.stringify(position);
 }
 export const normalizedBookmarkText=(text:string)=>text.normalize('NFKC').toLocaleLowerCase().replace(/\s+/g,' ').trim();
 export function bookmarkSearchScore(bookmark:ReadingBookmark,query:string) {

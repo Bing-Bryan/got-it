@@ -5,24 +5,43 @@ import {HOSTED,hostedGeneration,clearHostedGeneration,trialId} from './runtime-m
 import {noteAnswerComplete,track} from './hosted-usage';
 import {librarySession} from "./library-session";
 import {HOSTED_IMAGE_MAX_BYTES} from './pdf-data';
+import {imagePngTarget} from './image-actions';
 import { requestDeadline } from "./request-deadline";
 import type { InquiryEvent, InquiryRequest, InquiryResponse, ThreadMessage } from "../types";
 
 export class InquiryStreamError extends Error {constructor(message:string,public search?:SearchTrace){super(message);}}
 export const PROGRESS_LABELS = { accepted: "请求已接受，正在处理", "search-started": "正在搜索资料", "search-completed": "已收到搜索结果，正在整理", "checking-sources": "正在核对引用文字" };
+function base64(bytes:Uint8Array){let out='';for(let i=0;i<bytes.length;i+=32768)out+=String.fromCharCode(...bytes.subarray(i,i+32768));return btoa(out);}
 async function hostedCrop(entryId:string,cropId:string):Promise<string>{
   // Loaded lazily: a static import would create a module cycle through the library client.
   const {libraryBinary}=await import('./library-client');
   const blob=await (await libraryBinary(`/entries/${entryId}/resources/${cropId}`)).blob();
   const bytes=new Uint8Array(await blob.arrayBuffer());
   if(bytes.length>HOSTED_IMAGE_MAX_BYTES)throw new Error('所选区域图片过大，请缩小范围后重新框选。');
-  let out='';for(let i=0;i<bytes.length;i+=32768)out+=String.fromCharCode(...bytes.subarray(i,i+32768));
-  return btoa(out);
+  return base64(bytes);
+}
+async function hostedWebImage(entryId:string,revisionId:string,resourceId:string):Promise<string>{
+  const {libraryBinary}=await import('./library-client');
+  const blob=await (await libraryBinary(`/entries/${entryId}/web-resources/${revisionId}/${resourceId}`)).blob();
+  let bitmap:ImageBitmap;
+  try{bitmap=await createImageBitmap(blob);}catch{throw new Error('这张图片暂时无法读取，请刷新后重试。');}
+  try{
+    const target=imagePngTarget(bitmap.width,bitmap.height);
+    if(!target)throw new Error('这张图片尺寸无效，暂时不能发送。');
+    if(typeof document==='undefined')throw new Error('当前环境无法转换图片。');
+    const canvas=document.createElement('canvas');canvas.width=target.width;canvas.height=target.height;
+    const context=canvas.getContext('2d');if(!context)throw new Error('当前浏览器无法转换图片。');
+    context.drawImage(bitmap,0,0,target.width,target.height);
+    if(typeof canvas.toBlob!=='function')throw new Error('当前浏览器无法转换图片。');
+    const png=await new Promise<Blob|null>(resolve=>canvas.toBlob(resolve,'image/png'));
+    if(!png||png.size>HOSTED_IMAGE_MAX_BYTES)throw new Error('这张图片转换后仍然过大，暂时不能发送。');
+    return base64(new Uint8Array(await png.arrayBuffer()));
+  }finally{bitmap.close?.();}
 }
 export async function readInquiryStream(request: InquiryRequest, onEvent: (event: InquiryEvent) => void, signal?: AbortSignal, fetcher = fetch): Promise<void> {
-  // Hosted requests carry the stored crop itself; the server has no reading library.
-  const hostedImage=HOSTED&&request.image?await hostedCrop(request.image.entryId,request.image.cropId):undefined;
-  const hostedBody=HOSTED?{...(hostedImage?{image:{data:hostedImage}}:{}),requestId:request.requestId,intent:request.intent==='why'?'explain':request.intent,quote:request.quote,context:request.context,question:request.question,history:request.history?.slice(-8).map(m=>({role:m.role,content:m.content})),...(request.scope?{scope:request.scope}:{}),...(request.round?{round:request.round}:{}),...(request.parentMessageId?{parentMessageId:request.parentMessageId}:{}),...(request.readingScope?{readingScope:request.readingScope}:{}),...(request.explanationMode==='local'||request.explanationMode==='web'?{explanationMode:request.explanationMode}:{})}:undefined;
+  // Hosted requests carry the stored image itself; the server has no reading library.
+  const hostedImage=HOSTED&&request.image?(request.image.kind==="web-media"?await hostedWebImage(request.image.entryId,request.image.revisionId,request.image.resourceId):await hostedCrop(request.image.entryId,request.image.cropId)):undefined;
+  const hostedBody=HOSTED?{...(hostedImage?{image:{data:hostedImage,...(request.image?.kind==="web-media"?{kind:"web-image"}:{})}}:{}),requestId:request.requestId,intent:request.intent==='why'?'explain':request.intent,quote:request.quote,context:request.context,question:request.question,history:request.history?.slice(-8).map(m=>({role:m.role,content:m.content})),...(request.scope?{scope:request.scope}:{}),...(request.round?{round:request.round}:{}),...(request.parentMessageId?{parentMessageId:request.parentMessageId}:{}),...(request.readingScope?{readingScope:request.readingScope}:{}),...(request.explanationMode==='local'||request.explanationMode==='web'?{explanationMode:request.explanationMode}:{})}:undefined;
   const budget = requestDeadline(30_000, signal);
   const resumed = () => { try { budget.check(); } catch { /* abort settles the active read */ } };
   if (typeof document !== "undefined") document.addEventListener("visibilitychange", resumed);

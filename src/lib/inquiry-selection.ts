@@ -1,10 +1,15 @@
 import type {Anchor,ActiveInquiryIntent} from '../types';
 import {selectedQuote,translationContext} from './translation-reading';
 import {readingContext,questionContext,explanationContext} from './reading-context';
+import {imageContextText} from './image-actions';
 export const INQUIRY_SELECTION_LIMITS={quote:20000,multiContext:6000,context:50000,question:10000,ask:2000} as const;
 export function selectionContext(article:HTMLElement|null,anchor:Anchor,intent:ActiveInquiryIntent,question:string){
  if(anchor.segments){const first=anchor.segments[0].translation??anchor.segments[0],last=anchor.segments.at(-1)!.translation??anchor.segments.at(-1)!;
   const mapped=translationContext(anchor);return [mapped,`选区前文：${first.prefix}`,`选区后文：${last.suffix}`].filter(Boolean).join('\n');
+ }
+ if(anchor.image){
+  const heading=anchor.headingPath.join(' / ');
+  return [heading?`章节：${heading}`:'',imageContextText(anchor.image,anchor.suffix||anchor.prefix)].filter(Boolean).join('\n')||selectedQuote(anchor);
  }
  return translationContext(anchor)??(intent==='ask'?questionContext(article,anchor,question):intent==='explain'?explanationContext(article,anchor):readingContext(article,anchor));
 }

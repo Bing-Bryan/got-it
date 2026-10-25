@@ -1,5 +1,6 @@
 import {projectDomWebAnchor} from './web-anchor-compat';
 import { sameAnchor } from "./inquiry-tabs";
+import { imageAnchorElement } from "./image-actions";
 import { INTENT_META, NEW_INQUIRY_INTENTS } from "../types";
 import type { Anchor, Inquiry, SelectionDraft } from "../types";
 
@@ -434,12 +435,30 @@ function clearHighlightMarks(article: HTMLElement): void {
 /** Remove highlights previously applied by applyInquiryHighlights. */
 export function clearInquiryHighlights(article: HTMLElement): void {
   clearHighlightMarks(article);
+  article.querySelectorAll<HTMLImageElement>("img[data-image-inquiry]").forEach(image => {
+    image.removeAttribute("data-image-inquiry");
+    image.removeAttribute("data-image-intents");
+    const original = image.dataset.imageOriginalLabel;
+    if (original !== undefined) {
+      if (original) image.setAttribute("aria-label", original);
+      else image.removeAttribute("aria-label");
+      delete image.dataset.imageOriginalLabel;
+    }
+    image.classList.remove("image-inquiry-mark", "is-active", "is-emphasized");
+  });
 }
 
-/** Find an existing rendered mark, including a shared anchor's representative. */
+/** Find an existing rendered mark or image, including a shared anchor's representative. */
 export function findInquiryHighlight(article: HTMLElement, inquiries: readonly Inquiry[], inquiryId: string | null): HTMLElement | null {
   const inquiry = inquiries.find(item => item.id === inquiryId);
   if (!inquiry) return null;
+  if (inquiry.anchor.image) {
+    return Array.from(article.querySelectorAll<HTMLImageElement>("img[data-image-inquiry]")).find(image => {
+      if (image.dataset.imageInquiry === inquiry.id) return true;
+      const representative = inquiries.find(item => item.id === image.dataset.imageInquiry);
+      return representative && sameAnchor(representative.anchor, inquiry.anchor);
+    }) ?? null;
+  }
   return Array.from(article.querySelectorAll<HTMLElement>("mark[data-focus-stickies-highlight]")).find(mark => {
     if (mark.dataset.inquiryId === inquiry.id) return true;
     const representative = inquiries.find(item => item.id === mark.dataset.inquiryId);
@@ -452,6 +471,9 @@ export function emphasizeInquiryHighlight(article: HTMLElement, inquiries: reado
   const target = findInquiryHighlight(article, inquiries, inquiryId);
   article.querySelectorAll<HTMLElement>("mark[data-focus-stickies-highlight]").forEach(mark => {
     mark.classList.toggle("is-emphasized", !!target && mark.dataset.inquiryId===target.dataset.inquiryId);
+  });
+  article.querySelectorAll<HTMLImageElement>("img[data-image-inquiry]").forEach(image => {
+    image.classList.toggle("is-emphasized", !!target && image.dataset.imageInquiry===target.dataset.imageInquiry);
   });
 }
 
@@ -466,13 +488,29 @@ export function applyInquiryHighlights(
   onMissing?: (inquiry: Inquiry) => void,
   onResolved?: (inquiry: Inquiry) => void,
 ): () => void {
-  clearHighlightMarks(article);
+  clearInquiryHighlights(article);
 
   const highlighted = inquiries.filter((inquiry, index) => !inquiries.some((other, otherIndex) =>
     other.id !== inquiry.id && sameAnchor(other.anchor, inquiry.anchor) &&
     (other.id === activeInquiryId || (inquiry.id !== activeInquiryId && otherIndex < index))));
   for (const inquiry of highlighted) {
     if (inquiry.anchor.scope === "document") continue;
+    if (inquiry.anchor.image) {
+      const translatedView=article.dataset.readingSide==='translated';
+      const image = imageAnchorElement(article, inquiry.anchor);
+      if (!image) { if (!translatedView) onMissing?.(inquiry); continue; }
+      const intents = new Set(inquiries.filter(other => other.id === inquiry.id || sameAnchor(other.anchor, inquiry.anchor)).map(other => other.intent));
+      const orderedIntents = [...NEW_INQUIRY_INTENTS, "entity" as const, "why" as const].filter(intent => intents.has(intent));
+      if (image.dataset.imageOriginalLabel === undefined) image.dataset.imageOriginalLabel = image.getAttribute("aria-label") ?? "";
+      image.dataset.imageInquiry = inquiry.id;
+      image.dataset.imageIntents = orderedIntents.join(" ");
+      image.classList.add("image-inquiry-mark");
+      image.classList.toggle("is-active", inquiry.id === activeInquiryId);
+      image.classList.toggle("is-emphasized", inquiry.id === activeInquiryId);
+      image.setAttribute("aria-label", `图片知识贴（${orderedIntents.map(intent => INTENT_META[intent].label).join("、")}）：${inquiry.anchor.quote}。${inquiry.question}；按 Enter 仍可查看大图`);
+      if (!translatedView) onResolved?.(inquiry);
+      continue;
+    }
     const translatedView=article.dataset.readingSide==='translated';
     const segments=inquiry.anchor.segments??[inquiry.anchor];
     const placements:Array<{block:HTMLElement;start:number;end:number}>=[];
@@ -512,5 +550,5 @@ export function applyInquiryHighlights(
     if(!translatedView){if(decorated)onResolved?.(inquiry);else onMissing?.(inquiry);}
   }
 
-  return () => clearHighlightMarks(article);
+  return () => clearInquiryHighlights(article);
 }

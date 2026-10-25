@@ -4,6 +4,7 @@ import { copyWebDocument } from "./web-data";
 import { copyPdfDocument, copyPdfLocation, insidePage } from "./pdf-data";
 import { copyActiveTab, copyVisitedIds } from "./inquiry-tabs";
 import { copyModelPreferences } from "./model-routing";
+import { copyImageAnchor } from "./image-actions";
 import { copyOperation, copyVerification, copyTimings } from "./verification";
 import { interruptMessage } from "./inquiry-stream";
 import { sourceEvidence, copySearch } from "./evidence";
@@ -45,6 +46,9 @@ function providerId(value: unknown): value is ProviderId {
 
 function isAnchor(value: unknown,nested=false): value is Anchor {
   if (!isRecord(value) || (value.scope !== undefined && value.scope !== "document") || (value.scope === "document" && (value.pdf !== undefined || value.blockId !== "document" || value.start !== 0 || value.end !== 0)) || (value.pdf !== undefined && !copyPdfLocation(value.pdf))) return false;
+  if(value.image!==undefined){
+    if(nested||value.scope!==undefined||value.pdf!==undefined||value.segments!==undefined||value.translation!==undefined||value.start!==0||value.end!==0||!copyImageAnchor(value.image))return false;
+  }
   if(value.segments!==undefined){
     if(nested||value.scope!==undefined||value.pdf!==undefined||value.translation!==undefined||!Array.isArray(value.segments)||value.segments.length<2||value.segments.length>1000||!value.segments.every(segment=>isAnchor(segment,true)))return false;
     const segments=value.segments as Anchor[];if(segments.some(segment=>segment.documentId!==value.documentId||segment.scope!==undefined||segment.pdf!==undefined||segment.start<0||segment.end<=segment.start||segment.end-segment.start!==segment.quote.length||!!segment.translation!==!!segments[0].translation)||new Set(segments.map(segment=>segment.blockId)).size!==segments.length)return false;
@@ -57,6 +61,7 @@ function isAnchor(value: unknown,nested=false): value is Anchor {
     Array.isArray(value.headingPath) &&
     value.headingPath.every(stringField) &&
     stringField(value.quote) &&
+    (value.image === undefined || value.quote.trim().length > 0) &&
     stringField(value.prefix) &&
     stringField(value.suffix) &&
     Number.isInteger(value.start) &&
@@ -166,6 +171,7 @@ function copyAnchor(anchor: Anchor): Anchor {
     ...(copyTranslationSelection(anchor.translation) ? {translation:copyTranslationSelection(anchor.translation)} : {}),
     ...(anchor.scope === "document" ? {scope: "document" as const} : {}),
     ...(anchor.pdf ? { pdf: copyPdfLocation(anchor.pdf)! } : {}),
+    ...(anchor.image ? { image: copyImageAnchor(anchor.image)! } : {}),
     ...(anchor.textVersion === 2 ? { textVersion: 2 as const } : {}),
     documentId: anchor.documentId,
     blockId: anchor.blockId,
@@ -280,6 +286,7 @@ export function restoreWorkspace(value: unknown): Workspace | null {
   if (!isWorkspace(value)) return null;
   if (value.inquiries.some(i => {
     if (i.anchor.scope === 'document') return i.anchor.documentId !== value.document.id;
+    if (i.anchor.image) return value.document.kind !== 'web';
     if (value.document.kind !== 'pdf') return !!i.anchor.pdf;
     const a = i.anchor.pdf, page = a && value.document.pdf.pages[a.page-1];
     return !a || a.fileHash !== value.document.contentHash || !page || !a.rects.every(r=>insidePage(r,page));

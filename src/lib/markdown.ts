@@ -24,7 +24,7 @@ export function renderMarkdown(markdown: string, web?: WebDocumentData, imageSou
     const media = mediaById.get(id);
     if (!media) return `<span class="image-unavailable">图片未获授权：${escapeHtml(text)}</span>`;
     if (media.status !== "saved") return missingWebMediaHtml(media);
-    return `<img${mediaLegacyAttribute(media)} data-web-media="${escapeHtml(media.id)}" tabindex="0" role="button" aria-label="放大查看：${escapeHtml(media.alt || "静态图片或图表")}" alt="${escapeHtml(media.alt)}"${media.width ? ` width="${media.width}"` : ""}${media.height ? ` height="${media.height}"` : ""}>`;
+    return `<img${mediaLegacyAttribute(media)} data-web-media="${escapeHtml(media.id)}" data-web-resource="${escapeHtml(media.resourceId ?? "")}" tabindex="0" role="button" aria-label="放大查看：${escapeHtml(media.alt || "静态图片或图表")}" alt="${escapeHtml(media.alt)}"${media.width ? ` width="${media.width}"` : ""}${media.height ? ` height="${media.height}"` : ""}>`;
   };
   const rawHtml = marked.parse(markdown, {
     async: false,

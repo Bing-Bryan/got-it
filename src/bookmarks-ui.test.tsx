@@ -79,3 +79,17 @@ it('cancels delayed welcome preparation if the browser selection changes while R
  const prep=deferred<{id:string;revisionId:string}>(),onSaved=vi.fn();let selection='A';const spy=vi.spyOn(window,'getSelection').mockImplementation(()=>({toString:()=>selection} as Selection));api.mockResolvedValue(result);
  try{await act(async()=>root.render(<BookmarkAction entryId="" revisionId="" anchor={anchor} prepareEntry={()=>prep.promise} onSaved={onSaved}/>));await click('button');selection='B';await act(async()=>prep.resolve({id:'entry',revisionId:'rev'}));expect(api).not.toHaveBeenCalled();expect(onSaved).not.toHaveBeenCalled();}finally{spy.mockRestore();}
 });
+
+it('marks image bookmarks in the shared list and locates the same media entry',async()=>{
+ const imageAnchor={...anchor,blockId:'web-media-image-one',quote:'Architecture',start:0,end:0,image:{kind:'web-media' as const,mediaId:'image-one',resourceId:'b'.repeat(64),revisionId:'rev',alt:'Architecture',width:640,height:360}};
+ const imageBookmark={...b,id:'image-one-bookmark',anchor:imageAnchor,excerpt:'Architecture',contextBefore:'',contextAfter:'说明'};
+ api.mockResolvedValue({bookmarks:[imageBookmark],total:1,revision:1,warnings:[]});const locate=vi.fn(async()=>{});
+ await act(async()=>root.render(<BookmarksView version={0} onClose={()=>{}} onLocate={locate}/>));await act(async()=>vi.advanceTimersByTimeAsync(1));
+ expect(host.textContent).toContain('图片收藏');expect(host.textContent).toContain('Architecture');
+ await click('.bookmark-card-actions button');expect(locate).toHaveBeenCalledWith(imageBookmark);
+});
+it('names the image bookmark action for the image, not a text selection',async()=>{
+ api.mockResolvedValueOnce({bookmark:null});
+ await act(async()=>root.render(<BookmarkAction subject="image" entryId="entry" revisionId="rev" anchor={{...anchor,image:{kind:'web-media',mediaId:'image-one',resourceId:'b'.repeat(64),revisionId:'rev',alt:'Architecture'},blockId:'web-media-image-one',quote:'Architecture',start:0,end:0}} onSaved={()=>{}}/>));
+ expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('收藏图片');
+});

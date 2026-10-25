@@ -4,8 +4,20 @@ import type { Anchor, SelectionDraft, Workspace } from '../types';
 import { createAnchor,createAnchorFromSelection } from './anchors';
 import { canonicalTranslationDraft } from './translation-reading';
 import { bookmarkSegments, combineBookmarkAnchors, type BookmarkAnchor } from './bookmark-types';
+import { createImageAnchor } from './image-actions';
+import type { WebMedia } from './web-data';
 export interface BookmarkDraft extends Omit<SelectionDraft,'anchor'> {anchor:BookmarkAnchor}
 export function bookmarkBlocks(article:HTMLElement){return bookmarkRootElements(article);}
+export function createImageBookmarkDraft(workspace:Workspace,revisionId:string,media:WebMedia,image?:HTMLImageElement|null):BookmarkDraft|{error:string}{
+ if(workspace.document.kind!=='web')return {error:'只有网页图片支持图片收藏。'};
+ const block=image?.closest<HTMLElement>('[data-block-id]');
+ const nearby=(block?.textContent??'').replace(/\s+/g,' ').trim().slice(0,240);
+ let headingPath:string[]=[];try{headingPath=JSON.parse(block?.dataset.headingPath??'[]');if(!Array.isArray(headingPath)||!headingPath.every(item=>typeof item==='string'))headingPath=[];}catch{/* Optional heading metadata. */}
+ const anchor=createImageAnchor({documentId:workspace.document.id,revisionId,media,headingPath,prefix:'',suffix:nearby});
+ if(!anchor)return {error:'这张图片尚未完整保存到本机，暂时不能收藏。'};
+ const rect=image?.getBoundingClientRect();
+ return {anchor,rect:{top:rect?.top??0,left:rect?.left??0,width:rect?.width??0,height:rect?.height??0},context:''};
+}
 export function createBookmarkDraft(selection:Selection|null,article:HTMLElement,workspace:Workspace):BookmarkDraft|{error:string}{
  if(!selection||selection.isCollapsed||selection.rangeCount!==1)return {error:'请先选择要收藏的文字。'};
  const range=selection.getRangeAt(0);if(!article.contains(range.startContainer)||!article.contains(range.endContainer))return {error:'选区不在当前材料中。'};

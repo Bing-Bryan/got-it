@@ -24,9 +24,9 @@ it('keeps storage scope and backup failures discoverable without claiming a back
   await act(async()=>{details.open=true;document.body.dispatchEvent(new Event('pointerdown',{bubbles:true}));});expect(details.open).toBe(false);
  }finally{await act(async()=>root.unmount());host.remove();}
 });
-it('shows request and search destinations in the compact prompt before any action',async()=>{
+it('shows text, image and search destinations in save and privacy',async()=>{
  const host=document.body.appendChild(document.createElement('div')),root=createRoot(host);
- try{await act(async()=>root.render(<HostedSendDisclosure compact/>));expect(host.textContent).toContain('选区、有限上下文与追问');expect(host.textContent).toContain('托管及模型服务');expect(host.textContent).toContain('博查');expect(host.querySelector('details')).toBeNull();}finally{await act(async()=>root.unmount());host.remove();}
+ try{await act(async()=>root.render(<HostedSendDisclosure/>));expect(host.textContent).toContain('选区、主动选择的图片');expect(host.textContent).toContain('托管服务及模型服务商');expect(host.textContent).toContain('博查');expect(host.querySelector('details')).toBeNull();}finally{await act(async()=>root.unmount());host.remove();}
 });
 
 it('does not round small browser usage down to an apparent empty library',async()=>{

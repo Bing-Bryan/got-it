@@ -48,12 +48,24 @@ export type DocumentSnapshot = (DocumentBase & { kind?: 'markdown'; markdown: st
   | (DocumentBase & { kind: 'pdf'; pdf: PdfDocumentData; markdown?: never })
   | (DocumentBase & { kind: 'web'; markdown: string; web: WebDocumentData; pdf?: never });
 
+export interface ImageAnchor {
+  kind: "web-media";
+  mediaId: string;
+  resourceId: string;
+  revisionId: string;
+  alt: string;
+  caption?: string;
+  width?: number;
+  height?: number;
+}
+
 export interface Anchor {
   /** Ordered complete continuous selection; leaves use the legacy single-block shape. */
   segments?: Anchor[];
   translation?: TranslationSelection;
   scope?: "document";
   pdf?: PdfLocation;
+  image?: ImageAnchor;
   textVersion?: 2;
   documentId: string;
   blockId: string;
@@ -211,9 +223,13 @@ export interface SelectionDraft {
   };
 }
 
+export type InquiryImage =
+  | { entryId: string; fileHash: string; cropId: string; kind?: "pdf-crop" }
+  | { kind: "web-media"; entryId: string; revisionId: string; mediaId: string; resourceId: string };
+
 export interface InquiryRequest extends InquiryOperation {
   readingScope?: "document";
-  image?: { entryId: string; fileHash: string; cropId: string };
+  image?: InquiryImage;
   requestId?: string;
   providerId: ProviderId;
   intent: InquiryIntent;

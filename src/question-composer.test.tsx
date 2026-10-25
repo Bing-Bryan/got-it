@@ -69,3 +69,12 @@ it.each([{isComposing:true},{keyCode:229}])('keeps IME Escape away from the nati
   await key({key:'Escape'});expect(close).toHaveBeenCalledOnce();expect(windowDismiss).not.toHaveBeenCalled();
  } finally {window.removeEventListener('keydown',dismiss);}
 });
+
+it('disables only the requested action and exposes its reason without adding a disclosure line',async()=>{
+ const select=vi.fn(),close=vi.fn();
+ await act(async()=>root.render(<SelectionActions onSelect={select} onClose={close} actionReasons={{verify:'这张图没有可检索的说明文字'}} />));
+ const explain=host.querySelector<HTMLButtonElement>('[data-intent=explain]')!,verify=host.querySelector<HTMLButtonElement>('[data-intent=verify]')!;
+ expect(explain.disabled).toBe(false);expect(verify.disabled).toBe(true);expect(verify.title).toContain('没有可检索');
+ expect(host.querySelector('.selection-action-note')?.textContent).toContain('没有可检索');
+ expect(host.textContent).not.toContain('托管及模型服务');
+});

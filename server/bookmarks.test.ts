@@ -110,3 +110,28 @@ it('rejects a forged continuous range that skips unsupported visible source text
  const {combineBookmarkAnchors}=await import('../src/lib/bookmark-types');
  await expect(s.store.create({...s.make('FIRST'),anchor:combineBookmarkAnchors([first,last])})).rejects.toMatchObject({code:'bookmark_anchor_mismatch'});expect((await s.store.list()).total).toBe(0);
 });
+
+it('stores image bookmarks by media identity and rejects forged media, revision or wording',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'got-it-bookmark-image-'));dirs.push(dir);
+ const library=new ReadingLibrary(join(dir,'data')),fixture=await (await import('./test-support/web-fixture')).webFixture();
+ if(fixture.workspace.document.kind!=='web')throw Error();
+ const doc=fixture.workspace.document,media=doc.web.media.find(m=>m.kind==='image'&&m.status==='saved')!;
+ const {createHash}=await import('node:crypto'),{PNG}=await import('pngjs'),bytes=PNG.sync.write(new PNG({width:17,height:8})),resourceId=createHash('sha256').update(bytes).digest('hex');
+ const second={...media,id:'image-two',resourceId,bytes:bytes.length,width:17,height:8};
+ doc.web.media.push(second);fixture.resources.set(resourceId,{mime:'image/png',bytes,width:17,height:8});
+ const entry=await library.addWeb(fixture.workspace,fixture.resources,randomUUID()),store=new Bookmarks(library);
+ const {createImageAnchor}=await import('../src/lib/image-actions');
+ const base={entryId:entry.id,revisionId:entry.revisionId};
+ const first=createImageAnchor({documentId:doc.id,revisionId:entry.revisionId,media,suffix:'Diagram caption.'})!;
+ const other=createImageAnchor({documentId:doc.id,revisionId:entry.revisionId,media:second,suffix:'Diagram caption.'})!;
+ const saved=await store.create({...base,operationId:randomUUID(),anchor:first});
+ expect(saved.created).toBe(true);expect(saved.bookmark.excerpt).toBe('Diagram');
+ expect((await store.create({...base,operationId:randomUUID(),anchor:first})).created).toBe(false);
+ const secondSaved=await store.create({...base,operationId:randomUUID(),anchor:other});expect(secondSaved.bookmark.id).not.toBe(saved.bookmark.id);
+ expect((await store.list()).total).toBe(2);expect((await store.locate(saved.bookmark.id)).bookmark.anchor.image?.mediaId).toBe(media.id);
+ await expect(store.create({...base,operationId:randomUUID(),anchor:{...first,image:{...first.image!,resourceId:'d'.repeat(64)}}})).rejects.toMatchObject({status:409});
+ await expect(store.create({...base,operationId:randomUUID(),anchor:{...first,image:{...first.image!,revisionId:randomUUID()}}})).rejects.toMatchObject({status:409});
+ await expect(store.create({...base,operationId:randomUUID(),anchor:{...first,quote:'伪造说明'}})).rejects.toMatchObject({status:400});
+ await expect(store.create({...base,operationId:randomUUID(),anchor:{...first,start:1}})).rejects.toMatchObject({status:400});
+ expect((await store.list('伪造说明')).total).toBe(0);expect((await store.list()).total).toBe(2);
+});

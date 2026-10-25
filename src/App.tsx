@@ -5,7 +5,7 @@ import {PdfReaderBoundary,reloadAfterPreserving} from './PdfReaderBoundary';
 import {InquiryStreamError} from './lib/inquiry-stream';
 import {loadSampleImages,setBrowserLibraryNamespace} from './lib/browser-library';
 import {HOSTED,hostedCapabilities} from './lib/runtime-mode';
-import {HostedSettings,HostedSendDisclosure} from './HostedControls';
+import {HostedSettings} from './HostedControls';
 import {installUsage,track,markMaterial,noteAiStarted} from './lib/hosted-usage';
 import {revealBookmarkRanges} from './lib/bookmark-navigation';
 import {currentHeadingIndex,scrolledToEnd} from './lib/current-heading';
@@ -17,6 +17,7 @@ import { selectionContext,selectionRequestError } from './lib/inquiry-selection'
 import { DocumentBookmarks } from './DocumentBookmarks';
 import { useDocumentBookmarks } from './useDocumentBookmarks';
 import { createBookmarkDraft, bookmarkDomRanges, type BookmarkDraft } from './lib/bookmark-selection';
+import { imageAnchorElement, imageSearchText } from './lib/image-actions';
 import { applyBookmarkHighlights } from './lib/bookmark-highlights';
 import { bookmarkQuote, bookmarkSegments, bookmarkPosition, type BookmarkCreate, type BookmarkResult } from './lib/bookmark-types';
 import { useBookmarkFeedback } from './useBookmarkFeedback';
@@ -126,6 +127,7 @@ import { REFINEMENTS, canCompleteInquiry, type Refinement } from "./lib/learning
 import { loadWebMedia } from "./lib/web-media";
 import { WebMediaRetry } from "./WebMediaRetry";
 import { WebImageViewer } from "./WebImageViewer";
+import { WebImageActions } from "./WebImageActions";
 import {
   applyInquiryHighlights,
   emphasizeInquiryHighlight,
@@ -428,6 +430,13 @@ function App() {
     if(workspace.document.kind==='pdf')return;
     // Center while the list still covers the reader, then reveal the prepared source.
       library.rendered();
+      if(bookmarkTarget.anchor.image){
+        const image=articleRef.current&&imageAnchorElement(articleRef.current,bookmarkTarget.anchor);
+        if(image&&revealReadingTarget(image)){if(bookmarkPreparing.current?.fromStart)library.navigationRevealed();image.classList.add('is-bookmark-target');window.setTimeout(()=>image.classList.remove('is-bookmark-target'),1400);bookmarkFocus.current=image;setBookmarksOpen(false);}
+        else {showToast('无法定位收藏图片，说明仍保留。');setBookmarksOpen(true);}
+        bookmarkPreparing.current=null;setBookmarkTarget(null);
+        return;
+      }
       const ranges=articleRef.current&&bookmarkDomRanges(articleRef.current,bookmarkTarget.anchor);
       const block=ranges?.[0]?.startContainer.parentElement?.closest<HTMLElement>('[data-block-id],[data-bookmark-block-id]');
       if(ranges&&block&&revealBookmarkRanges(ranges)) {if(bookmarkPreparing.current?.fromStart)library.navigationRevealed();bookmarkFocus.current=block;setBookmarksOpen(false);if(bookmarkSegments(bookmarkTarget.anchor).some(segment=>segment.translation))showToast('已定位对应原文段落（非逐词对齐）。');}
@@ -535,6 +544,7 @@ function App() {
 
   const saveWarning=library.blocked||library.status==="阅读进度暂未保存";
   const selectionUnavailable = actionUnavailable({readOnly:!!library.historyId||!!library.recovery,ready:library.ready,busy:library.busy,saveFailed:library.blocked,invalidSelection:!selectionDraft,generating:!!selectionDraft && workspace.inquiries.some(i=>i.status==='answering'&&sameAnchor(i.anchor,selectionDraft.anchor)),modelReady,hosted:HOSTED});
+  const imageUnavailable = actionUnavailable({readOnly:!!library.historyId||!!library.recovery,ready:library.ready,busy:library.busy,saveFailed:library.blocked,modelReady,hosted:HOSTED});
   const recoverAction = (target:'connection'|'save') => {
     if(target==='connection') {setProviderOpen(true);if(HOSTED)void refreshProviders();return;}
     selectionSaveRecovery.current=true;
@@ -701,8 +711,8 @@ function App() {
       const requestId = newId("request"), messageId = newId("message"), controller = new AbortController();
       noteAiStarted(requestId);
       const operation = request.operation ?? (request.intent === "why" ? "explain" : request.intent);
-      const imageAnchor=workspaceRef.current.inquiries.find(i=>i.id===inquiryId)?.anchor.pdf;
-      const image=request.image ?? (imageAnchor?.kind==="region" && library.entry ? {entryId:library.entry.id,fileHash:imageAnchor.fileHash,cropId:imageAnchor.cropId!} : undefined);
+      const imageAnchor=workspaceRef.current.inquiries.find(i=>i.id===inquiryId)?.anchor;
+      const image=request.image ?? (imageAnchor?.pdf?.kind==="region" && library.entry ? {entryId:library.entry.id,fileHash:imageAnchor.pdf.fileHash,cropId:imageAnchor.pdf.cropId!} : imageAnchor?.image && library.entry ? {kind:"web-media" as const,entryId:library.entry.id,revisionId:imageAnchor.image.revisionId,mediaId:imageAnchor.image.mediaId,resourceId:imageAnchor.image.resourceId} : undefined);
       const scoped = { ...request, ...(image?{image}:{}), modelConfig: request.providerId === "codex" ? request.modelConfig ?? resolveModelConfig(operation, workspace.modelPreferences, codexModels) : undefined, requestId, operation, scope: request.scope ?? "initial" as const, round: request.round ?? 1 };
       requests.current.set(inquiryId, { id: requestId, controller });
       updateInquiry(inquiryId, inquiry => ({ ...inquiry, messages: [...inquiry.messages, { id: messageId, role: "assistant", content: "", createdAt: now(), modelConfig: scoped.modelConfig, requestId, completion: "provisional", operation: scoped.operation, explanationMode: scoped.explanationMode, scope: scoped.scope, round: scoped.round, parentMessageId: scoped.parentMessageId }] }));
@@ -777,6 +787,7 @@ function App() {
       if (library.readOnly || library.busy || !library.ready) return false;
       const draft = draftOverride ?? selectionDraft;
       if (!draft) return false;
+      if (intent === 'verify' && draft.anchor.image && HOSTED && !imageSearchText(draft.anchor.image, draft.anchor.suffix || draft.anchor.prefix)) { showToast('这张图没有可检索的说明文字，暂时无法查找来源；可以解释或问一问。'); return false; }
       if(HOSTED&&!library.entry){const sourceId=workspaceRef.current.document.id,visit=navigationSequence.current,selection=bookmarkDraftRef.current,nativeSelection=window.getSelection()?.toString();try{await library.ensureEntry();}catch(error){showToast(readError(error));return false;}if(workspaceRef.current.document.id!==sourceId||navigationSequence.current!==visit||(!draftOverride&&(bookmarkDraftRef.current!==selection||window.getSelection()?.toString()!==nativeSelection)))return false;}
       if (workspace.activeProviderId === "codex" && (modelsLoading || modelsError || !codexModels.length)) { showToast("请先等待模型列表加载完成，或刷新连接后再试。"); return false; }
       const matches = workspace.inquiries.filter(i => sameAnchor(i.anchor, draft.anchor));
@@ -820,7 +831,7 @@ function App() {
       }));
       const request: InquiryRequest = {
         providerId: workspace.activeProviderId,
-        ...(draft.anchor.pdf?.kind === "region" && library.entry ? {image:{entryId:library.entry.id,fileHash:draft.anchor.pdf.fileHash,cropId:draft.anchor.pdf.cropId!}} : {}),
+        ...(draft.anchor.pdf?.kind === "region" && library.entry ? {image:{entryId:library.entry.id,fileHash:draft.anchor.pdf.fileHash,cropId:draft.anchor.pdf.cropId!}} : draft.anchor.image && library.entry ? {image:{kind:"web-media" as const,entryId:library.entry.id,revisionId:draft.anchor.image.revisionId,mediaId:draft.anchor.image.mediaId,resourceId:draft.anchor.image.resourceId}} : {}),
         intent,
         ...(["explain", "ask"].includes(intent) ? {explanationMode:"auto" as const} : {}),
         ...(draft.anchor.scope === "document" ? { readingScope: "document" as const } : {}),
@@ -1039,6 +1050,15 @@ function App() {
       const pdf = inquiry.anchor.pdf;
       if (!pdf || pdf.fileHash !== current.document.pdf.resourceId || pdf.page < 1 || pdf.page > current.document.pdf.pages.length) { finishSourceNavigation(inquiryId, false); return; }
       setPdfTarget({id:inquiryId,nonce:sequence,returnToSource});
+      return;
+    }
+    if (inquiry.anchor.image) {
+      window.requestAnimationFrame(() => {
+        if (sequence !== navigationSequence.current || workspaceRef.current.document !== current.document || workspaceRef.current.activeInquiryId !== inquiryId) return;
+        const image = articleRef.current && imageAnchorElement(articleRef.current, inquiry.anchor);
+        if (image) { image.classList.add('is-inquiry-target'); window.setTimeout(() => image.classList.remove('is-inquiry-target'), 1400); }
+        finishSourceNavigation(inquiryId, !!image && revealReadingTarget(image), returnToSource, image ?? undefined);
+      });
       return;
     }
     window.requestAnimationFrame(() => {
@@ -1300,7 +1320,7 @@ function App() {
         </div>
       </main>
 
-      {workspace.document.kind === "web" ? <><WebImageViewer article={articleRef} documentKey={workspace.document.id+":"+documentLoadId}/><WebMediaRetry key={workspace.document.id+":"+documentLoadId+":"+library.historyId} article={articleRef} web={workspace.document.web} documentKey={workspace.document.id+":"+documentLoadId+":"+rendered.html} disabled={library.readOnly||!library.ready} retry={library.retryWebMedia}/></> : null}
+      {workspace.document.kind === "web" ? <><WebImageViewer article={articleRef} documentKey={workspace.document.id+":"+documentLoadId}/><WebMediaRetry key={workspace.document.id+":"+documentLoadId+":"+library.historyId} article={articleRef} web={workspace.document.web} documentKey={workspace.document.id+":"+documentLoadId+":"+rendered.html} disabled={library.readOnly||!library.ready} retry={library.retryWebMedia}/><WebImageActions key={workspace.document.id+":"+documentLoadId} article={articleRef} documentKey={workspace.document.id+":"+documentLoadId} workspace={workspace} entryId={library.entry?.id??""} revisionId={library.entry?.revisionId??""} readOnly={!!library.historyId||!!library.recovery||library.readOnly} busy={library.busy} ready={library.ready} modelReady={modelReady} hidden={showStart||mobileDrawerOpen||bookmarksOpen||providerOpen||!!selectionDraft||!!bookmarkDraft} unavailable={imageUnavailable} saveWarning={saveWarning} onRecover={recoverAction} bookmarkVersion={bookmarkVersion} onBookmarkSaved={finishBookmarkSave} onBookmarkStarted={beginBookmarkSave} onBookmarkFailed={bookmarkFeedback.failed} onCreate={(intent,draft,question)=>createInquiry(intent,draft,question)}/></> : null}
       <div className="result-rail" onMouseEnter={resultPanel.hoverReveal} onMouseLeave={resultPanel.leave}>
         <button ref={resultPanel.triggerRef} type="button" className="icon-button" aria-label="展开知识贴" aria-controls="knowledge-panel" aria-expanded={resultPanel.expanded} onClick={resultPanel.reveal}><PanelRightOpen size={17} /></button>
       </div>
@@ -1333,7 +1353,7 @@ function App() {
         </div>
         {!resultPanel.pinned ? <button className="result-collapse-action icon-button" type="button" aria-label="收起知识贴" title="收起知识贴（Esc）" onClick={resultPanel.close}><PanelRightClose size={15} /></button> : null}
         <div ref={listScrollRef} onScroll={rememberList} className={`intent-result${activeInquiry ? "" : " category-view"}`} id="intent-result" role="tabpanel" aria-labelledby={tabIntent !== "why" ? `intent-tab-${tabIntent}` : undefined}>
-        {activeInquiry ? <div className="result-navigation">{activeInquiry.anchor.translation ? <button type="button" className="source-excerpt" onClick={()=>{if(activeInquiry.anchor.translation?.translationId!==workspace.webTranslation?.id || activeInquiry.anchor.translation?.version!==workspace.webTranslation?.version){showToast("旧译文摘录仍保留；当前译文版本不同，请用对应原文段落回看。");return;}updateWorkspace(current=>({...current,readingSide:"translated"}));requestAnimationFrame(()=>locateInquiry(activeInquiry.id,true));}}><span>译文摘录：{activeInquiry.anchor.translation.quote}</span></button> : null}<button className="return-to-list" type="button" onClick={() => switchTab(tabIntent, true)}><ChevronLeft size={16} aria-hidden="true" />返回</button>{activeInquiry.anchor.scope === "document" ? <span className="source-excerpt">全文</span> : <button className="source-excerpt" type="button" title={activeInquiry.anchor.quote} aria-label={`定位原文：${activeInquiry.anchor.pdf?.kind === 'region' ? `第 ${activeInquiry.anchor.pdf.page} 页 · 所选区域` : activeInquiry.anchor.quote}`} onClick={() => { track("source-return"); if(activeInquiry.anchor.translation)updateWorkspace(current=>({...current,readingSide:"original"}));requestAnimationFrame(()=>locateInquiry(activeInquiry.id, true)); }}>{activeInquiry.anchor.pdf ? <span className="source-page">第 {activeInquiry.anchor.pdf.page} 页{activeInquiry.anchor.pdf.kind === 'region' ? ' · 所选区域' : ''}</span> : null}{activeInquiry.anchor.pdf?.kind !== 'region' ? <span>{activeInquiry.anchor.translation?"对应原文段落：":""}{activeInquiry.anchor.quote}</span> : null}</button>}</div> : null}
+        {activeInquiry ? <div className="result-navigation">{activeInquiry.anchor.translation ? <button type="button" className="source-excerpt" onClick={()=>{if(activeInquiry.anchor.translation?.translationId!==workspace.webTranslation?.id || activeInquiry.anchor.translation?.version!==workspace.webTranslation?.version){showToast("旧译文摘录仍保留；当前译文版本不同，请用对应原文段落回看。");return;}updateWorkspace(current=>({...current,readingSide:"translated"}));requestAnimationFrame(()=>locateInquiry(activeInquiry.id,true));}}><span>译文摘录：{activeInquiry.anchor.translation.quote}</span></button> : null}<button className="return-to-list" type="button" onClick={() => switchTab(tabIntent, true)}><ChevronLeft size={16} aria-hidden="true" />返回</button>{activeInquiry.anchor.scope === "document" ? <span className="source-excerpt">全文</span> : <button className="source-excerpt" type="button" title={activeInquiry.anchor.quote} aria-label={`定位原文：${activeInquiry.anchor.image ? `图片 · ${activeInquiry.anchor.quote}` : activeInquiry.anchor.pdf?.kind === 'region' ? `第 ${activeInquiry.anchor.pdf.page} 页 · 所选区域` : activeInquiry.anchor.quote}`} onClick={() => { track("source-return"); if(activeInquiry.anchor.translation)updateWorkspace(current=>({...current,readingSide:"original"}));requestAnimationFrame(()=>locateInquiry(activeInquiry.id, true)); }}>{activeInquiry.anchor.image ? <span className="source-page">图片</span> : null}{activeInquiry.anchor.pdf ? <span className="source-page">第 {activeInquiry.anchor.pdf.page} 页{activeInquiry.anchor.pdf.kind === 'region' ? ' · 所选区域' : ''}</span> : null}{activeInquiry.anchor.pdf?.kind !== 'region' ? <span>{activeInquiry.anchor.translation?"对应原文段落：":""}{activeInquiry.anchor.quote}</span> : null}</button>}</div> : null}
           <div hidden={!!activeInquiry} className="category-heading category-toolbar"><strong>本文的{tabIntent === "ask" ? "问题" : INTENT_META[tabIntent].shortLabel}</strong><div className="category-heading-actions"><span>{categoryItems.length} 条</span>
             <button id="inquiry-delete-toggle" className="category-delete-toggle" type="button" aria-label={deleteMode ? "退出删除模式" : "删除知识贴"} title={deleteMode ? "退出删除模式（Esc）" : "删除知识贴"} aria-pressed={deleteMode}
               disabled={!categoryItems.length || library.readOnly || library.busy || !library.ready}

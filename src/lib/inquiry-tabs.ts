@@ -1,8 +1,10 @@
 import type { Anchor, Inquiry, InquiryIntent, Workspace } from "../types";
 import { safeSourceUrl } from "./evidence";
+import { sameImageAnchor } from "./image-actions";
 export function sameAnchor(a: Anchor, b: Anchor): boolean {
   if(a.segments||b.segments)return a.matchStatus==='matched'&&b.matchStatus==='matched'&&a.documentId===b.documentId&&!!a.segments&&!!b.segments&&a.segments.length===b.segments.length&&a.segments.every((segment,index)=>sameAnchor(segment,b.segments![index]));
   if (a.scope === "document" || b.scope === "document") return a.scope === b.scope && a.documentId === b.documentId;
+  if (a.image || b.image) return a.matchStatus === "matched" && b.matchStatus === "matched" && sameImageAnchor(a, b);
   if (!!a.translation !== !!b.translation) return false;
   if (a.translation && b.translation && (a.translation.translationId !== b.translation.translationId || a.translation.quote !== b.translation.quote || a.translation.start !== b.translation.start || a.translation.end !== b.translation.end)) return false;
   if (!!a.pdf !== !!b.pdf) return false;

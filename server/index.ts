@@ -9,6 +9,9 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import sharp from "sharp";
+import { imageOrientedSize, imagePngTarget, isImageActionableMedia } from "../src/lib/image-actions";
+import { MAX_CROP_BYTES } from "../src/lib/pdf-data";
 
 import {
   parseInquiryRequest,
@@ -39,6 +42,22 @@ export function createApp(options: AppOptions = {}) {
   async function imageInput(req: Request, inquiry: import("../src/types").InquiryRequest) {
     if(!inquiry.image)return undefined;
     if(req.headers["x-got-it-session"]!==sessionToken)throw new ProviderError("阅读会话已过期，请重新打开材料后重试。",401,"image_session_expired");
+    if(inquiry.image.kind==="web-media"){
+      const {entryId,revisionId,mediaId,resourceId}=inquiry.image;
+      try{
+        const entry=await library.get(entryId),workspace=entry.revisionId===revisionId?entry.workspace:entry.history.find(h=>h.id===revisionId)?.workspace,doc=workspace?.document;
+        if(!doc||doc.kind!=="web")throw new Error();
+        const media=doc.web.media.find(m=>m.id===mediaId&&m.resourceId===resourceId);
+        if(!isImageActionableMedia(media))throw new Error();
+        const resource=await library.readWebResource(entryId,revisionId,resourceId);
+        const input=sharp(resource.bytes,{failOn:"warning",limitInputPixels:40_000_000,animated:false}),meta=await input.metadata();
+        const width=meta.width??0,height=meta.height??0,oriented=imageOrientedSize(width,height,meta.orientation),target=imagePngTarget(oriented.width,oriented.height);
+        if(!target)throw new Error();
+        const png=await input.rotate().resize({width:target.width,height:target.height,fit:"fill"}).png({compressionLevel:9}).toBuffer();
+        if(png.length>MAX_CROP_BYTES)throw new Error();
+        return png;
+      }catch{throw new ProviderError("网页图片未能读取或转换，请刷新后重试。",400,"image_resource_invalid");}
+    }
     const {entryId,fileHash,cropId}=inquiry.image;
     try { const {meta,bytes}=await library.resources.read(entryId,cropId);if(meta.kind!=="crop"||meta.fileHash!==fileHash)throw new Error();await library.resources.page(entryId,fileHash,meta.page!);return bytes; }
     catch {throw new ProviderError("裁图资源缺失或无权读取，请重新框选。",400,"image_resource_invalid");}

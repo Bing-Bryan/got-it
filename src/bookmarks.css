@@ -97,3 +97,19 @@
  .app-frame .selection-toolbar { bottom:calc(var(--reading-viewport-bottom,0px) + 10px); }
  .app-frame .selection-understanding { max-height:min(360px,calc(var(--reading-viewport-height,100dvh) - 24px)); }
 }
+
+/* Web image quick actions: a fixed action bar that grows out of the image's lower edge. */
+.image-actions-toolbar {position:fixed;z-index:120;width:min(510px,calc(100vw - 24px));max-height:min(360px,calc(100dvh - 24px));overflow:visible;border:1px solid var(--line-strong);border-radius:14px;background:var(--paper);box-shadow:var(--shadow-float);transform-origin:top center;animation:image-actions-in .16s ease-out both;}
+.image-actions-toolbar .selection-operation-row {min-width:0;}
+.image-actions-toolbar .selection-actions {padding:6px;}
+@keyframes image-actions-in {from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+@media (prefers-reduced-motion:reduce){.image-actions-toolbar{animation:none;}}
+.selection-action-note {margin:0;padding:0 12px 8px;color:var(--muted);font-size:var(--font-meta);line-height:1.5;}
+.web-image-actions-trigger {position:fixed;z-index:118;display:grid;place-items:center;width:44px;height:44px;padding:0;border:1px solid var(--line-strong);border-radius:12px;background:color-mix(in srgb,var(--paper) 92%,transparent);color:var(--muted);box-shadow:0 2px 10px #18213b12;}
+.web-image-actions-trigger:hover,.web-image-actions-trigger:focus-visible {color:var(--ink);background:var(--paper);}
+@media (hover:hover){.web-image-actions-trigger{display:none;}}
+.image-inquiry-mark {outline:2px solid color-mix(in srgb,var(--blue) 72%,transparent);outline-offset:3px;}
+.image-inquiry-mark.is-active,.image-inquiry-mark.is-emphasized {outline-style:dashed;outline-width:2px;outline-color:var(--blue-strong);}
+.is-bookmark-target,.is-inquiry-target {animation:image-target-flash 1.2s ease-out 1;}
+@keyframes image-target-flash {0%,25%{outline:3px solid var(--blue-strong);outline-offset:4px}100%{outline:2px solid transparent;outline-offset:4px}}
+@media (prefers-reduced-motion:reduce){.is-bookmark-target,.is-inquiry-target{animation:none;outline:2px dashed var(--blue-strong);outline-offset:3px;}}

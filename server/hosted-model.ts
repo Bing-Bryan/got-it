@@ -3,34 +3,36 @@ import {crc32} from 'node:zlib';
 import {AnswerDecoder} from './codex-stream';
 import type {InquiryRequest, InquiryResponse} from '../src/types';
 import {hostedPrompt, hostedInputBytes} from '../src/lib/hosted-prompt';
-export {hostedPrompt, IMAGE_PROMPT_NOTE} from '../src/lib/hosted-prompt';
+export {hostedPrompt, IMAGE_PROMPT_NOTE, WEB_IMAGE_PROMPT_NOTE} from '../src/lib/hosted-prompt';
 import {HostedError, MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS} from './hosted-budget';
 import {HOSTED_IMAGE_MAX_BYTES, REGION_NO_TEXT_CONTEXT} from '../src/lib/pdf-data';
 import {REGION_MAX_PIXELS, REGION_MAX_SIDE} from '../src/lib/pdf-region';
 
 // A user-selected PDF region, validated and carried as a data URL.
-export interface HostedImage {dataUrl:string;width:number;height:number;tokens:number}
+export interface HostedImage {dataUrl:string;width:number;height:number;tokens:number;kind:'region'|'web-image'}
 export type HostedInquiry=InquiryRequest&{hostedImage?:HostedImage};
 // Observed deepseek-flash usage stayed under ~700 tokens per megapixel. A settled
 // overrun blocks the whole day, so reserve well above that (2.5 MP -> 6750 tokens).
 export const imageTokenReserve=(pixels:number)=>Math.ceil(pixels/400)+500;
 const PNG_SIGNATURE=Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]);
 function parseHostedImage(value:unknown):HostedImage{
-  if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>k!=='data'))throw new HostedError('图片格式无效',400,'invalid_image');
+  if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>k!=='data'&&k!=='kind'))throw new HostedError('图片格式无效',400,'invalid_image');
+  const kind=(value as {kind?:unknown}).kind;
+  if(kind!==undefined&&kind!=='web-image'&&kind!=='region')throw new HostedError('图片类型无效',400,'invalid_image');
   const data=(value as {data:unknown}).data;
   if(typeof data!=='string'||data.length>Math.ceil(HOSTED_IMAGE_MAX_BYTES/3)*4||!/^[A-Za-z0-9+/]+={0,2}$/.test(data))throw new HostedError('图片格式无效',400,'invalid_image');
   const bytes=Buffer.from(data,'base64');
   if(bytes.length<33||bytes.length>HOSTED_IMAGE_MAX_BYTES||!bytes.subarray(0,8).equals(PNG_SIGNATURE)||bytes.readUInt32BE(8)!==13||bytes.toString('ascii',12,16)!=='IHDR'||crc32(bytes.subarray(12,29))!==bytes.readUInt32BE(29))throw new HostedError('图片格式无效',400,'invalid_image');
   const width=bytes.readUInt32BE(16),height=bytes.readUInt32BE(20);
-  if(!width||!height||width>REGION_MAX_SIDE||height>REGION_MAX_SIDE||width*height>REGION_MAX_PIXELS*1.01)throw new HostedError('图片尺寸超过限制，请缩小框选范围',413,'image_limit');
-  return {dataUrl:`data:image/png;base64,${data}`,width,height,tokens:imageTokenReserve(width*height)};
+  if(!width||!height||width>REGION_MAX_SIDE||height>REGION_MAX_SIDE||width*height>REGION_MAX_PIXELS*1.01)throw new HostedError(kind==='web-image'?'图片尺寸超过限制，请换一张图片':'图片尺寸超过限制，请缩小框选范围',413,'image_limit');
+  return {dataUrl:`data:image/png;base64,${data}`,width,height,tokens:imageTokenReserve(width*height),kind:kind==='web-image'?'web-image':'region'};
 }
 
 export const HOSTED_MODEL='deepseek-flash';
 export const usesHostedSearch=(request:InquiryRequest)=>request.intent==='verify'||request.intent==='explain'&&request.explanationMode==='web';
 // A selected region's quote is a placeholder; its searchable text is the OCR context.
 export function hostedSearchQuery(request:HostedInquiry):string{
-  const basis=request.hostedImage?(request.context===REGION_NO_TEXT_CONTEXT?'':request.context):request.quote;
+  const basis=request.hostedImage?(request.hostedImage.kind==='web-image'?request.context:request.context===REGION_NO_TEXT_CONTEXT?'':request.context):request.quote;
   return [basis,request.question].join(' ').replace(/https?:\/\/\S+/gi,' ').replace(/\s+/g,' ').trim().slice(0,256);
 }
 export function parseHostedInquiry(value:unknown,options:{images?:boolean}={}):HostedInquiry {
