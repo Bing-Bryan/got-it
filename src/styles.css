@@ -97,7 +97,8 @@ a:focus-visible {
 .app-frame {
   position: relative;
   display: grid;
-  --left-width: 236px;
+  --left-open-width: 236px;
+  --left-width: var(--left-open-width);
   --right-width: 360px;
   grid-template-columns: var(--left-width) minmax(0, 1fr) var(--right-width);
   width: 100%;
@@ -122,8 +123,34 @@ a:focus-visible {
   z-index: 20;
   display: flex;
   flex-direction: column;
-  background: var(--panel);
-  border-right: 1px solid var(--line);
+  overflow: clip;
+  background: transparent;
+  border-right: 0;
+}
+
+.left-sidebar-inner {
+  position: absolute;
+  inset: 0 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  width: var(--left-open-width);
+  min-width: 0;
+  min-height: 0;
+  background: var(--reading-desk);
+  border-right: 1px solid var(--reading-line);
+}
+
+.right-panel-inner {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: flex;
+  flex-direction: column;
+  width: var(--right-open-width, var(--right-width));
+  min-width: 0;
+  min-height: 0;
+  background: var(--reading-paper);
+  border-left: 1px solid var(--reading-line);
+  container: knowledge-panel / inline-size;
 }
 
 .brand-row {
@@ -807,9 +834,9 @@ a:focus-visible {
 .right-panel {
   position: relative;
   z-index: 16;
-  overflow: hidden;
-  background: var(--panel);
-  border-left: 1px solid var(--line);
+  overflow: clip;
+  background: transparent;
+  border-left: 0;
 }
 
 .panel-mobile-head {
@@ -1796,7 +1823,7 @@ a:focus-visible {
 
 @media (max-width: 1260px) {
   .app-frame {
-    --left-width: 216px;
+    --left-open-width: 216px;
     --right-width: 396px;
   }
 
@@ -1826,6 +1853,12 @@ a:focus-visible {
     box-shadow: 14px 0 42px rgba(31, 34, 43, 0.12);
     transform: translateX(-104%);
     transition: transform 180ms ease;
+  }
+
+  .left-sidebar-inner {
+    position: static;
+    width: 100%;
+    height: 100%;
   }
 
   .sidebar-open .left-sidebar {
@@ -1872,6 +1905,13 @@ a:focus-visible {
     box-shadow: -14px 0 42px rgba(31, 34, 43, 0.12);
     transform: translateX(104%);
     transition: transform 180ms ease;
+  }
+
+  .right-panel-inner {
+    position: static;
+    width: 100%;
+    height: auto;
+    min-height: 100%;
   }
 
   .panel-open .right-panel {
@@ -2135,8 +2175,8 @@ a:focus-visible {
 
 @media (max-width: 760px) {
   .right-panel { overflow-y: auto; }
-  .right-panel > .panel-mobile-head { position: sticky; top: 0; z-index: 2; background: var(--panel); flex-shrink: 0; }
-  .right-panel > .inquiry-tabs, .right-panel > .model-controls { flex-shrink: 0; }
+  .right-panel-inner > .panel-mobile-head { position: sticky; top: 0; z-index: 2; background: var(--panel); flex-shrink: 0; }
+  .right-panel-inner .inquiry-tabs, .right-panel-inner .model-controls { flex-shrink: 0; }
   .intent-result { flex: none; min-height: auto; }
   .intent-result > .inquiry-panel-content { flex: none; height: auto; overflow: visible; }
   .intent-result .thread-scroll { flex: none; overflow: visible; }
@@ -2151,7 +2191,7 @@ a:focus-visible {
 .model-settings > summary::-webkit-details-marker { display: none; }
 .model-settings > .model-controls { position: absolute; z-index: 12; right: 12px; top: 28px; width: min(360px, calc(100vw - 42px)); padding: 16px; text-align: left; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 8px 28px #18213b18; }
 .category-items[hidden] { display: none; }
-.result-navigation { display: flex; align-items: center; gap: 12px; padding: 14px 24px; border-bottom: 1px solid var(--soft); flex-shrink: 0; }
+.result-navigation { display: flex; align-items: center; gap: 12px; padding: 8px 24px; border-bottom: 1px solid var(--soft); flex-shrink: 0; }
 .result-navigation button { border: 0; padding: 4px 0; background: none; font-size: var(--font-ui); color: var(--subtle); white-space: nowrap; cursor: pointer; }
 .result-navigation strong { font-size: var(--font-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inquiry-panel-content { position: relative; min-height: 0; }
@@ -2347,24 +2387,42 @@ a:focus-visible {
 .anchor-requests button:hover { background: var(--soft); }
 .anchor-requests button[aria-current="true"] { color: var(--ink); background: var(--soft); border-color: var(--subtle); font-weight: 650; }
 
-/* Independent sidebar columns release space to the original document. */
-.sidebar-rail, .result-rail { display: none; }
-.brand-row .desktop-sidebar-controls { display: flex; flex-direction: row; margin-left: auto; gap: 1px; }
-.desktop-sidebar-controls .icon-button, .desktop-panel-controls .icon-button { width: 26px; height: 28px; }
-.brand-row > div:not(.desktop-sidebar-controls) { min-width: 0; }
-.desktop-sidebar-controls .icon-button[aria-pressed=true], .desktop-panel-controls .icon-button[aria-pressed=true] { color: var(--accent); background: var(--accent-soft); }
-@media (width > 1080px) {
-  .app-frame.sidebar-collapsed:not(.sidebar-peek) { --left-width: 32px; }
-  .sidebar-collapsed:not(.sidebar-peek) .sidebar-rail { display: flex; align-items: flex-start; padding-top: 18px; background: var(--panel); border-right: 1px solid var(--line); }
-  .sidebar-rail .icon-button { width: 30px; padding: 0; }
-  .sidebar-collapsed:not(.sidebar-peek) .left-sidebar { position: absolute; width: 0; visibility: hidden; overflow: hidden; pointer-events: none; }
+/* Sidebar tracks release space; the fixed top-band toggles never move. */
+.app-frame.sidebar-collapsed { --left-width: 0px; }
+.app-frame.result-collapsed { --right-width: 0px; }
+.app-sidebar-toggle {
+  position: absolute;
+  top: 16px;
+  z-index: 24;
+  width: 32px;
+  height: 32px;
+  color: var(--muted);
 }
-@media (max-width: 1080px) { .brand-row .desktop-sidebar-controls { display: none; } }
+.app-sidebar-toggle--left { left: 12px; }
+.app-sidebar-toggle--right { right: 12px; }
+.app-frame:not(.sidebar-collapsed) .app-sidebar-toggle--left { left: calc(var(--left-width) - 40px); }
+.app-frame:not(.result-collapsed) .app-sidebar-toggle--right { right: calc(var(--right-width) - 52px); }
+.app-sidebar-toggle:hover { color: var(--accent); }
+.app-sidebar-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (pointer: coarse) {
+  .app-sidebar-toggle::after { content: ""; position: absolute; inset: -6px; }
+}
+@media (max-width: 1080px) { .app-sidebar-toggle--left { display: none; } }
+@media (max-width: 780px) { .app-sidebar-toggle--right { display: none; } }
+.start-mode > .app-sidebar-toggle, .bookmarks-mode .app-sidebar-toggle { display: none; }
 @media (width > 780px) {
-  .app-frame.result-collapsed { --right-width: 32px; }
-  .result-collapsed .result-rail { display: flex; align-items: flex-start; padding-top: 18px; background: var(--panel); border-left: 1px solid var(--line); }
-  .result-rail .icon-button { width: 30px; padding: 0; }
-  .result-collapsed .right-panel { position: absolute; right: 0; width: 0; visibility: hidden; overflow: hidden; pointer-events: none; }
+  .app-frame.sidebar-animating {
+    transition: grid-template-columns 500ms cubic-bezier(.4, 0, .2, 1);
+    will-change: grid-template-columns;
+  }
+  .app-frame.sidebar-animating.panel-resizing { transition: none; }
+  .app-frame.sidebar-animating .app-sidebar-toggle--left { transition: left 500ms cubic-bezier(.4, 0, .2, 1); }
+  .app-frame.sidebar-animating .app-sidebar-toggle--right { transition: right 500ms cubic-bezier(.4, 0, .2, 1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-frame.sidebar-animating,
+  .app-frame.sidebar-animating .app-sidebar-toggle--left,
+  .app-frame.sidebar-animating .app-sidebar-toggle--right { transition: none; }
 }
 
 /* A shared trailing action column keeps deletion out of the reading text. */
@@ -2388,10 +2446,10 @@ a:focus-visible {
 .intent-result { flex: 1; min-height: 0; }
 .intent-result > .inquiry-panel-content { flex: 1; min-height: 0; overflow: hidden; }
 .intent-result .thread-scroll { flex: 1; min-height: 0; overflow: auto; padding: 22px 24px 32px; }
-.result-navigation { display: flex; flex-direction: row; align-items: center; gap: 18px; padding: 14px 24px; }
+.result-navigation { display: flex; flex-direction: row; align-items: center; gap: 18px; padding: 8px 24px; }
 .result-navigation .return-to-list { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; font-size: var(--font-ui-strong); min-height: 32px; }
 .result-navigation .source-excerpt { display: block; flex: 1; min-width: 0; text-align: left; white-space: normal; border-left: 1px solid var(--line-strong); padding: 2px 0 2px 18px; color: var(--ink); line-height: 1.6; }
-.source-excerpt > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
+.source-excerpt > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden; overflow-wrap: anywhere; }
 .source-excerpt .source-page { font-size: var(--font-ui); color: var(--muted); }
 .result-navigation button:hover { color: var(--ink); background: var(--soft); }
 .result-navigation button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
@@ -2436,7 +2494,7 @@ a:focus-visible {
 .selection-actions > .question-toggle:not(.secondary-action) { font-size: var(--font-ui-strong); color: var(--muted); }
 .pdf-card-actions { flex-wrap: wrap; }
 @media (max-width: 760px) { .selection-toolbar { left: 12px !important; transform: none; } .anchor-requests { padding: 10px 16px; } }
-.anchor-requests button[title] { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.anchor-requests button[title] { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden; }
 
 /* Selection actions become one focused field, rather than an expanded form. */
 .selection-actions { grid-template-columns: repeat(3, minmax(0, 1fr)) 29px; }
@@ -2515,26 +2573,21 @@ a:focus-visible {
 .model-controls .refresh-models { flex: 0 0 100%; border: 0; background: transparent; color: var(--accent); padding: 4px 0; text-align: left; font: inherit; font-size: var(--font-ui); cursor: pointer; }
 .model-controls .refresh-models:disabled { opacity: .5; cursor: wait; }
 
-/* Mirrored pin sits beside, not inside, the category tablist. */
+/* The fixed top-band toggle sits outside the panel's scrolling content. */
 .right-panel { position: relative; }
 .panel-desktop-head { display: flex; align-items: center; flex-shrink: 0; min-height: 64px; padding: 8px; gap: 8px; border-bottom: 1px solid var(--line); }
-.desktop-panel-controls { display: flex; flex: 0 0 26px; }
 .panel-desktop-head .inquiry-tabs { flex: 1; min-width: 0; align-self: stretch; align-items: stretch; border-bottom: 0; padding: 0; gap: 8px; }
 .panel-desktop-head .inquiry-tabs [role=tab] { min-width: 0; gap: 4px; }
-.result-collapse-action { position: absolute; right: 8px; bottom: 8px; width: 28px; height: 28px; z-index: 3; background: var(--panel); border: 1px solid var(--line); }
 @media (max-width: 780px) {
   .right-panel { position: absolute; }
-  .desktop-panel-controls, .result-collapse-action { display: none; }
   .panel-desktop-head { padding: 8px; min-height: 60px; }
   .panel-desktop-head .inquiry-tabs { padding-inline: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   .left-sidebar, .right-panel { transition: none; }
 }
-/* Keep both pin centers aligned in the reader header. */
+/* Keep both top-band controls aligned with the 64px reader header. */
 .brand-row { height: 64px; min-height: 64px; flex-shrink: 0; padding-block: 8px; }
-.brand-row .desktop-sidebar-controls { flex: 0 0 26px; }
-.desktop-sidebar-controls .icon-button, .desktop-panel-controls .icon-button { flex-shrink: 0; }
 @media (max-width: 360px) {
   .panel-desktop-head .inquiry-tabs { padding-inline: 0; gap: 8px; }
   .panel-desktop-head .inquiry-tabs [role=tab] { gap: 2px; }
@@ -2560,7 +2613,7 @@ a:focus-visible {
 
 /* Keep the preferred desktop width separate from temporary viewport constraints. */
 @media (width > 780px) {
- .app-frame { --reader-left-space: 0px; --right-width: min(var(--preferred-right-width, 360px), max(220px, calc(100vw - var(--reader-left-space) - 320px))); }
+ .app-frame { --reader-left-space: 0px; --right-open-width: min(var(--preferred-right-width, 360px), max(220px, calc(100vw - var(--reader-left-space) - 320px))); --right-width: var(--right-open-width); }
  .panel-resize-handle { position:absolute; z-index:30; left:0; top:0; bottom:0; width:8px; cursor:col-resize; touch-action:none; }
  .panel-resize-handle::after { content:""; position:absolute; inset:0 auto 0 0; width:2px; background:transparent; }
  .panel-resize-handle:hover::after, .panel-resize-handle:focus-visible::after, .panel-resizing .panel-resize-handle::after { background:var(--accent-muted); }
@@ -2620,8 +2673,7 @@ a:focus-visible {
 .reading-adjustment .reading-adjustment-label { grid-column: 1 / -1; font-size: var(--font-ui); color: var(--muted); }
 .reading-adjustment .markdown-width-slider, .reading-adjustment .pdf-zoom-slider { width: 100%; min-width: 0; margin: 0; }
 
-/* Density follows the measured panel, including a resized desktop panel or drawer. */
-.right-panel { container: knowledge-panel / inline-size; }
+/* Density follows the fixed-width panel content, including a resized panel or drawer. */
 .panel-desktop-head .inquiry-tabs [role="tab"] { display: grid; grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); min-height:44px; padding:8px 4px; gap:0; }
 .panel-desktop-head .inquiry-tabs [role="tab"] .tab-content { grid-column:2; position:relative; left:-2px; display:inline-flex; align-items:center; justify-content:center; gap:var(--control-gap); font-size:var(--control-font-size); font-weight:500; line-height:1.5; }
 .panel-desktop-head .inquiry-tabs [role="tab"] :is(.tab-label,.tab-short-label) { font-size:inherit; font-weight:inherit; line-height:inherit; }
@@ -2683,7 +2735,7 @@ a:focus-visible {
 .sidebar-scroll { padding: 16px 8px 18px; }
 .section-label { padding-bottom: 12px; }
 .outline-item { white-space: normal; overflow-wrap: anywhere; line-height: 1.55; }
-.outline-item:not(.pdf-outline-item) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.outline-item:not(.pdf-outline-item) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
 .outline-item[aria-current=location] { color: var(--accent); background: var(--accent-soft); border-radius: 6px; }
 .reader-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0 10px; flex: none; min-width: 0; padding: 6px 16px; border-bottom: 1px solid var(--line); background: var(--paper); container-type: inline-size; z-index: 16; }
 .reader-tools .library-state { flex: 1 1 240px; min-width: 0; }
@@ -2780,7 +2832,7 @@ a:focus-visible {
 .web-import-dialog .web-import-confirm { background: var(--intent-violet); border-color: var(--intent-violet); color: #fff; }
 /* Reader/UI paper shares the neutral theme; PDF canvases and in-place translation retain their original pixels. */
 :root { --reading-paper: #fbfbf8; }
-.reader-scroll:not(.reader-scroll--pdf), .right-panel { background: var(--reading-paper); }
+.reader-scroll:not(.reader-scroll--pdf), .right-panel-inner { background: var(--reading-paper); }
 .markdown-article { font-size: 18px; line-height: 1.75; color: var(--reading-ink); }
 .markdown-article[data-width-mode="recommended"] { width: min(100%, 720px); }
 .markdown-width-error { grid-column: 1 / -1; font-size: var(--font-ui); line-height: 1.5; color: var(--amber); }
@@ -3055,13 +3107,12 @@ details[open] > .disclosure-summary > .disclosure-chevron { transform: rotate(18
 /* Scoped neutral surfaces: PDF canvases and semantic state colors retain their own colors. */
 :root { --reading-desk: #f4f4f3; --reading-card: #fbfbf8; --reading-muted: #ededec; --reading-line: #e1e1de; --reading-line-strong: #d0d0cc; }
 .reader-column { background: var(--reading-paper); }
-.left-sidebar, .reader-toolbar, .reader-tools, .reading-library,
-.category-toolbar, .result-navigation, .result-rail, .sidebar-bookmark-footer { background: var(--reading-desk); border-color: var(--reading-line); }
+.left-sidebar-inner, .reader-toolbar, .reader-tools, .reading-library,
+.category-toolbar, .result-navigation, .sidebar-bookmark-footer { background: var(--reading-desk); border-color: var(--reading-line); }
 .anchor-card, .assistant-message, .user-message p, .document-bookmarks-panel { background: var(--reading-card); border-color: var(--reading-line); }
 .markdown-article blockquote, .markdown-article pre, .markdown-article th { background: var(--reading-muted); }
 
 /* Complete the reader's neutral frame without recoloring document/PDF pixels or semantic states. */
-.sidebar-collapsed:not(.sidebar-peek) .sidebar-rail,
 .panel-desktop-head, .panel-desktop-head .inquiry-tabs { background: var(--reading-desk); border-color: var(--reading-line); }
 .provider-popover, .reading-adjustment .reading-adjustment-fields, .library-add-options,
 .library-popup-panel, .document-bookmarks-panel { --paper:var(--reading-card); --panel:var(--reading-desk); --soft:var(--reading-muted); --line:var(--reading-line); --line-strong:var(--reading-line-strong); background:var(--reading-card); border-color:var(--reading-line-strong); }
@@ -3249,3 +3300,62 @@ details[open] > .disclosure-summary > .disclosure-chevron { transform: rotate(18
 .action-unavailable > span { flex:1 1 180px; }
 .action-unavailable button { min-height:32px;white-space:normal; }
 @media (max-width:560px), (pointer:coarse) { .action-unavailable button {min-height:44px;} }
+
+/* The collapsed edge button needs a gutter; expanded panels own the inner edge. */
+@media (width > 1080px) {
+  .app-frame.sidebar-collapsed .reader-toolbar { padding-left: 56px; }
+  .app-frame.sidebar-collapsed:not(.sidebar-animating) .left-sidebar-inner { visibility: hidden; }
+}
+@media (width > 780px) {
+  .app-frame.result-collapsed .reader-toolbar { padding-right: 56px; }
+  .app-frame.result-collapsed .reader-tools { padding-right: 56px; }
+  .panel-desktop-head { padding-left: 56px; }
+  .app-frame.result-collapsed:not(.sidebar-animating) .right-panel-inner { visibility: hidden; }
+}
+@media (max-width: 780px) {
+  .panel-desktop-head { padding-left: 8px; }
+}
+
+/* Keep privacy/source controls on the tools row instead of a second text line. */
+.reader-tools .library-state {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.reader-tools .library-state > .library-source-state {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+
+/* The shared button state layer owns `transition`; re-declare the moving toggle
+   outside the layer so its position follows the panel edge without dropping color feedback. */
+@media (width > 780px) {
+  .app-frame.sidebar-animating .app-sidebar-toggle--left {
+    transition: left 500ms cubic-bezier(.4, 0, .2, 1), background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+  }
+  .app-frame.sidebar-animating .app-sidebar-toggle--right {
+    transition: right 500ms cubic-bezier(.4, 0, .2, 1), background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-frame.sidebar-animating .app-sidebar-toggle--left,
+  .app-frame.sidebar-animating .app-sidebar-toggle--right { transition: none; }
+}
+
+/* One-line source excerpt keeps the second header row at the same 49px height. */
+.result-navigation { padding-block: 8px; }
+.result-navigation .source-excerpt { line-height: 1.35; }
+
+/* The right detail navigation is a fixed second-row height, matching the reader tools. */
+.result-navigation {
+  box-sizing: border-box;
+  height: 49px;
+  min-height: 49px;
+  max-height: 49px;
+  padding-block: 8px;
+}
+
+/* Preserve the existing two-line outline presentation without leaking a clipped half line. */
+.outline-item:not(.pdf-outline-item) { display: block; white-space: normal; -webkit-line-clamp: unset; }

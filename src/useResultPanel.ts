@@ -2,71 +2,93 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 const KEY = 'got-it.result-panel-pinned.v1';
 const MEDIA = '(max-width: 780px)';
-type Mode = 'closed' | 'peek' | 'reading';
+
+interface ResultPanelOptions {
+  onAnimate?: () => void;
+}
 
 /** Visibility only: hiding the panel never unmounts or changes a reading thread. */
-export function useResultPanel() {
-  const [pinned, setPinned] = useState(() => {
+export function useResultPanel({ onAnimate }: ResultPanelOptions = {}) {
+  const [expanded, setExpandedState] = useState(() => {
     try { return localStorage.getItem(KEY) !== 'false'; } catch { return true; }
   });
-  const [mode, setMode] = useState<Mode>('closed');
+  const [peek, setPeek] = useState(false);
   const [narrow, setNarrow] = useState(() => window.matchMedia?.(MEDIA).matches ?? false);
   const ref = useRef<HTMLElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const hovered = useRef(false);
-  const hoverBlockedUntil = useRef(0);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const cancel = useCallback(() => { clearTimeout(timer.current); }, []);
-  const enter = useCallback(() => { hovered.current = true; cancel(); }, [cancel]);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const visible = expanded || peek;
+  const cancel = useCallback(() => {
+    if (timer.current !== null) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+  }, []);
+  const setExpanded = useCallback((value: boolean, persist = true) => {
+    setExpandedState(value);
+    if (persist) try { localStorage.setItem(KEY, String(value)); } catch { /* keep session preference */ }
+  }, []);
   const reveal = useCallback(() => {
     cancel();
-    setMode(current => current === 'reading' ? current : 'peek');
-  }, [cancel]);
-  const hoverReveal = useCallback(() => {
-    // Closing under the pointer must not immediately reopen the new edge rail.
-    if (Date.now() >= hoverBlockedUntil.current) reveal();
-  }, [reveal]);
-  const openReading = useCallback(() => { cancel(); setMode('reading'); }, [cancel]);
-  const deferClose = useCallback(() => {
+    if (narrow || expanded || peek) return;
+    onAnimate?.();
+    setPeek(true);
+  }, [cancel, narrow, expanded, peek, onAnimate]);
+  const leave = useCallback(() => {
+    if (narrow || expanded || !peek) return;
     cancel();
     timer.current = setTimeout(() => {
-      if (!hovered.current && !ref.current?.contains(document.activeElement)) {
-        setMode(current => current === 'peek' ? 'closed' : current);
-      }
+      timer.current = null;
+      if (ref.current?.contains(document.activeElement)) return;
+      onAnimate?.();
+      setPeek(false);
     }, 220);
-  }, [cancel]);
-  const leave = useCallback(() => { hovered.current = false; deferClose(); }, [deferClose]);
-  const pin = useCallback((value: boolean) => {
-    cancel(); setPinned(value); setMode('closed');
-    try { localStorage.setItem(KEY, String(value)); } catch { /* keep session preference */ }
-    // Unpinning is an explicit close action. Close immediately instead of
-    // waiting for the pointer to leave, and return focus to the edge rail.
-    if (!value) {
-      hovered.current = false;
-      hoverBlockedUntil.current = Date.now() + 300;
-      requestAnimationFrame(() => triggerRef.current?.focus());
-    }
-  }, [cancel]);
+  }, [cancel, narrow, expanded, peek, onAnimate]);
+  const toggle = useCallback(() => {
+    if (narrow) return;
+    const restore = ref.current?.contains(document.activeElement);
+    cancel();
+    setPeek(false);
+    setExpandedState(current => {
+      const next = !current;
+      try { localStorage.setItem(KEY, String(next)); } catch { /* keep session preference */ }
+      return next;
+    });
+    if (restore) requestAnimationFrame(() => triggerRef.current?.focus());
+  }, [narrow, cancel]);
+  const openReading = useCallback(() => {
+    if (narrow) return;
+    cancel();
+    setPeek(false);
+    setExpanded(true);
+  }, [narrow, cancel, setExpanded]);
   const close = useCallback(() => {
-    if (pinned) return;
-    const restoreFocus = ref.current?.contains(document.activeElement);
-    cancel(); setMode('closed'); hovered.current = false;
-    hoverBlockedUntil.current = Date.now() + 300;
-    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus());
-  }, [pinned, cancel]);
+    if (narrow) return;
+    const restore = ref.current?.contains(document.activeElement);
+    cancel();
+    setPeek(false);
+    setExpanded(false);
+    if (restore) requestAnimationFrame(() => triggerRef.current?.focus());
+  }, [narrow, cancel, setExpanded]);
   const collapseFromDrag = useCallback(() => {
-    cancel(); setPinned(false); setMode('closed'); hovered.current = false;
-    hoverBlockedUntil.current = Date.now() + 500;
-    try { localStorage.setItem(KEY, 'false'); } catch { /* retain session state */ }
+    cancel();
+    setPeek(false);
+    setExpanded(false);
     requestAnimationFrame(() => triggerRef.current?.focus());
-  }, [cancel]);
+  }, [cancel, setExpanded]);
   useEffect(() => {
     const media = window.matchMedia?.(MEDIA);
-    const resize = () => { cancel(); hovered.current = false; setNarrow(media?.matches ?? false); setMode('closed'); };
+    const resize = () => {
+      setNarrow(media?.matches ?? false);
+      setPeek(false);
+      cancel();
+    };
     media?.addEventListener('change', resize);
     resize(); // Reconcile a viewport change between initial render and subscribing.
-    return () => { media?.removeEventListener('change', resize); cancel(); };
+    return () => {
+      media?.removeEventListener('change', resize);
+      cancel();
+    };
   }, [cancel]);
-  const autoFixed = mode === 'reading' && !pinned;
-  return { pinned, autoFixed, effectivelyPinned: pinned || autoFixed, expanded: pinned || mode !== 'closed', narrow, ref, triggerRef, enter, leave, deferClose, cancel, reveal, hoverReveal, openReading, pin, close, collapseFromDrag };
+  return { expanded, peek, visible, narrow, ref, triggerRef, toggle, openReading, close, collapseFromDrag, reveal, leave, cancel };
 }

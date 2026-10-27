@@ -12,7 +12,7 @@
   background:var(--paper); color:var(--ink); font-family:var(--interface-font,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif); font-size:15px; line-height:1.6;
 }
 .reading-start-page:focus { outline:none; }
-.start-mode>.reader-column,.start-mode>.right-panel,.start-mode>.result-rail,.start-mode>.left-sidebar,.start-mode>.sidebar-rail,.start-mode>.mobile-scrim { display:none!important; }
+.start-mode>.reader-column,.start-mode>.right-panel,.start-mode>.left-sidebar,.start-mode>.app-sidebar-toggle,.start-mode>.mobile-scrim { display:none!important; }
 .start-mode>.reading-start-page { grid-column:1/-1; }
 .start-mode>.bookmarks-view { inset:0; }
 .start-mode.bookmarks-mode>.reading-start-page { visibility:hidden; pointer-events:none; }

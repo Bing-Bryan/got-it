@@ -34,7 +34,13 @@ export function useAlignedReaderHeaders(ref: RefObject<HTMLElement | null>) {
     const media = window.matchMedia?.('(min-width: 1081px)');
     if (!media) return;
     let frame = 0, stopped = false;
-    const measure = () => { frame = 0; if (!stopped) alignReaderHeaders(root, media.matches); };
+    const measure = () => {
+      frame = 0;
+      // A row measured mid-width can lock a transient height into every aligned row.
+      // Let the 500ms sidebar transition finish, then measure the final boxes.
+      if (stopped || root.classList.contains('sidebar-animating')) return;
+      alignReaderHeaders(root, media.matches);
+    };
     const schedule = () => { if (!stopped && !frame) frame = requestAnimationFrame(measure); };
     const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule);
     const observeRows = () => {

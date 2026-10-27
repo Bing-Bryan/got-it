@@ -10,6 +10,7 @@ import App from './App';
 import { createInitialWorkspace } from './sample';
 import { renderMarkdown } from './lib/markdown';
 import { STORAGE_KEY } from './lib/storage';
+import { START_VIEW_KEY } from './lib/reading-start-page';
 import type { InquiryEvent, InquiryRequest, Workspace } from './types';
 import { inquiryCategoryStatus } from './lib/inquiry-tabs';
 const stream=vi.hoisted(()=>vi.fn());
@@ -340,6 +341,33 @@ it('shows two neutral selection actions and optional questions without requestin
  selection.removeAllRanges();delete (Range.prototype as any).getBoundingClientRect;
 });
 
+it('auto-expands the knowledge panel when a selection action starts and closes with one top-toggle click',async()=>{
+ localStorage.setItem('got-it.result-panel-pinned.v1','false');
+ stream.mockImplementation(()=>new Promise(()=>{}));
+ await mount();
+ const p=host.querySelector('.markdown-article p')!;
+ const range=document.createRange();range.selectNodeContents(p);
+ Object.defineProperty(Range.prototype,'getBoundingClientRect',{configurable:true,value:()=>({left:300,top:200,bottom:220,width:100,height:20,right:400})});
+ const selection=window.getSelection()!;selection.removeAllRanges();selection.addRange(range);
+ const raf=vi.spyOn(window,'requestAnimationFrame').mockImplementation(callback=>{callback(0);return 0;});
+ await act(async()=>{p.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));});
+ raf.mockRestore();
+ const panel=host.querySelector('.right-panel') as HTMLElement;
+ const toggle=host.querySelector<HTMLButtonElement>('.app-sidebar-toggle--right')!;
+ expect(panel.hasAttribute('inert')).toBe(true);
+ await click('.selection-toolbar [data-intent="explain"]');
+ expect(panel.hasAttribute('inert')).toBe(false);
+ expect(toggle.getAttribute('aria-expanded')).toBe('true');
+ expect(toggle.getAttribute('aria-label')).toBe('收起知识贴');
+ expect(localStorage.getItem('got-it.result-panel-pinned.v1')).toBe('true');
+ expect(stream).toHaveBeenCalledTimes(1);
+ await act(async()=>host.querySelector('.reader-scroll')!.dispatchEvent(new Event('scroll',{bubbles:true})));
+ expect(panel.hasAttribute('inert')).toBe(false);
+ await click('.app-sidebar-toggle--right');
+ expect(panel.hasAttribute('inert')).toBe(true);
+ selection.removeAllRanges();delete (Range.prototype as any).getBoundingClientRect;
+});
+
 it('keeps the selection toolbar close below the selection and flips above only when the viewport lacks room',async()=>{
  await mount();
  const p=host.querySelector('.markdown-article p')!;
@@ -556,24 +584,54 @@ it('allows explicit source selection without default explanation overriding it a
  await click('.verify-again-action');expect(host.querySelector('.question-toggle')).toBeNull();expect(stream).toHaveBeenCalledTimes(1);
 });
 
-it('opens a collapsed result from its original mark and preserves it through explicit hide and reopen',async()=>{
+it('opens a collapsed result from its original mark and preserves it through one-click hide and reopen',async()=>{
  localStorage.setItem('got-it.result-panel-pinned.v1','false');
  await mount();
  const panel=()=>host.querySelector('.right-panel') as HTMLElement;
  expect(panel().hasAttribute("inert")).toBe(true);
  await click('mark[data-inquiry-id="explain"]');
  expect(panel().hasAttribute("inert")).toBe(false);expect(host.querySelector('.answer-markdown')?.textContent).toContain('已有解释');
- const pin=host.querySelector<HTMLButtonElement>('.desktop-panel-controls button')!;
- expect(pin.getAttribute('aria-pressed')).toBe('true');expect(pin.getAttribute('aria-label')).toBe('收起知识贴');
- expect(pin.querySelector('svg')?.getAttribute('fill')).toBe('currentColor');expect(host.querySelector('.result-collapse-action')).toBeNull();
- expect(localStorage.getItem('got-it.result-panel-pinned.v1')).toBe('false');
- await act(async()=>panel().dispatchEvent(new MouseEvent('mouseout',{bubbles:true,relatedTarget:document.body})));
- await act(async()=>new Promise(r=>setTimeout(r,250)));
- expect(panel().hasAttribute("inert")).toBe(false);
+ const toggle=host.querySelector<HTMLButtonElement>('.app-sidebar-toggle--right')!;
+ expect(toggle.getAttribute('aria-expanded')).toBe('true');expect(toggle.getAttribute('aria-label')).toBe('收起知识贴');
+ expect(host.querySelector('.desktop-panel-controls')).toBeNull();expect(host.querySelector('.result-collapse-action')).toBeNull();
+ expect(localStorage.getItem('got-it.result-panel-pinned.v1')).toBe('true');
  await click('[aria-label="收起知识贴"]');expect(panel().hasAttribute("inert")).toBe(true);
  await click('[aria-label="展开知识贴"]');expect(panel().hasAttribute("inert")).toBe(false);
  expect(host.querySelector('.answer-markdown')?.textContent).toContain('已有解释');expect(stream).not.toHaveBeenCalled();
  expect(testWorkspace().activeInquiryId).toBe('explain');
+});
+it('toggles both fixed top-band controls and their icon states',async()=>{
+ await mount();
+ const frame=host.querySelector('.app-frame')!;
+ const left=host.querySelector<HTMLButtonElement>('.app-sidebar-toggle--left')!;
+ const right=host.querySelector<HTMLButtonElement>('.app-sidebar-toggle--right')!;
+ expect(left.getAttribute('aria-expanded')).toBe('true');
+ expect(right.getAttribute('aria-expanded')).toBe('true');
+ expect(left.getAttribute('aria-label')).toBe('收起导航');
+ expect(right.getAttribute('aria-label')).toBe('收起知识贴');
+ expect(left.querySelector('path')?.getAttribute('d')).toBe('M8.5 4v16');
+ expect(right.querySelector('path')?.getAttribute('d')).toBe('M15.5 4v16');
+ expect(host.querySelector('.sidebar-rail')).toBeNull();
+ expect(host.querySelector('.result-rail')).toBeNull();
+ await click('.app-sidebar-toggle--left');
+ expect(frame.classList.contains('sidebar-collapsed')).toBe(true);
+ expect(frame.classList.contains('sidebar-animating')).toBe(true);
+ expect(left.getAttribute('aria-expanded')).toBe('false');
+ expect(left.getAttribute('aria-label')).toBe('展开导航');
+ expect(left.querySelector('path')?.getAttribute('d')).toBe('M8.5 4v16');
+ expect(localStorage.getItem('got-it.sidebar-pinned.v1')).toBe('false');
+ await click('.app-sidebar-toggle--left');
+ expect(frame.classList.contains('sidebar-collapsed')).toBe(false);
+ expect(left.getAttribute('aria-expanded')).toBe('true');
+ await click('.app-sidebar-toggle--right');
+ expect(frame.classList.contains('result-collapsed')).toBe(true);
+ expect(right.getAttribute('aria-expanded')).toBe('false');
+ expect(right.getAttribute('aria-label')).toBe('展开知识贴');
+ expect(right.querySelector('path')?.getAttribute('d')).toBe('M15.5 4v16');
+ expect(localStorage.getItem('got-it.result-panel-pinned.v1')).toBe('false');
+ await click('.app-sidebar-toggle--right');
+ expect(frame.classList.contains('result-collapsed')).toBe(false);
+ expect(right.getAttribute('aria-expanded')).toBe('true');
 });
 it('a model response completing after explicit collapse does not reopen the panel',async()=>{
  localStorage.setItem('got-it.result-panel-pinned.v1','false');
@@ -586,15 +644,23 @@ it('a model response completing after explicit collapse does not reopen the pane
  expect(host.querySelector('.right-panel')!.hasAttribute("inert")).toBe(true);expect(stream).toHaveBeenCalledTimes(1);
  await click('[aria-label="展开知识贴"]');expect(host.querySelector('.answer-markdown')?.textContent).toContain('折叠后完成');
 });
-it('settings Escape takes precedence over closing the unpinned result',async()=>{
- localStorage.setItem('got-it.result-panel-pinned.v1','false');await mount();
+it('settings Escape takes precedence over closing the reading panel',async()=>{
+ localStorage.setItem('got-it.result-panel-pinned.v1','false');
+ const saved=await testLibraryRequest('/entries',{workspace:w,creationKey:'settings-escape-panel'}) as {id:string};
+ await testLibraryRequest(`/entries/${saved.id}/activate`,{});
+ sessionStorage.setItem(START_VIEW_KEY,'reading');
+ const navigation=vi.spyOn(performance,'getEntriesByType').mockReturnValue([{type:'reload'}] as unknown as PerformanceEntry[]);
+ await mount();
+ expect(host.querySelector('.reading-start-page')).toBeNull();
  await click('mark[data-inquiry-id="explain"]');await click('.provider-trigger');
  await act(async()=>host.querySelector('.provider-popover')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
  expect((host.querySelector('.provider-shell') as HTMLElement).hidden).toBe(true);expect(host.querySelector('.right-panel')!.hasAttribute("inert")).toBe(false);
  await act(async()=>host.querySelector('.right-panel')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})));
  expect(host.querySelector('.right-panel')!.hasAttribute("inert")).toBe(true);
+ navigation.mockRestore();
+ sessionStorage.removeItem(START_VIEW_KEY);
 });
-it('narrow result close retains the desktop pin preference',async()=>{
+it('narrow result close retains the desktop expand preference',async()=>{
  vi.stubGlobal('matchMedia',vi.fn((query:string)=>({matches:query.includes('780'),addEventListener:vi.fn(),removeEventListener:vi.fn()})));
  localStorage.setItem('got-it.result-panel-pinned.v1','true');await mount();
  expect(host.querySelector('.right-panel')!.hasAttribute("inert")).toBe(true);

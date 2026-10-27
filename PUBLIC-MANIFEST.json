@@ -8,8 +8,8 @@
     },
     {
       "path": "src/App.tsx",
-      "bytes": 124621,
-      "sha256": "57ec9c899b0deff672a02c5ec26078be4bb75ceec8d3b227c484516ad894fee8"
+      "bytes": 125797,
+      "sha256": "dc793804b1658794d39308e9840bcde07f87e402be3e69f3e137e9bc179a0faf"
     },
     {
       "path": "src/AssistantMessage.test.tsx",
@@ -88,8 +88,8 @@
     },
     {
       "path": "src/PanelResizeHandle.tsx",
-      "bytes": 4783,
-      "sha256": "63bfb7fd4f9a79749a457444675fc5c3be75471d31aca12e0533ae030505a0c9"
+      "bytes": 4951,
+      "sha256": "0632bbd95119891c931076548d993cc7f0099130c9a5a57a2453870716a68dc7"
     },
     {
       "path": "src/PdfOutline.tsx",
@@ -298,8 +298,8 @@
     },
     {
       "path": "src/bookmarks.css",
-      "bytes": 18124,
-      "sha256": "ee3aed1dc7942af07c1239259e22a850cec2e36f55b79021c416cdcf821401cd"
+      "bytes": 18095,
+      "sha256": "d04c59a5a75c2ecb08575892941dd317898e456ae20f9d1236ce898b32fd5b41"
     },
     {
       "path": "src/codex-login-ui.test.tsx",
@@ -313,8 +313,8 @@
     },
     {
       "path": "src/control-states.css",
-      "bytes": 13171,
-      "sha256": "a3db3938aa32cb3db72f33ecdb3032ce42952b319a4c9ef8694f70e7d1fc335a"
+      "bytes": 12845,
+      "sha256": "5aac9864148326721a08194d9003990ca767cb94a44cbb09f23764315ff27bc9"
     },
     {
       "path": "src/fonts.css",
@@ -1063,8 +1063,8 @@
     },
     {
       "path": "src/model-tabs-ui.test.tsx",
-      "bytes": 73824,
-      "sha256": "69c9f0e9d3d5c6603dd8cd7970606cd3c29a45d56b2d8efe9d4f1f302ce0a1b9"
+      "bytes": 77869,
+      "sha256": "a7b1d84a180a07c6ad13a13117597ba8077fcef8954ca517b6d41af647d4452e"
     },
     {
       "path": "src/multi-inquiry-ui.test.tsx",
@@ -1143,8 +1143,8 @@
     },
     {
       "path": "src/reading-start-page.css",
-      "bytes": 46968,
-      "sha256": "1b2e6d67284e8e2bf55ef4e6ad5111885192aff0202fa3bbe0e4f250eb686e41"
+      "bytes": 46949,
+      "sha256": "1a78c69a55d45136c5d8f80551dc9cc4337ad3b993aaa1e4534a95118e8dcaa2"
     },
     {
       "path": "src/reading-start-page.test.tsx",
@@ -1163,8 +1163,8 @@
     },
     {
       "path": "src/styles.css",
-      "bytes": 137848,
-      "sha256": "f31edbfa1b948b4236f1682c9628397fd1ffcfecfc14e7b830ea0e730f418c4f"
+      "bytes": 140688,
+      "sha256": "55f1a8ed2048cffe88a6383909e45a96a6c99dddf8939b5f70b2a53d43edb248"
     },
     {
       "path": "src/test-support/library.ts",
@@ -1193,8 +1193,8 @@
     },
     {
       "path": "src/useAlignedReaderHeaders.ts",
-      "bytes": 3543,
-      "sha256": "e5bc246f3bd7bfe907e2f5a6b6726cddc2c34c935901930302a7b0d95e55e25c"
+      "bytes": 3786,
+      "sha256": "9a21d76722644c020fb290e947287332732eedf84cc89c03d0ba9e9a1c4af78d"
     },
     {
       "path": "src/useBookmarkFeedback.ts",
@@ -1273,13 +1273,13 @@
     },
     {
       "path": "src/useResultPanel.test.tsx",
-      "bytes": 5803,
-      "sha256": "8f39dc28d1e2d833a5c7a54c960493ed4b3dc2fbf2a8dd5b24a252ebbef83498"
+      "bytes": 6267,
+      "sha256": "0a75b2690aee076603a3a33d327841b899a4bc323b53f752776c220b86cb16f9"
     },
     {
       "path": "src/useResultPanel.ts",
-      "bytes": 3691,
-      "sha256": "1b8abc79cd27bd81838d8746fbac59752a2ecfb474ce5a5a1acb02716ab449e9"
+      "bytes": 3384,
+      "sha256": "455d7f2baa8bda7b5a776974908c0c0501e99e2bb17357a6859e0fc6a93008ad"
     },
     {
       "path": "src/useSaveStatus.test.tsx",
@@ -1292,9 +1292,14 @@
       "sha256": "bed4d9b7f31d469413a657ceac61430e80ead8b18d3ada879999e0e054b9c1f6"
     },
     {
+      "path": "src/useSidebar.test.tsx",
+      "bytes": 5088,
+      "sha256": "f8d093c3b2f8d5ee874948c97614c8f395a00848e7b8766645bada060b1c336f"
+    },
+    {
       "path": "src/useSidebar.ts",
-      "bytes": 1701,
-      "sha256": "17a49fa4ed16a148e082ed7791101d738be35e20a7d07773aa19940efe101339"
+      "bytes": 2945,
+      "sha256": "29ac8266570eb4cf9a691e699382382422c018bb8892b15e872df930f73f6b03"
     },
     {
       "path": "src/useStartBookmarks.ts",
@@ -1978,8 +1983,8 @@
     },
     {
       "path": "scripts/generate-button-showcase.mjs",
-      "bytes": 26177,
-      "sha256": "62648d7751a706350359805d7ab567204bebd4628247cc5bb7b05ecf8da430f2"
+      "bytes": 26453,
+      "sha256": "9b11315656885e9bee52a6c905c24e362bee7b93c8754ab4347c8c6af02b8c1c"
     },
     {
       "path": "scripts/hosted-alert-recovery-drill.mjs",
@@ -2378,13 +2383,13 @@
     },
     {
       "path": "docs/ui-guidelines.md",
-      "bytes": 40976,
-      "sha256": "590601b611c9121545d042cbae3b043670c188b4b8252507a9a0535ef94baaff"
+      "bytes": 43199,
+      "sha256": "e79877c435def69387edf79fdf81d8a7d07a0c7d3b2cf266a52963dcbc9b2217"
     },
     {
       "path": "docs/ui/button-states.html",
-      "bytes": 261129,
-      "sha256": "106083082f5781c9b2f1d83d4ccd7ab18e7b6d1bf13cbc1c4b7aa5a5839fdd40"
+      "bytes": 261434,
+      "sha256": "79b01ebb82753d5b15e5d3bf2ca9971a807722a2dd01e6b97105b1d54a76e1f8"
     },
     {
       "path": "SECURITY.md",

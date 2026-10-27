@@ -83,9 +83,7 @@ import {
   Link2,
   LoaderCircle,
   PanelRightOpen,
-  PanelRightClose,
   PanelLeftOpen,
-  Pin,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -276,22 +274,58 @@ function App() {
   const frameRef = useRef<HTMLDivElement>(null);
   useAlignedReaderHeaders(frameRef);
   useReadingViewport(frameRef);
-  const sidebar = useSidebar();
-  const resultPanel = useResultPanel();
-  const openResultPanel = resultPanel.openReading;
-  const resultPinActive = resultPanel.effectivelyPinned;
-  const resultPinLabel = resultPanel.pinned ? "解除固定并收起知识贴" : resultPanel.autoFixed ? "收起知识贴" : "固定知识贴";
-  const resultPinTitle = resultPanel.pinned ? "解除固定并收起知识贴" : resultPanel.autoFixed ? "知识贴已自动展开，点击收起" : "固定知识贴";
+  const [sidebarAnimating, setSidebarAnimating] = useState(false);
+  const sidebarAnimationTimer = useRef<number | null>(null);
+  const animateSidebars = useCallback(() => {
+    setSidebarAnimating(true);
+    if (sidebarAnimationTimer.current !== null) window.clearTimeout(sidebarAnimationTimer.current);
+    sidebarAnimationTimer.current = window.setTimeout(() => {
+      setSidebarAnimating(false);
+      sidebarAnimationTimer.current = null;
+    }, 800);
+  }, []);
+  useEffect(() => {
+    if (!sidebarAnimating) return;
+    const frame = frameRef.current;
+    if (!frame) return;
+    const finish = (event: TransitionEvent) => {
+      if (event.target !== frame || event.propertyName !== "grid-template-columns") return;
+      setSidebarAnimating(false);
+      if (sidebarAnimationTimer.current !== null) {
+        window.clearTimeout(sidebarAnimationTimer.current);
+        sidebarAnimationTimer.current = null;
+      }
+    };
+    frame.addEventListener("transitionend", finish);
+    return () => frame.removeEventListener("transitionend", finish);
+  }, [sidebarAnimating]);
+  useEffect(() => () => {
+    if (sidebarAnimationTimer.current !== null) window.clearTimeout(sidebarAnimationTimer.current);
+  }, []);
+  const sidebar = useSidebar({ onAnimate: animateSidebars });
+  const resultPanel = useResultPanel({ onAnimate: animateSidebars });
+  const openResultPanel = useCallback(() => {
+    animateSidebars();
+    resultPanel.openReading();
+  }, [animateSidebars, resultPanel.openReading]);
+  const toggleSidebar = useCallback(() => {
+    animateSidebars();
+    sidebar.toggle();
+  }, [animateSidebars, sidebar.toggle]);
+  const toggleResultPanel = useCallback(() => {
+    animateSidebars();
+    resultPanel.toggle();
+  }, [animateSidebars, resultPanel.toggle]);
   const listScrollRef = useRef<HTMLDivElement>(null);
   const listPositions = useRef(new Map<string, {top:number;id?:string}>());
   const restoreListFocus = useRef(false);
   const navigationSequence = useRef(0);
-  const sidebarDrawer = useResponsiveDrawer({ narrow: sidebar.narrow, panel: sidebar.ref, desktopExpanded: sidebar.pinned || sidebar.peek, desktopTrigger: '.sidebar-rail button', desktopControl: '.desktop-sidebar-controls button' });
+  const sidebarDrawer = useResponsiveDrawer({ narrow: sidebar.narrow, panel: sidebar.ref, desktopExpanded: sidebar.visible, desktopTrigger: '.app-sidebar-toggle--left', desktopControl: '.app-sidebar-toggle--left' });
   const { open: mobileSidebarOpen, setOpen: setSidebarDrawerOpen } = sidebarDrawer;
   const [documentQuestionOpen, setDocumentQuestionOpen] = useState(false);
-  const resultDrawer = useResponsiveDrawer({ narrow: resultPanel.narrow, panel: resultPanel.ref, desktopExpanded: resultPanel.expanded, desktopTrigger: '.result-rail button', desktopControl: '.desktop-panel-controls button' });
+  const resultDrawer = useResponsiveDrawer({ narrow: resultPanel.narrow, panel: resultPanel.ref, desktopExpanded: resultPanel.visible, desktopTrigger: '.app-sidebar-toggle--right', desktopControl: '.app-sidebar-toggle--right' });
   const { open: mobilePanelOpen, setOpen: setResultDrawerOpen } = resultDrawer;
-  // One overlay owns focus at a time; mobile visibility never changes desktop pins.
+  // One overlay owns focus at a time; mobile visibility never changes desktop expansion preferences.
   const setMobileSidebarOpen = useCallback((open: boolean) => {
     if (open) setResultDrawerOpen(false);
     setSidebarDrawerOpen(open);
@@ -1197,7 +1231,7 @@ function App() {
   return (
     <div
       ref={frameRef}
-      className={`app-frame ${showStart ? "start-mode" : ""} ${bookmarksOpen ? "bookmarks-mode" : ""} ${!sidebar.pinned ? "sidebar-collapsed" : ""} ${sidebar.peek ? "sidebar-peek" : ""} ${!resultPanel.expanded ? "result-collapsed" : ""} ${mobileSidebarOpen ? "sidebar-open" : ""} ${mobilePanelOpen ? "panel-open" : ""} ${shareToken ? "share-mode" : ""}`}
+      className={`app-frame ${showStart ? "start-mode" : ""} ${bookmarksOpen ? "bookmarks-mode" : ""} ${!sidebar.visible ? "sidebar-collapsed" : ""} ${!resultPanel.visible ? "result-collapsed" : ""} ${sidebarAnimating ? "sidebar-animating" : ""} ${mobileSidebarOpen ? "sidebar-open" : ""} ${mobilePanelOpen ? "panel-open" : ""} ${shareToken ? "share-mode" : ""}`}
       onDragEnter={(event) => {
         event.preventDefault();
         setIsDragging(true);
@@ -1211,7 +1245,11 @@ function App() {
         if (providerOpen || (!mobileDrawerOpen && (selectionDraft || bookmarkDraft))) return;
         if (deleteMode) { setDeleteMode(false); setPendingDeleteId(null); document.getElementById("inquiry-delete-toggle")?.focus(); return; }
         if (mobileDrawerOpen) { sidebarDrawer.close(); resultDrawer.close(); return; }
-        sidebar.close(); resultPanel.close(); sidebarDrawer.close(); resultDrawer.close(); } }}
+        if (!showStart && !bookmarksOpen) {
+          if (sidebar.visible || resultPanel.visible) animateSidebars();
+          sidebar.close(); resultPanel.close();
+        }
+        sidebarDrawer.close(); resultDrawer.close(); } }}
     >
       {shareToken && shareBoot !== "off" ? (
         <div className={`share-boot${shareBoot === "error" ? " is-error" : ""}`} role={shareBoot === "error" ? "alert" : "status"}>
@@ -1239,13 +1277,38 @@ function App() {
       />
 
       <WebImportDialog library={library}/>
-      <div className="sidebar-rail" onMouseEnter={sidebar.reveal} onMouseLeave={sidebar.leave}><button type="button" className="icon-button" aria-label="展开导航" aria-controls="document-navigation" aria-expanded={sidebar.peek} onClick={sidebar.reveal}><PanelLeftOpen size={17} /></button></div>
-      <aside id="document-navigation" ref={sidebar.ref} className="left-sidebar" aria-label="文档导航" aria-hidden={showStart||undefined} inert={showStart||(resultPanel.narrow && mobilePanelOpen) || (sidebar.narrow ? !mobileSidebarOpen : !sidebar.pinned && !sidebar.peek)} onMouseEnter={sidebar.cancel} onMouseLeave={sidebar.leave} onBlur={sidebar.leave}>
+      <button
+        ref={sidebar.triggerRef}
+        type="button"
+        className="app-sidebar-toggle app-sidebar-toggle--left icon-button"
+        aria-label={sidebar.expanded ? "收起导航" : "展开导航"}
+        title={sidebar.expanded ? "收起导航" : "展开导航"}
+        aria-controls="document-navigation"
+        aria-expanded={sidebar.expanded}
+        onMouseEnter={sidebar.reveal}
+        onMouseLeave={sidebar.leave}
+        onClick={toggleSidebar}
+      >
+        <SidebarToggleIcon side="left" />
+      </button>
+      <button
+        ref={resultPanel.triggerRef}
+        type="button"
+        className="app-sidebar-toggle app-sidebar-toggle--right icon-button"
+        aria-label={resultPanel.expanded ? "收起知识贴" : "展开知识贴"}
+        title={resultPanel.expanded ? "收起知识贴" : "展开知识贴"}
+        aria-controls="knowledge-panel"
+        aria-expanded={resultPanel.expanded}
+        onMouseEnter={resultPanel.reveal}
+        onMouseLeave={resultPanel.leave}
+        onClick={toggleResultPanel}
+      >
+        <SidebarToggleIcon side="right" />
+      </button>
+      <aside id="document-navigation" ref={sidebar.ref} className="left-sidebar" aria-label="文档导航" aria-hidden={showStart||undefined} inert={showStart||(resultPanel.narrow && mobilePanelOpen) || (sidebar.narrow ? !mobileSidebarOpen : !sidebar.visible)} onMouseEnter={sidebar.cancel} onMouseLeave={sidebar.leave} onFocus={sidebar.cancel} onBlur={sidebar.leave}>
+        <div className="left-sidebar-inner">
         <div className="brand-row">
           <button type="button" className="start-brand" aria-label="回到起始页" title="回到起始页" disabled={!library.ready||library.busy} onClick={()=>void returnToStart()}><BrandMark /><strong>got it</strong></button>
-          <div className="desktop-sidebar-controls">
-            {<button className="icon-button" type="button" aria-label={sidebar.pinned ? "解除固定导航" : "固定导航"} aria-pressed={sidebar.pinned} title={sidebar.pinned ? "解除固定，移开后收起" : "固定导航"} onClick={e => { sidebar.pin(!sidebar.pinned); if(sidebar.pinned && e.detail>0)e.currentTarget.blur(); }}><Pin size={15} fill={sidebar.pinned ? "currentColor" : "none"} /></button>}
-          </div>
           <button
             className="icon-button sidebar-close"
             type="button"
@@ -1287,6 +1350,7 @@ function App() {
 
         </nav>
         <div className="sidebar-bookmark-footer"><button type="button" className="bookmarks-nav" aria-pressed={bookmarksOpen} disabled={!library.ready||library.busy} onClick={()=>void openBookmarks()}><Bookmark size={16} aria-hidden="true"/>全部收藏</button></div>
+        </div>
       </aside>
 
       {showStart?<ReadingStartPage library={library} workspace={workspace} onFile={()=>{if(library.list.nativePicker)void library.choose();else fileInputRef.current?.click();}} onContinue={enterReading} onNote={id=>{enterReading();requestAnimationFrame(()=>openAnchor(id));}} onBookmarks={()=>void openBookmarks()} onLocateBookmark={locateBookmark} bookmarkVersion={bookmarkVersion} connectionControl={providerControl} covered={bookmarksOpen}/>:null}
@@ -1375,10 +1439,8 @@ function App() {
       </main>
 
       {workspace.document.kind === "web" ? <><WebImageViewer article={articleRef} documentKey={workspace.document.id+":"+documentLoadId}/><WebMediaRetry key={workspace.document.id+":"+documentLoadId+":"+library.historyId} article={articleRef} web={workspace.document.web} documentKey={workspace.document.id+":"+documentLoadId+":"+rendered.html} disabled={library.readOnly||!library.ready} retry={library.retryWebMedia}/><WebImageActions key={workspace.document.id+":"+documentLoadId} article={articleRef} documentKey={workspace.document.id+":"+documentLoadId} workspace={workspace} entryId={library.entry?.id??""} revisionId={library.entry?.revisionId??""} readOnly={!!library.historyId||!!library.recovery||library.readOnly} busy={library.busy} ready={library.ready} modelReady={modelReady} hidden={showStart||mobileDrawerOpen||bookmarksOpen||providerOpen||!!selectionDraft||!!bookmarkDraft} unavailable={imageUnavailable} saveWarning={saveWarning} onRecover={recoverAction} bookmarkVersion={bookmarkVersion} onBookmarkSaved={finishBookmarkSave} onBookmarkStarted={beginBookmarkSave} onBookmarkFailed={bookmarkFeedback.failed} onCreate={(intent,draft,question)=>createInquiry(intent,draft,question)}/></> : null}
-      <div className="result-rail" onMouseEnter={resultPanel.hoverReveal} onMouseLeave={resultPanel.leave}>
-        <button ref={resultPanel.triggerRef} type="button" className="icon-button" aria-label="展开知识贴" aria-controls="knowledge-panel" aria-expanded={resultPanel.expanded} onClick={resultPanel.reveal}><PanelRightOpen size={17} /></button>
-      </div>
-      <aside id="knowledge-panel" ref={resultPanel.ref} className="right-panel" aria-label="活动知识贴" aria-hidden={bookmarksOpen||undefined} inert={bookmarksOpen||(sidebar.narrow && mobileSidebarOpen) || (resultPanel.narrow ? !mobilePanelOpen : !resultPanel.expanded)} onMouseEnter={resultPanel.enter} onMouseLeave={resultPanel.leave} onFocus={resultPanel.cancel} onBlur={resultPanel.deferClose}>
+      <aside id="knowledge-panel" ref={resultPanel.ref} className="right-panel" aria-label="活动知识贴" aria-hidden={bookmarksOpen||undefined} inert={bookmarksOpen||(sidebar.narrow && mobileSidebarOpen) || (resultPanel.narrow ? !mobilePanelOpen : !resultPanel.visible)} onMouseEnter={resultPanel.cancel} onMouseLeave={resultPanel.leave} onFocus={resultPanel.cancel} onBlur={resultPanel.leave}>
+        <div className="right-panel-inner">
         <PanelResizeHandle panel={resultPanel.ref} onStart={resultPanel.openReading} onCollapse={resultPanel.collapseFromDrag} />
 
         <div className="panel-mobile-head">
@@ -1388,9 +1450,6 @@ function App() {
           </button>
         </div>
         <div className="panel-desktop-head">
-          <div className="desktop-panel-controls">
-            <button className="icon-button" type="button" aria-label={resultPinLabel} aria-pressed={resultPinActive} title={resultPinTitle} onClick={event => { if (resultPanel.autoFixed) { resultPanel.close(); return; } resultPanel.pin(!resultPanel.pinned); if (resultPanel.pinned && event.detail > 0) event.currentTarget.blur(); }}><Pin size={15} fill={resultPinActive ? "currentColor" : "none"} /></button>
-          </div>
           <div className="inquiry-tabs" role="tablist" aria-label="本文知识贴分类">
             {NEW_INQUIRY_INTENTS.map((intent, index) => {
               const items = intentHistory(workspace.inquiries, intent);
@@ -1405,7 +1464,6 @@ function App() {
             })}
           </div>
         </div>
-        {!resultPanel.effectivelyPinned ? <button className="result-collapse-action icon-button" type="button" aria-label="收起知识贴" title="收起知识贴（Esc）" onClick={resultPanel.close}><PanelRightClose size={15} /></button> : null}
         <div ref={listScrollRef} onScroll={rememberList} className={`intent-result${activeInquiry ? "" : " category-view"}`} id="intent-result" role="tabpanel" aria-labelledby={tabIntent !== "why" ? `intent-tab-${tabIntent}` : undefined}>
         {activeInquiry ? <div className="result-navigation">{activeInquiry.anchor.translation ? <button type="button" className="source-excerpt" onClick={()=>{if(activeInquiry.anchor.translation?.translationId!==workspace.webTranslation?.id || activeInquiry.anchor.translation?.version!==workspace.webTranslation?.version){showToast("旧译文摘录仍保留；当前译文版本不同，请用对应原文段落回看。");return;}updateWorkspace(current=>({...current,readingSide:"translated"}));requestAnimationFrame(()=>locateInquiry(activeInquiry.id,true));}}><span>译文摘录：{activeInquiry.anchor.translation.quote}</span></button> : null}<button className="return-to-list" type="button" onClick={() => switchTab(tabIntent, true)}><ChevronLeft size={16} aria-hidden="true" />返回</button>{activeInquiry.anchor.scope === "document" ? <span className="source-excerpt">全文</span> : <button className="source-excerpt" type="button" title={activeInquiry.anchor.quote} aria-label={`定位原文：${activeInquiry.anchor.image ? `图片 · ${activeInquiry.anchor.quote}` : activeInquiry.anchor.pdf?.kind === 'region' ? `第 ${activeInquiry.anchor.pdf.page} 页 · 所选区域` : activeInquiry.anchor.quote}`} onClick={() => { track("source-return"); if(activeInquiry.anchor.translation)updateWorkspace(current=>({...current,readingSide:"original"}));requestAnimationFrame(()=>locateInquiry(activeInquiry.id, true)); }}>{activeInquiry.anchor.image ? <span className="source-page">图片</span> : null}{activeInquiry.anchor.pdf ? <span className="source-page">第 {activeInquiry.anchor.pdf.page} 页{activeInquiry.anchor.pdf.kind === 'region' ? ' · 所选区域' : ''}</span> : null}{activeInquiry.anchor.pdf?.kind !== 'region' ? <span>{activeInquiry.anchor.translation?"对应原文段落：":""}{activeInquiry.anchor.quote}</span> : null}</button>}</div> : null}
           <div hidden={!!activeInquiry} className="category-heading category-toolbar"><strong>本文的{tabIntent === "ask" ? "问题" : INTENT_META[tabIntent].shortLabel}</strong><div className="category-heading-actions"><span>{categoryItems.length} 条</span>
@@ -1455,6 +1513,7 @@ function App() {
           categoryItems.length ? <div className="empty-intent"><p>选择上方条目查看结果。</p></div> : null
         )}
         </div>
+        </div>
       </aside>
 
       {bookmarksOpen?<BookmarksView onChanged={bookmarkFeedback.changed} version={bookmarkVersion} onClose={closeBookmarks} onLocate={locateBookmark}/>:null}
@@ -1492,6 +1551,16 @@ function App() {
 function BrandMark() {
   return (
     <img className="brand-mark" src={brandIcon} width={29} height={29} alt="" aria-hidden="true" />
+  );
+}
+
+function SidebarToggleIcon({ side }: { side: "left" | "right" }) {
+  const divider = side === "left" ? 8.5 : 15.5;
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="16" rx="4" />
+      <path d={`M${divider} 4v16`} />
+    </svg>
   );
 }
 

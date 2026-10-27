@@ -22,14 +22,15 @@ export function PanelResizeHandle({ panel, onStart, onCollapse }: { panel: RefOb
   useEffect(() => {
     const el = panel.current, frame = el?.closest<HTMLElement>('.app-frame'), reader = frame?.querySelector<HTMLElement>('.reader-column');
     if (!el || !frame || !reader) return;
+    const content = () => el.querySelector<HTMLElement>('.right-panel-inner') ?? el;
     const update = () => {
       const max = clampPanelWidth(frame.getBoundingClientRect().right - reader.getBoundingClientRect().left - 320);
-      const current = Math.round(el.getBoundingClientRect().width);
+      const current = Math.round(content().getBoundingClientRect().width);
       el.dataset.density = panelDensity(current, el.dataset.density as PanelDensity | undefined);
       setBounds(previous => previous.max === max && previous.current === current ? previous : { max, current });
     };
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
-    observer?.observe(el); observer?.observe(reader); window.addEventListener('resize', update); update();
+    observer?.observe(content()); observer?.observe(reader); window.addEventListener('resize', update); update();
     return () => { observer?.disconnect(); window.removeEventListener('resize', update); frame.classList.remove('panel-resizing'); };
   }, [panel]);
   const persist = (value: number) => { try { localStorage.setItem(KEY, String(value)); } catch { /* retain session preference */ } };
@@ -46,7 +47,7 @@ export function PanelResizeHandle({ panel, onStart, onCollapse }: { panel: RefOb
     onPointerDown={event => {
       if (event.button !== 0) return;
       event.preventDefault(); event.stopPropagation(); onStart(); event.currentTarget.focus();
-      drag.current = { x: event.clientX, width: panel.current?.getBoundingClientRect().width ?? preferred, preferred, collapse: false };
+      drag.current = { x: event.clientX, width: (panel.current?.querySelector<HTMLElement>('.right-panel-inner') ?? panel.current)?.getBoundingClientRect().width ?? preferred, preferred, collapse: false };
       event.currentTarget.setPointerCapture(event.pointerId); panel.current?.closest('.app-frame')?.classList.add('panel-resizing');
     }}
     onPointerMove={event => {

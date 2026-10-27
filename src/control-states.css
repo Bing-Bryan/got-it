@@ -70,7 +70,7 @@
 
   /* Persistent choices reserve their boundary in every state. Keep this list
      explicit: source HTML, landing teaching tabs and submit/danger actions differ. */
-  :is(.inquiry-tabs [role="tab"], .anchor-requests button, .provider-option, .library-open, .library-current, .outline-item, .desktop-sidebar-controls .icon-button, .desktop-panel-controls .icon-button, .bookmarks-nav, .translation-side-toggle, .pdf-select-mode, .category-delete-toggle, .provider-trigger, .reading-adjustment-trigger, .library-add, .document-bookmarks-trigger, .reader-tools .disclosure-summary, .result-navigation button, .question-back, .compact-actions > .secondary-action, .library-samples .hosted-samples button) {
+  :is(.inquiry-tabs [role="tab"], .anchor-requests button, .provider-option, .library-open, .library-current, .outline-item, .bookmarks-nav, .translation-side-toggle, .pdf-select-mode, .category-delete-toggle, .provider-trigger, .reading-adjustment-trigger, .library-add, .document-bookmarks-trigger, .reader-tools .disclosure-summary, .result-navigation button, .question-back, .compact-actions > .secondary-action, .library-samples .hosted-samples button) {
     border: 1px solid var(--control-border);
     border-radius: var(--control-radius);
     --control-active-bg: var(--paper);
@@ -91,7 +91,7 @@
     padding: var(--control-padding-y) var(--control-padding-x);
   }
 
-  :is(.inquiry-tabs [role="tab"], .anchor-requests button, .provider-option, .outline-item, .desktop-sidebar-controls .icon-button, .desktop-panel-controls .icon-button, .bookmarks-nav, .translation-side-toggle, .reader-tools .disclosure-summary, .result-navigation button, .question-back, .compact-actions > .secondary-action) svg {
+  :is(.inquiry-tabs [role="tab"], .anchor-requests button, .provider-option, .outline-item, .bookmarks-nav, .translation-side-toggle, .reader-tools .disclosure-summary, .result-navigation button, .question-back, .compact-actions > .secondary-action) svg {
     width: var(--control-icon-size);
     height: var(--control-icon-size);
     stroke-width: var(--control-icon-stroke);
@@ -114,7 +114,7 @@
   .result-navigation button.source-excerpt > span {
     display: -webkit-box;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 1;
     overflow: hidden;
   }
 
@@ -127,7 +127,7 @@
   }
 
   /* Expanded remains menu state, never a replacement for selected semantics. */
-  :is(.inquiry-tabs [role="tab"], .anchor-requests button, .provider-option, .library-open, .library-current, .outline-item, .desktop-sidebar-controls .icon-button, .desktop-panel-controls .icon-button, .bookmarks-nav, .translation-side-toggle, .pdf-select-mode, .category-delete-toggle, .provider-trigger, .reading-adjustment-trigger, .library-add, .document-bookmarks-trigger, .reader-tools .disclosure-summary, .result-navigation button, .question-back, .compact-actions > .secondary-action, .library-samples .hosted-samples button):is([aria-pressed="true"], [aria-selected="true"], [aria-current="true"], [aria-current="location"], [aria-expanded="true"]),
+  :is(.inquiry-tabs [role="tab"], .anchor-requests button, .provider-option, .library-open, .library-current, .outline-item, .bookmarks-nav, .translation-side-toggle, .pdf-select-mode, .category-delete-toggle, .provider-trigger, .reading-adjustment-trigger, .library-add, .document-bookmarks-trigger, .reader-tools .disclosure-summary, .result-navigation button, .question-back, .compact-actions > .secondary-action, .library-samples .hosted-samples button):is([aria-pressed="true"], [aria-selected="true"], [aria-current="true"], [aria-current="location"], [aria-expanded="true"]),
   .provider-option.active,
   .library-item.current .library-open {
     --control-bg: var(--paper);
@@ -138,7 +138,7 @@
     --control-hover-border: var(--blue-strong);
   }
 
-  :is(.inquiry-tabs [role="tab"], .anchor-requests button, .provider-option, .library-open, .library-current, .outline-item, .desktop-sidebar-controls .icon-button, .desktop-panel-controls .icon-button, .bookmarks-nav, .translation-side-toggle, .pdf-select-mode, .category-delete-toggle, .provider-trigger, .reading-adjustment-trigger, .library-add, .document-bookmarks-trigger, .reader-tools .disclosure-summary, .result-navigation button, .question-back, .compact-actions > .secondary-action, .library-samples .hosted-samples button):not(:disabled):not([aria-disabled="true"]):active {
+  :is(.inquiry-tabs [role="tab"], .anchor-requests button, .provider-option, .library-open, .library-current, .outline-item, .bookmarks-nav, .translation-side-toggle, .pdf-select-mode, .category-delete-toggle, .provider-trigger, .reading-adjustment-trigger, .library-add, .document-bookmarks-trigger, .reader-tools .disclosure-summary, .result-navigation button, .question-back, .compact-actions > .secondary-action, .library-samples .hosted-samples button):not(:disabled):not([aria-disabled="true"]):active {
     box-shadow: var(--control-active-shadow);
   }
 
@@ -250,7 +250,7 @@
   :is(.provider-trigger,.document-bookmarks-trigger,.reading-adjustment-trigger,.library-add,.bookmarks-nav,.bookmark-back,.pdf-module-error button):not([aria-expanded=true]):not([aria-pressed=true]):not([aria-selected=true]) {
     --control-bg:var(--reading-card); --control-border:var(--reading-line-strong);
   }
-  :is(.sidebar-rail,.panel-desktop-head) .icon-button:not([aria-pressed=true]):not([aria-expanded=true]) {
+  :is(.panel-desktop-head) .icon-button:not([aria-pressed=true]):not([aria-expanded=true]) {
     --control-bg:transparent; --control-border:transparent;
   }
 }
