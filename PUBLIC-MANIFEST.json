@@ -8,8 +8,8 @@
     },
     {
       "path": "src/App.tsx",
-      "bytes": 121272,
-      "sha256": "c344e37e06322b997bdf731b2c5855e308e5792e784398b633532209e5c94435"
+      "bytes": 122957,
+      "sha256": "72d82aae91e733019439f338c1ab07024d0fc72802d43ec0e5fba1bbe8b4a742"
     },
     {
       "path": "src/AssistantMessage.test.tsx",
@@ -1068,8 +1068,8 @@
     },
     {
       "path": "src/multi-inquiry-ui.test.tsx",
-      "bytes": 10010,
-      "sha256": "dd63fc08955de4d9d8cd5546807250635b5df7655451578ed37ebcebd06468c0"
+      "bytes": 10195,
+      "sha256": "ba053b6f7159ad6743e55c86404ecb911894465b6c60a2bc67b0b0f70386b1da"
     },
     {
       "path": "src/pdf-draft.test.tsx",

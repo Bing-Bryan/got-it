@@ -23,8 +23,12 @@ it('follows the selection while the reader scrolls and hides when it leaves view
   await select();
   const toolbar=host.querySelector<HTMLElement>('.selection-toolbar')!;
   const scroller=host.querySelector<HTMLElement>('.reader-scroll')!;
-  const wait=()=>act(async()=>{scroller.dispatchEvent(new Event('scroll'));await new Promise(r=>setTimeout(r,40));});
+  const wait=()=>act(async()=>{scroller.dispatchEvent(new Event('scroll'));await new Promise(r=>setTimeout(r,180));});
   expect(parseFloat(toolbar.style.top)).toBe(352);
+  scroller.scrollTop=100;
+  rect={...rect,top:200,bottom:240};
+  await act(async()=>{scroller.dispatchEvent(new Event('scroll'));});
+  expect(parseFloat(toolbar.style.top)).toBe(252);
   rect={...rect,top:150,bottom:190};
   await wait();
   expect(parseFloat(toolbar.style.top)).toBe(202);

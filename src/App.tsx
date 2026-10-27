@@ -1606,18 +1606,50 @@ function SelectionToolbar({
     let frame = 0;
     const schedule = () => {
       if (frame) return;
-      frame = window.requestAnimationFrame(() => { frame = 0; place(); });
+      frame = window.requestAnimationFrame(() => { frame = 0; placeAndTrack(); });
     };
-    place();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
+    let visualTop = 0;
+    let visualHeight = 0;
+    const placeAndTrack = () => {
+      place();
+      const next = Number.parseFloat(element.style.top);
+      if (Number.isFinite(next)) visualTop = next;
+      visualHeight = element.offsetHeight;
+    };
+    placeAndTrack();
+    const scrollContainer = article?.closest<HTMLElement>(".reader-scroll, .recovery-original") ?? null;
+    let lastScrollTop = scrollContainer?.scrollTop ?? window.scrollY;
+    let settle = 0;
+    const settlePlace = () => {
+      if (settle) window.clearTimeout(settle);
+      settle = window.setTimeout(() => { settle = 0; placeAndTrack(); }, 100);
+    };
+    const onScroll = (event: Event) => {
+      // Move the fixed toolbar by the scroll delta before the next paint. A
+      // range measurement here would force layout on every wheel event and
+      // make trackpad scrolling stutter. Exact placement waits until scroll
+      // settles, then handles edge flips and clamping.
+      let nextScrollTop: number | null = null;
+      if (scrollContainer && event.target === scrollContainer) nextScrollTop = scrollContainer.scrollTop;
+      else if (!scrollContainer && (event.target === document || event.target === window || event.target === document.documentElement)) nextScrollTop = window.scrollY;
+      if (nextScrollTop !== null) {
+        visualTop -= nextScrollTop - lastScrollTop;
+        lastScrollTop = nextScrollTop;
+        element.style.top = `${visualTop}px`;
+        if (visualTop + visualHeight < 0 || visualTop > window.innerHeight) element.style.visibility = "hidden";
+      }
+      settlePlace();
+    };
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(placeAndTrack);
     observer?.observe(element);
     if (article) observer?.observe(article);
-    window.addEventListener("scroll", schedule, true);
+    window.addEventListener("scroll", onScroll, { capture: true, passive: true });
     window.addEventListener("resize", schedule);
     return () => {
       if (frame) window.cancelAnimationFrame(frame);
+      if (settle) window.clearTimeout(settle);
       observer?.disconnect();
-      window.removeEventListener("scroll", schedule, true);
+      window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", schedule);
     };
   }, [draft, hidden, article]);
