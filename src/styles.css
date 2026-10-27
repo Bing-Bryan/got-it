@@ -554,6 +554,7 @@ a:focus-visible {
 }
 
 .reader-scroll {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -1633,6 +1634,21 @@ a:focus-visible {
 
 .primary-action:hover {
   background: var(--blue-strong);
+}
+
+.selection-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.selection-layer > .selection-toolbar {
+  position: absolute;
+  pointer-events: auto;
 }
 
 .selection-toolbar {

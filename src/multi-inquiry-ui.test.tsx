@@ -14,7 +14,7 @@ it('rejects an oversized complete range before any request or inquiry is created
 it('keeps the selected text only in the accessible name and never renders a quote row, including ask input mode',async()=>{await setup();await select();const surface=host.querySelector('.selection-understanding')!;expect(surface.querySelector(':scope > .selection-quote')).toBeNull();expect(surface.getAttribute('role')).toBe('group');expect(surface.getAttribute('aria-label')).toMatch(/^选中的原文：FIRST COMPLETE SOURCE\./);expect(surface.querySelector('.selection-operation-row > .selection-bookmark-container .bookmark-icon')).not.toBeNull();expect(surface.querySelector('.selection-actions [data-intent=explain]')).not.toBeNull();expect(host.querySelector('.selection-toolbar > .selection-bookmark-container')).toBeNull();expect(surface.querySelector('.bookmark-icon')?.textContent).toBe('');expect(stream).not.toHaveBeenCalled();await act(async()=>host.querySelector<HTMLButtonElement>('.selection-actions .question-input-trigger')!.click());expect(host.querySelector('.selection-toolbar .selection-quote')).toBeNull();expect(host.querySelector('.selection-toolbar textarea')).not.toBeNull();expect(surface.getAttribute('aria-label')).toMatch(/^选中的原文：FIRST COMPLETE SOURCE\./);expect(stream).not.toHaveBeenCalled();});
 
 
-it('follows the selection while the reader scrolls and hides when it leaves view',async()=>{
+it('portals the toolbar into the reader scroll layer so scrolling moves it natively',async()=>{
  await setup();
  let rect={left:100,top:300,right:200,bottom:340,width:100,height:40} as DOMRect;
  Object.defineProperty(Range.prototype,'getBoundingClientRect',{configurable:true,value:()=>rect});
@@ -22,33 +22,20 @@ it('follows the selection while the reader scrolls and hides when it leaves view
  try{
   await select();
   const toolbar=host.querySelector<HTMLElement>('.selection-toolbar')!;
+  const layer=host.querySelector<HTMLElement>('.selection-layer')!;
   const scroller=host.querySelector<HTMLElement>('.reader-scroll')!;
-  const wait=()=>act(async()=>{scroller.dispatchEvent(new Event('scroll'));await new Promise(r=>setTimeout(r,180));});
-  expect(parseFloat(toolbar.style.top)).toBe(352);
+  expect(toolbar.parentElement).toBe(layer);
+  expect(layer.parentElement).toBe(scroller);
+  const contentTop=parseFloat(toolbar.style.top);
+  expect(contentTop).toBe(352);
+  // The toolbar stores a content-space position; scrolling must not rewrite it.
   scroller.scrollTop=100;
   rect={...rect,top:200,bottom:240};
-  await act(async()=>{scroller.dispatchEvent(new Event('scroll'));});
-  expect(parseFloat(toolbar.style.top)).toBe(252);
-  rect={...rect,top:150,bottom:190};
-  await wait();
-  expect(parseFloat(toolbar.style.top)).toBe(202);
-  rect={...rect,top:-100,bottom:-60};
-  await wait();
-  expect(toolbar.style.visibility).toBe('hidden');
-  rect={...rect,top:150,bottom:190};
-  await wait();
-  expect(toolbar.style.visibility).toBe('visible');
-  expect(parseFloat(toolbar.style.top)).toBe(202);
-  await act(async()=>{host.querySelector<HTMLButtonElement>('.selection-actions .question-input-trigger')!.click();window.getSelection()?.removeAllRanges();});
-  rect={...rect,top:210,bottom:250};
-  await wait();
-  expect(parseFloat(toolbar.style.top)).toBe(262);
-  const input=host.querySelector<HTMLTextAreaElement>('.selection-toolbar textarea')!;
-  await act(async()=>input.focus());
-  rect={...rect,top:-100,bottom:-60};
-  await wait();
-  expect(toolbar.style.visibility).toBe('hidden');
-  expect(document.activeElement).not.toBe(input);
+  await act(async()=>{scroller.dispatchEvent(new Event('scroll'));await new Promise(r=>setTimeout(r,20));});
+  expect(parseFloat(toolbar.style.top)).toBe(contentTop);
+  await act(async()=>host.querySelector<HTMLButtonElement>('.selection-actions .question-input-trigger')!.click());
+  expect(host.querySelector('.selection-toolbar textarea')).not.toBeNull();
+  expect(host.querySelector('.selection-toolbar .selection-quote')).toBeNull();
  }finally{delete (Range.prototype as any).getBoundingClientRect;delete (Range.prototype as any).getClientRects;}
 });
 

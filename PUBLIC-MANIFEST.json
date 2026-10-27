@@ -8,8 +8,8 @@
     },
     {
       "path": "src/App.tsx",
-      "bytes": 122957,
-      "sha256": "72d82aae91e733019439f338c1ab07024d0fc72802d43ec0e5fba1bbe8b4a742"
+      "bytes": 124621,
+      "sha256": "57ec9c899b0deff672a02c5ec26078be4bb75ceec8d3b227c484516ad894fee8"
     },
     {
       "path": "src/AssistantMessage.test.tsx",
@@ -1068,8 +1068,8 @@
     },
     {
       "path": "src/multi-inquiry-ui.test.tsx",
-      "bytes": 10195,
-      "sha256": "ba053b6f7159ad6743e55c86404ecb911894465b6c60a2bc67b0b0f70386b1da"
+      "bytes": 9760,
+      "sha256": "481c902eced959eee9f26f30d96b6d5dc3425ea3fb4cdc00b7d708b2a6993de2"
     },
     {
       "path": "src/pdf-draft.test.tsx",
@@ -1163,8 +1163,8 @@
     },
     {
       "path": "src/styles.css",
-      "bytes": 137607,
-      "sha256": "6c73da18e31f4b2b68819d5c20b6c60c7cf2898cee0da2a42a6f728c0db3a033"
+      "bytes": 137848,
+      "sha256": "f31edbfa1b948b4236f1682c9628397fd1ffcfecfc14e7b830ea0e730f418c4f"
     },
     {
       "path": "src/test-support/library.ts",

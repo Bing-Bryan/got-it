@@ -108,6 +108,7 @@ import {
   type DragEvent,
   type MouseEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   INTENT_META,
   type Inquiry,
@@ -193,11 +194,22 @@ function App() {
     return { ...loaded, modelDefaultsVersion: 4, modelPreferences: loaded.modelDefaultsVersion === 4 ? loaded.modelPreferences : Object.fromEntries((["explain", "verify", "entity", "why", "ask"] as const).map(intent => [intent, modelConfig(intent)])), activeProviderId: HOSTED?"deepseek":"codex" };
   });
   const [readingView,setReadingView]=useState<'start'|'reading'>(()=>initialReadingView(()=>sessionStorage,(performance.getEntriesByType?.('navigation')[0] as PerformanceNavigationTiming|undefined)?.type));
+  const selectionLayerRef = useRef<HTMLDivElement>(null);
+  const [compactSelection, setCompactSelection] = useState(() => window.matchMedia?.('(max-width: 560px)').matches ?? false);
   const [shareToken] = useState(() => shareTokenFromLocation());
   const [shareBoot, setShareBoot] = useState<"opening" | "error" | "off">(shareToken ? "opening" : "off");
   const [shareError, setShareError] = useState("");
   const shareStarted = useRef(false);
   const shareFirstName = useRef("");
+
+  useEffect(() => {
+    const media = window.matchMedia?.('(max-width: 560px)');
+    if (!media) return;
+    const update = () => setCompactSelection(media.matches);
+    update();
+    media.addEventListener?.('change', update);
+    return () => media.removeEventListener?.('change', update);
+  }, []);
   const enterReading=useCallback(()=>{setReadingView('reading');try{sessionStorage.setItem(START_VIEW_KEY,'reading');}catch{/* Session view is optional, never a saved-content claim. */}},[]);
   const workspaceRef = useRef(workspace);
   workspaceRef.current = workspace;
@@ -1160,6 +1172,28 @@ function App() {
                 </ProviderPopover>
               </div>
             </div>;
+  const selectionLayer = selectionLayerRef.current;
+  const selectionInScroll = !compactSelection && !!selectionLayer;
+  const selectionToolbar = bookmarkDraft && !bookmarksOpen ? (
+    <SelectionToolbar
+      draft={bookmarkDraft}
+      hidden={mobileDrawerOpen || providerOpen}
+      article={articleRef.current}
+      inScroll={selectionInScroll}
+      hint={inquirySelectionError}
+      unavailable={selectionUnavailable}
+      onRecover={recoverAction}
+      saveWarning={saveWarning}
+      bookmark={(library.entry||HOSTED)&&!library.readOnly?<BookmarkAction prepareEntry={!library.entry?library.ensureEntry:undefined} entryId={library.entry?.id??""} revisionId={library.entry?.revisionId??""} anchor={bookmarkDraft.anchor} iconOnly onSaved={finishBookmarkSave} version={bookmarkVersion} onStarted={beginBookmarkSave} onFailed={bookmarkFeedback.failed}/>:null}
+      onSelect={(intent, question) => createInquiry(intent, undefined, question)}
+      disabled={!selectionDraft || !modelReady || workspace.inquiries.some(i => i.status === "answering" && sameAnchor(i.anchor, selectionDraft.anchor)) || library.readOnly || library.busy}
+      onClose={() => {
+        setSelectionDraft(null);setBookmarkDraft(null);setInquirySelectionError('');
+        window.getSelection()?.removeAllRanges();
+      }}
+    />
+  ) : null;
+
   return (
     <div
       ref={frameRef}
@@ -1335,6 +1369,7 @@ function App() {
             <BookOpenText size={15} />
             <span>读到不懂处，选中原文。一次只解决一个知识缺口。</span>
           </footer>
+          <div ref={selectionLayerRef} className="selection-layer" />
         </div>
         </div>
       </main>
@@ -1425,24 +1460,7 @@ function App() {
       {bookmarksOpen?<BookmarksView onChanged={bookmarkFeedback.changed} version={bookmarkVersion} onClose={closeBookmarks} onLocate={locateBookmark}/>:null}
       {bookmarkFailure?<div className="bookmark-toast" role="alert"><span>收藏失败：{bookmarkFailure.error}（{bookmarkQuote(bookmarkFailure.request.anchor).slice(0,36)}）</span><button type="button" disabled={bookmarkRetrying} onClick={()=>void bookmarkFeedback.retry(finishBookmarkSave)}>{bookmarkRetrying?'保存中…':'重试收藏'}</button><button type="button" onClick={bookmarkFeedback.closeFailure}>关闭</button></div>:null}
       <span className="bookmark-live" role="status" aria-live="polite">{bookmarkNotice?'已收藏':''}</span>
-      {bookmarkDraft && !bookmarksOpen ? (
-        <SelectionToolbar
-          draft={bookmarkDraft}
-          hidden={mobileDrawerOpen || providerOpen}
-          article={articleRef.current}
-          hint={inquirySelectionError}
-          unavailable={selectionUnavailable}
-          onRecover={recoverAction}
-          saveWarning={saveWarning}
-          bookmark={(library.entry||HOSTED)&&!library.readOnly?<BookmarkAction prepareEntry={!library.entry?library.ensureEntry:undefined} entryId={library.entry?.id??""} revisionId={library.entry?.revisionId??""} anchor={bookmarkDraft.anchor} iconOnly onSaved={finishBookmarkSave} version={bookmarkVersion} onStarted={beginBookmarkSave} onFailed={bookmarkFeedback.failed}/>:null}
-          onSelect={(intent, question) => createInquiry(intent, undefined, question)}
-          disabled={!selectionDraft || !modelReady || workspace.inquiries.some(i => i.status === "answering" && sameAnchor(i.anchor, selectionDraft.anchor)) || library.readOnly || library.busy}
-          onClose={() => {
-            setSelectionDraft(null);setBookmarkDraft(null);setInquirySelectionError('');
-            window.getSelection()?.removeAllRanges();
-          }}
-        />
-      ) : null}
+      {selectionToolbar ? (selectionLayer ? createPortal(selectionToolbar, selectionLayer) : selectionToolbar) : null}
 
       {isDragging ? (
         <div className="drop-overlay">
@@ -1546,10 +1564,12 @@ function SelectionToolbar({
   saveWarning,
   hidden = false,
   article,
+  inScroll = false,
 }: {
   draft: BookmarkDraft;
   hidden?: boolean;
   article?: HTMLElement | null;
+  inScroll?: boolean;
   hint?:string;
   unavailable?:ActionUnavailable;
   saveWarning?:boolean;
@@ -1598,11 +1618,30 @@ function SelectionToolbar({
         { width: element.offsetWidth, height: element.offsetHeight },
         { width: window.innerWidth, height: window.innerHeight },
       );
-      element.style.left = `${placement.left}px`;
-      element.style.top = `${placement.top}px`;
+      const layer = inScroll ? element.parentElement : null;
+      const layerRect = layer?.getBoundingClientRect();
+      if (inScroll && !layerRect) {
+        hide();
+        return;
+      }
+      element.style.left = `${placement.left - (layerRect?.left ?? 0)}px`;
+      element.style.top = `${placement.top - (layerRect?.top ?? 0)}px`;
       element.style.visibility = "visible";
       element.dataset.placement = placement.side;
     };
+    if (inScroll) {
+      // The toolbar is portaled into the reader's scroll content. It moves with
+      // the text on the compositor, so scrolling needs no JavaScript reposition.
+      place();
+      const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
+      observer?.observe(element);
+      if (article) observer?.observe(article);
+      window.addEventListener("resize", place);
+      return () => {
+        observer?.disconnect();
+        window.removeEventListener("resize", place);
+      };
+    }
     let frame = 0;
     const schedule = () => {
       if (frame) return;
@@ -1652,7 +1691,7 @@ function SelectionToolbar({
       window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", schedule);
     };
-  }, [draft, hidden, article]);
+  }, [draft, hidden, article, inScroll]);
   return (
     <div
       ref={surface}
