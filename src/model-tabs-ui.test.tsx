@@ -340,6 +340,43 @@ it('shows two neutral selection actions and optional questions without requestin
  selection.removeAllRanges();delete (Range.prototype as any).getBoundingClientRect;
 });
 
+it('keeps the selection toolbar close below the selection and flips above only when the viewport lacks room',async()=>{
+ await mount();
+ const p=host.querySelector('.markdown-article p')!;
+ let anchor={left:500,top:300,bottom:340,width:100,height:40,right:600,x:500,y:300,toJSON:()=>({})} as DOMRect;
+ Object.defineProperty(Range.prototype,'getBoundingClientRect',{configurable:true,value:()=>anchor});
+ const height=Object.getOwnPropertyDescriptor(HTMLElement.prototype,'offsetHeight')!,width=Object.getOwnPropertyDescriptor(HTMLElement.prototype,'offsetWidth')!;
+ const previousHeight=window.innerHeight,previousWidth=window.innerWidth;
+ vi.stubGlobal('innerHeight',885);vi.stubGlobal('innerWidth',1119);
+ Object.defineProperty(HTMLElement.prototype,'offsetHeight',{configurable:true,get(){return this.classList?.contains('selection-toolbar')?64:0;}});
+ Object.defineProperty(HTMLElement.prototype,'offsetWidth',{configurable:true,get(){return this.classList?.contains('selection-toolbar')?510:0;}});
+ const select=async()=>{
+  const range=document.createRange();range.selectNodeContents(p);
+  const selection=window.getSelection()!;selection.removeAllRanges();selection.addRange(range);
+  const raf=vi.spyOn(window,'requestAnimationFrame').mockImplementation(callback=>{callback(0);return 0;});
+  await act(async()=>{p.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));});
+  raf.mockRestore();
+  return host.querySelector<HTMLElement>('.selection-toolbar')!;
+ };
+ try{
+  let toolbar=await select();
+  expect(toolbar.dataset.placement).toBe('below');
+  expect(parseFloat(toolbar.style.top)).toBe(352);
+
+  anchor={...anchor,left:500,top:800,bottom:825,y:800,height:25};
+  toolbar=await select();
+  expect(toolbar.dataset.placement).toBe('above');
+  expect(parseFloat(toolbar.style.top)).toBe(724);
+  expect(anchor.top-(parseFloat(toolbar.style.top)+64)).toBe(12);
+ }finally{
+  vi.stubGlobal('innerHeight',previousHeight);vi.stubGlobal('innerWidth',previousWidth);
+  Object.defineProperty(HTMLElement.prototype,'offsetHeight',height);
+  Object.defineProperty(HTMLElement.prototype,'offsetWidth',width);
+  window.getSelection()?.removeAllRanges();
+  delete (Range.prototype as any).getBoundingClientRect;
+ }
+});
+
 it('hovering a source mark only hints its list entry and never opens, saves, scrolls or generates',async()=>{
  await mount();
  await act(async()=>new Promise<void>(resolve=>window.requestAnimationFrame(()=>resolve())));
@@ -526,6 +563,10 @@ it('opens a collapsed result from its original mark and preserves it through exp
  expect(panel().hasAttribute("inert")).toBe(true);
  await click('mark[data-inquiry-id="explain"]');
  expect(panel().hasAttribute("inert")).toBe(false);expect(host.querySelector('.answer-markdown')?.textContent).toContain('已有解释');
+ const pin=host.querySelector<HTMLButtonElement>('.desktop-panel-controls button')!;
+ expect(pin.getAttribute('aria-pressed')).toBe('true');expect(pin.getAttribute('aria-label')).toBe('收起知识贴');
+ expect(pin.querySelector('svg')?.getAttribute('fill')).toBe('currentColor');expect(host.querySelector('.result-collapse-action')).toBeNull();
+ expect(localStorage.getItem('got-it.result-panel-pinned.v1')).toBe('false');
  await act(async()=>panel().dispatchEvent(new MouseEvent('mouseout',{bubbles:true,relatedTarget:document.body})));
  await act(async()=>new Promise(r=>setTimeout(r,250)));
  expect(panel().hasAttribute("inert")).toBe(false);

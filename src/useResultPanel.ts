@@ -37,10 +37,16 @@ export function useResultPanel() {
   }, [cancel]);
   const leave = useCallback(() => { hovered.current = false; deferClose(); }, [deferClose]);
   const pin = useCallback((value: boolean) => {
-    cancel(); setPinned(value); setMode(value ? 'closed' : 'peek');
+    cancel(); setPinned(value); setMode('closed');
     try { localStorage.setItem(KEY, String(value)); } catch { /* keep session preference */ }
-    if (!value) deferClose();
-  }, [cancel, deferClose]);
+    // Unpinning is an explicit close action. Close immediately instead of
+    // waiting for the pointer to leave, and return focus to the edge rail.
+    if (!value) {
+      hovered.current = false;
+      hoverBlockedUntil.current = Date.now() + 300;
+      requestAnimationFrame(() => triggerRef.current?.focus());
+    }
+  }, [cancel]);
   const close = useCallback(() => {
     if (pinned) return;
     const restoreFocus = ref.current?.contains(document.activeElement);
@@ -61,5 +67,6 @@ export function useResultPanel() {
     resize(); // Reconcile a viewport change between initial render and subscribing.
     return () => { media?.removeEventListener('change', resize); cancel(); };
   }, [cancel]);
-  return { pinned, expanded: pinned || mode !== 'closed', narrow, ref, triggerRef, enter, leave, deferClose, cancel, reveal, hoverReveal, openReading, pin, close, collapseFromDrag };
+  const autoFixed = mode === 'reading' && !pinned;
+  return { pinned, autoFixed, effectivelyPinned: pinned || autoFixed, expanded: pinned || mode !== 'closed', narrow, ref, triggerRef, enter, leave, deferClose, cancel, reveal, hoverReveal, openReading, pin, close, collapseFromDrag };
 }

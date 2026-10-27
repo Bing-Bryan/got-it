@@ -35,6 +35,7 @@
 .pdf-selection-card:has(.bookmark-action){padding:0;border:1px solid var(--line-strong);border-radius:14px;background:var(--paper);box-shadow:var(--shadow-float);overflow:hidden;}.pdf-selection-card:has(.bookmark-action) .pdf-card-actions{border:0;box-shadow:none;background:transparent;}.pdf-selection-card:has(.bookmark-action) .pdf-selected-quote{margin:0;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:8px 11px;}
 .pdf-bookmark-mark {position:absolute;border-bottom:2px solid var(--blue);pointer-events:none;}
 .markdown-article::highlight(got-it-bookmarks) {text-decoration:underline;text-decoration-color:var(--blue);text-decoration-thickness:2px;text-underline-offset:4px;background:transparent;}
+.markdown-article::highlight(got-it-bookmarks-block) {text-decoration:underline;text-decoration-style:dashed;text-decoration-color:var(--blue);text-decoration-thickness:2px;text-underline-offset:4px;background:transparent;}
 @media(max-width:780px){.document-bookmarks{margin-left:6px;}.document-bookmark-word{display:none;}.document-bookmarks-trigger{min-width:44px;min-height:44px;justify-content:center;padding:6px;}.document-bookmarks-panel{position:fixed;top:64px;left:12px;right:12px;width:auto;max-height:calc(100dvh - 100px);}.selection-toolbar{gap:10px;}.selection-understanding{min-width:0;}.selection-bookmark-container{flex-basis:58px;padding:7px 0;}.selection-operation-row{gap:0;}.selection-actions{grid-template-columns:1fr 1fr auto;}.selection-actions>.question-input-trigger{grid-column:1/-1;}.selection-actions>.selection-close{grid-column:3;grid-row:1;}.document-bookmark-row{min-height:44px;}}
 }
 @layer controls {.bookmark-action .bookmark-icon{--control-bg:var(--paper);--control-border:var(--line-strong);--control-fg:var(--blue-strong);} }
@@ -97,6 +98,22 @@
  .app-frame .selection-toolbar { bottom:calc(var(--reading-viewport-bottom,0px) + 10px); }
  .app-frame .selection-understanding { max-height:min(360px,calc(var(--reading-viewport-height,100dvh) - 24px)); }
 }
+
+/* Web image quick actions: a fixed action bar that grows out of the image's lower edge. */
+.image-actions-toolbar {position:fixed;z-index:120;width:min(510px,calc(100vw - 24px));max-height:min(360px,calc(100dvh - 24px));overflow:visible;border:1px solid var(--line-strong);border-radius:14px;background:var(--paper);box-shadow:var(--shadow-float);transform-origin:top center;animation:image-actions-in .16s ease-out both;}
+.image-actions-toolbar .selection-operation-row {min-width:0;}
+.image-actions-toolbar .selection-actions {padding:6px;}
+@keyframes image-actions-in {from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+@media (prefers-reduced-motion:reduce){.image-actions-toolbar{animation:none;}}
+.selection-action-note {margin:0;padding:0 12px 8px;color:var(--muted);font-size:var(--font-meta);line-height:1.5;}
+.web-image-actions-trigger {position:fixed;z-index:118;display:grid;place-items:center;width:44px;height:44px;padding:0;border:1px solid var(--line-strong);border-radius:12px;background:color-mix(in srgb,var(--paper) 92%,transparent);color:var(--muted);box-shadow:0 2px 10px #18213b12;}
+.web-image-actions-trigger:hover,.web-image-actions-trigger:focus-visible {color:var(--ink);background:var(--paper);}
+@media (hover:hover){.web-image-actions-trigger{display:none;}}
+.image-inquiry-mark {outline:2px solid color-mix(in srgb,var(--blue) 72%,transparent);outline-offset:3px;}
+.image-inquiry-mark.is-active,.image-inquiry-mark.is-emphasized {outline-style:dashed;outline-width:2px;outline-color:var(--blue-strong);}
+.is-bookmark-target,.is-inquiry-target {animation:image-target-flash 1.2s ease-out 1;}
+@keyframes image-target-flash {0%,25%{outline:3px solid var(--blue-strong);outline-offset:4px}100%{outline:2px solid transparent;outline-offset:4px}}
+@media (prefers-reduced-motion:reduce){.is-bookmark-target,.is-inquiry-target{animation:none;outline:2px dashed var(--blue-strong);outline-offset:3px;}}
 
 @layer reader-base {
 :root {
@@ -2271,8 +2288,11 @@ a:focus-visible {
 .website-links em { font-size: var(--font-ui); font-style: normal; color: var(--subtle); }
 @media(max-width: 400px) { .inquiry-tabs [role="tab"] { gap: 3px; } .inquiry-tabs [role="tab"] span { font-size: var(--font-ui); } .inquiry-tabs [role="tab"] .tab-count { font-size: var(--font-ui); margin-left: 1px; } }
 
-/* Actions follow the response in the same scrolling flow. */
-.thread-scroll > .compact-actions { padding: 18px 0 0; margin-top: 20px; gap: 8px; }
+/* Actions follow the response in the same scrolling flow. The footer sits inside
+   ActionAvailability, so match both the direct and wrapped form to keep its
+   left edge on the answer text's line. */
+.thread-scroll > .compact-actions,
+.thread-scroll .action-availability > .compact-actions { padding: 18px 0 0; margin-top: 20px; gap: 8px; }
 
 /* Low-frequency model preferences live with the provider connection. */
 .provider-shell[hidden] { display: none; }
@@ -2521,7 +2541,6 @@ a:focus-visible {
 
 /* Selection actions become one focused field, rather than an expanded form. */
 .selection-actions { grid-template-columns: repeat(3, minmax(0, 1fr)) 29px; }
-.selection-toolbar:has(.question-inline) .selection-quote,
 .selection-actions:has(.question-inline) > button,
 .pdf-card-actions:has(.question-inline) > button { display: none; }
 .selection-actions:has(.question-inline) { display: block; padding: 0; }
@@ -2795,7 +2814,6 @@ a:focus-visible {
 @media (prefers-reduced-motion: reduce) { .category-delete.confirming { animation: none; } }
 .selection-actions > .question-input-trigger, .pdf-card-actions > .question-input-trigger { justify-content: center; gap: 6px; color: var(--text); border: 0; background: var(--accent-soft); font-size: var(--font-ui-strong); font-weight: 500; }
 .selection-actions > .question-input-trigger:hover, .pdf-card-actions > .question-input-trigger:hover { color: var(--intent-violet); background: var(--accent-soft); }
-.selection-toolbar:has(.question-inline) .selection-quote { display: block; }
 .question-composer.question-inline .question-back { flex: 0 0 auto; color: var(--accent); font-size: var(--font-ui); padding: 6px; border: 0; background: transparent; cursor: pointer; }
 .stopped-card { padding: 12px; background: var(--soft); border-radius: 8px; font-size: var(--font-ui-strong); display: flex; gap: 8px; color: var(--muted); }
 .stopped-card p { margin: 4px 0 0; }
@@ -3034,7 +3052,6 @@ a:focus-visible {
 .hosted-disclosure-panel p:last-child { margin-bottom: 0; }
 .hosted-disclosure-panel button { min-height: 32px; }
 .hosted-disclosure-panel a { color: var(--blue); text-decoration: underline; }
-.selection-surface .hosted-send-disclosure { padding: 4px 12px 8px; }
 .document-question-entry .hosted-send-disclosure { padding: 4px 0 8px; }
 .hosted-disclosure-panel .hosted-send-disclosure { padding: 10px 0 0; }
 
@@ -3085,6 +3102,36 @@ details[open] > .disclosure-summary > .disclosure-chevron { transform: rotate(18
 .reader-tools .reader-status-host { flex: 1 0 100%; order: initial; width: 100%; }
 .reader-tools .reader-status-host:empty { display: none; }
 
+/* PDF: share one row while it fits, then let the real controls wrap without clipping.
+   The status host sits between the leading and trailing groups instead of owning a fixed row. */
+.reader-tools--pdf { display:flex; flex-wrap:wrap; padding-block:5px; column-gap:8px; row-gap:4px; }
+.reader-tools--pdf .reader-tools-leading { order:0; flex:0 1 auto; gap:4px 8px; }
+.reader-tools--pdf .reader-tools-leading .library-state { flex:0 1 auto; display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px; }
+.reader-tools--pdf .reader-tools-leading .library-source-state { padding:0; }
+.reader-tools--pdf .reader-status-host { order:1; flex:1 1 240px; width:auto; }
+.reader-tools--pdf .reader-tools-trailing { order:2; margin-left:0; }
+.reader-tools--pdf .reader-status-host .pdf-toolbar { height:auto; min-height:32px; flex-wrap:wrap; align-content:center; row-gap:4px; overflow:visible; }
+.reader-tools--pdf .pdf-page-number { padding-right:8px; }
+.reader-tools--pdf .pdf-inline-help { flex:1 1 140px; overflow:visible; text-overflow:clip; white-space:normal; overflow-wrap:anywhere; }
+.reader-tools--pdf .pdf-save-state { max-width:none; overflow:visible; text-overflow:clip; white-space:normal; overflow-wrap:anywhere; }
+.reader-tools--pdf .pdf-mode-hint { white-space:normal; }
+.reader-tools--pdf .reader-tools-trailing .library-save-status { max-width:240px; }
+@media (pointer:coarse) {
+  .reader-tools--pdf .pdf-toolbar button,
+  .reader-tools--pdf .reading-adjustment-trigger { height:auto; min-height:44px; }
+  .reader-tools--pdf .reading-adjustment-trigger { width:44px; height:44px; }
+  .reader-tools--pdf .reader-tools-trailing .reader-adjustment-layer,
+  .reader-tools--pdf .reader-tools-trailing .reading-adjustment-dock { flex-basis:44px; width:44px; height:44px; }
+}
+/* Narrow PDF: let leading controls, save state and zoom share one line, then give
+   page/selection the full last line. Leading participates directly so it can wrap
+   without pushing persistence to a third line; all heights stay content-driven. */
+@media (max-width:780px) {
+  .reader-tools--pdf .reader-tools-leading { order:0; display:contents; }
+  .reader-tools--pdf .reader-tools-trailing { order:1; margin-left:auto; }
+  .reader-tools--pdf .reader-status-host { order:2; flex:1 1 100%; width:100%; }
+}
+
 .translation-privacy-settings { border-top:1px solid var(--line); margin-top:12px; padding-top:12px; }
 .translation-privacy-settings strong { font-size:var(--font-ui); font-weight:600; }
 .translation-privacy-settings label { display:flex; align-items:flex-start; gap:var(--control-gap); min-height:24px; font-size:var(--font-ui); line-height:1.6; }
@@ -3124,6 +3171,16 @@ details[open] > .disclosure-summary > .disclosure-chevron { transform: rotate(18
 .pdf-module-error h2 { font-size:18px;margin:0 0 10px; }.pdf-module-error p{margin:8px 0}.pdf-module-error button{padding:8px 12px;border:1px solid var(--reading-line-strong);border-radius:8px}
 .reading-adjustment .markdown-width-value { background:var(--reading-muted); border-color:var(--reading-line-strong); }
 .reading-adjustment .markdown-width-value:focus-within { background:var(--reading-card); border-color:var(--blue-line); }
+
+/* One frameless appearance toggle shared by the landing header and reading tools. */
+.color-scheme-menu { display:inline-flex; align-items:center; flex:none; }
+.color-scheme-trigger { position:relative; display:grid; place-items:center; width:34px; height:34px; padding:0; border:0; border-radius:8px; background:transparent; color:var(--muted); cursor:pointer; }
+.color-scheme-trigger:hover, .color-scheme-trigger:active { background:transparent; border-color:transparent; }
+.color-scheme-trigger:hover { color:var(--accent); }
+.color-scheme-trigger:active { color:var(--accent-strong); }
+@media (max-width:780px), (pointer:coarse) {
+  .color-scheme-trigger { width:44px; height:44px; }
+}
 
 /* Reversible reading-list membership; persisted material remains untouched. */
 .library-title { display:flex; align-items:center; gap:6px; }
@@ -3240,10 +3297,6 @@ details[open] > .disclosure-summary > .disclosure-chevron { transform: rotate(18
 
 /* Pointer over a source mark: light hint on the matching list entry (no open, scroll or request). */
 .category-open[data-source-hover] { background: var(--blue-soft); box-shadow: inset 0 0 0 1px var(--blue-line); }
-
-/* Markdown/web popover: no quote row beside a visible highlight; 问一问 moves focus into the field and drops the highlight, so the quote returns there. */
-.selection-toolbar .selection-quote--ask { display: none; }
-.selection-toolbar:has(.question-inline) .selection-quote--ask { display: block; }
 
 /* Grid children must shrink before their own code/table scroll containers do. */
 .thread-messages > .assistant-message {

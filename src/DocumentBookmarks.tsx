@@ -1,14 +1,166 @@
-import {track} from './lib/hosted-usage';
-import {useEffect,useRef,useState} from 'react';
-import {Bookmark,X,Trash2} from 'lucide-react';
-import {libraryRequest} from './lib/library-client';
-import {bookmarkIsImage,type ReadingBookmark} from './lib/bookmark-types';
-export function DocumentBookmarks({bookmarks,loading,error,revisionId,disabled,onLocate,onRetry,onChanged}:{bookmarks:ReadingBookmark[];loading:boolean;error:string;revisionId?:string;disabled?:boolean;onLocate:(b:ReadingBookmark)=>Promise<void>;onRetry:()=>void;onChanged?:()=>void}){
- const [open,setOpen]=useState(false),[actionError,setActionError]=useState(''),[pending,setPending]=useState<string|null>(null),[deleting,setDeleting]=useState<string|null>(null),[removed,setRemoved]=useState<string[]>([]);const root=useRef<HTMLDivElement>(null),trigger=useRef<HTMLButtonElement>(null);
- useEffect(()=>{setOpen(false);setActionError('');setDeleting(null);},[revisionId]);
- useEffect(()=>{if(!open)return;const outside=(event:PointerEvent)=>{if(!root.current?.contains(event.target as Node))setOpen(false);};document.addEventListener('pointerdown',outside);return()=>document.removeEventListener('pointerdown',outside);},[open]);
- async function locate(b:ReadingBookmark){setPending(b.id);setActionError('');try{await onLocate(b);setOpen(false);}catch(e){setActionError(e instanceof Error?e.message:'无法定位原文，收藏仍保留。');}finally{setPending(null);}}
- async function remove(b:ReadingBookmark){setPending(b.id);setActionError('');try{await libraryRequest(`/bookmarks/${b.id}/delete`,{expectedVersion:b.version});setRemoved(ids=>[...ids,b.id]);setDeleting(null);onChanged?.();}catch(e){setActionError(e instanceof Error?e.message:'删除失败，请重试。');}finally{setPending(null);}}
- const visible=bookmarks.filter(b=>!removed.includes(b.id));
- return <div className="document-bookmarks" ref={root} onKeyDown={e=>{if(e.key==='Escape'&&open){e.stopPropagation();setOpen(false);trigger.current?.focus();}}}><button ref={trigger} type="button" className="document-bookmarks-trigger" disabled={disabled} aria-label="本文收藏" title="本文收藏" aria-expanded={open} aria-controls="document-bookmarks-panel" onClick={()=>setOpen(v=>{if(!v)track("bookmarks-document");return !v;})}><Bookmark size={18} aria-hidden="true"/></button>{open?<section id="document-bookmarks-panel" aria-label="本文收藏" className="document-bookmarks-panel"><header><strong>本文收藏 · {loading?'…':visible.length}</strong><button type="button" className="icon-button" aria-label="关闭本文收藏" onClick={()=>{setOpen(false);trigger.current?.focus();}}><X size={16}/></button></header>{error?<p role="alert">{error}<button type="button" onClick={onRetry}>重新读取</button></p>:loading?<p role="status">正在读取本文收藏…</p>:!visible.length?<p>本文还没有收藏，选中文字或图片后点击独立的收藏图标。</p>:null}{actionError?<p role="alert">{actionError}</p>:null}<div className="document-bookmarks-list">{visible.map(b=><article className="document-bookmark-item" key={b.id}><button type="button" className="document-bookmark-row" disabled={!!pending} onClick={()=>void locate(b)}><span>{b.excerpt}</span><small>{b.revisionId===revisionId?'当前原文版本':'已保存的旧版本'} · {new Date(b.createdAt).toLocaleDateString()}{bookmarkIsImage(b.anchor)?' · 图片收藏':''}{b.anchor.translation||b.anchor.segments?.some(s=>s.translation)?' · 译文收藏':''}</small></button><div className="document-bookmark-actions">{deleting===b.id?<><button type="button" className="bookmark-danger" disabled={!!pending} onClick={()=>void remove(b)}>{pending===b.id?'删除中…':'确认删除'}</button><button type="button" disabled={!!pending} onClick={()=>setDeleting(null)}>取消</button></>:<button type="button" className="category-delete bookmark-delete" aria-label="删除收藏" title="删除收藏" disabled={!!pending} onClick={()=>setDeleting(b.id)}><Trash2 size={16} aria-hidden="true"/></button>}</div></article>)}</div></section>:null}</div>;
+import { track } from './lib/hosted-usage';
+import { useEffect, useRef, useState } from 'react';
+import { Bookmark, X, Trash2 } from 'lucide-react';
+import { libraryRequest } from './lib/library-client';
+import { bookmarkIsImage, type ReadingBookmark } from './lib/bookmark-types';
+import type { BookmarkDisplay } from './lib/translated-bookmarks';
+
+export function DocumentBookmarks({
+  bookmarks,
+  loading,
+  error,
+  revisionId,
+  disabled,
+  displays,
+  onLocate,
+  onRetry,
+  onChanged,
+}: {
+  bookmarks: ReadingBookmark[];
+  loading: boolean;
+  error: string;
+  revisionId?: string;
+  disabled?: boolean;
+  displays?: Map<string, BookmarkDisplay>;
+  onLocate: (b: ReadingBookmark) => Promise<void>;
+  onRetry: () => void;
+  onChanged?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [pending, setPending] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [removed, setRemoved] = useState<string[]>([]);
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    setOpen(false);
+    setActionError('');
+    setDeleting(null);
+  }, [revisionId]);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
+  }, [open]);
+
+  async function locate(b: ReadingBookmark) {
+    setPending(b.id);
+    setActionError('');
+    try {
+      await onLocate(b);
+      setOpen(false);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : '无法定位原文，收藏仍保留。');
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function remove(b: ReadingBookmark) {
+    setPending(b.id);
+    setActionError('');
+    try {
+      await libraryRequest(`/bookmarks/${b.id}/delete`, { expectedVersion: b.version });
+      setRemoved(ids => [...ids, b.id]);
+      setDeleting(null);
+      onChanged?.();
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : '删除失败，请重试。');
+    } finally {
+      setPending(null);
+    }
+  }
+
+  const visible = bookmarks.filter(b => !removed.includes(b.id));
+  return (
+    <div
+      className="document-bookmarks"
+      ref={root}
+      onKeyDown={e => {
+        if (e.key === 'Escape' && open) {
+          e.stopPropagation();
+          setOpen(false);
+          trigger.current?.focus();
+        }
+      }}
+    >
+      <button
+        ref={trigger}
+        type="button"
+        className="document-bookmarks-trigger"
+        disabled={disabled}
+        aria-label="本文收藏"
+        title="本文收藏"
+        aria-expanded={open}
+        aria-controls="document-bookmarks-panel"
+        onClick={() => setOpen(v => {
+          if (!v) track('bookmarks-document');
+          return !v;
+        })}
+      >
+        <Bookmark size={18} aria-hidden="true" />
+      </button>
+      {open ? (
+        <section id="document-bookmarks-panel" aria-label="本文收藏" className="document-bookmarks-panel">
+          <header>
+            <strong>本文收藏 · {loading ? '…' : visible.length}</strong>
+            <button type="button" className="icon-button" aria-label="关闭本文收藏" onClick={() => {
+              setOpen(false);
+              trigger.current?.focus();
+            }}><X size={16} /></button>
+          </header>
+          {error ? <p role="alert">{error}<button type="button" onClick={onRetry}>重新读取</button></p> : loading ? <p role="status">正在读取本文收藏…</p> : !visible.length ? <p>本文还没有收藏，选中文字或图片后点击独立的收藏图标。</p> : null}
+          {actionError ? <p role="alert">{actionError}</p> : null}
+          <div className="document-bookmarks-list">
+            {visible.map(b => {
+              const image = bookmarkIsImage(b.anchor);
+              const display = displays?.get(b.id);
+              const quote = display?.quote ?? b.excerpt;
+              const translation = image ? '图片收藏' : display?.kind === 'exact'
+                ? '译文收藏'
+                : display?.kind === 'paragraph'
+                  ? '译文对应段落'
+                  : display?.kind === 'stale'
+                    ? '旧译文摘录'
+                    : display?.kind === 'original'
+                      ? '当前译文不可用'
+                      : b.anchor.translation || b.anchor.segments?.some(segment => segment.translation)
+                        ? '译文收藏'
+                        : '';
+              const paragraphTitle = display?.kind === 'paragraph' ? '按段落对应的译文，非逐词对齐' : undefined;
+              return (
+                <article className="document-bookmark-item" key={b.id}>
+                  <button
+                    type="button"
+                    className="document-bookmark-row"
+                    disabled={!!pending}
+                    title={paragraphTitle}
+                    onClick={() => void locate(b)}
+                  >
+                    <span>{quote}</span>
+                    <small>{b.revisionId === revisionId ? '当前原文版本' : '已保存的旧版本'} · {new Date(b.createdAt).toLocaleDateString()}{translation ? ` · ${translation}` : ''}</small>
+                  </button>
+                  <div className="document-bookmark-actions">
+                    {deleting === b.id ? (
+                      <>
+                        <button type="button" className="bookmark-danger" disabled={!!pending} onClick={() => void remove(b)}>{pending === b.id ? '删除中…' : '确认删除'}</button>
+                        <button type="button" disabled={!!pending} onClick={() => setDeleting(null)}>取消</button>
+                      </>
+                    ) : (
+                      <button type="button" className="category-delete bookmark-delete" aria-label="删除收藏" title="删除收藏" disabled={!!pending} onClick={() => setDeleting(b.id)}><Trash2 size={16} aria-hidden="true" /></button>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
 }

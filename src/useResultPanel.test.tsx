@@ -48,9 +48,15 @@ it('delays transient closure and cancels it on reentry or internal focus', async
 it('retains intentionally opened results on leave and explicitly closes with focus restoration', async () => {
   localStorage.setItem(key,'false'); await mount();
   await act(async () => { panel.openReading(); panel.leave(); }); await tick(); expect(panel.expanded).toBe(true);
+  expect(panel.pinned).toBe(false); expect(panel.autoFixed).toBe(true); expect(panel.effectivelyPinned).toBe(true);
   (host.querySelector('aside button') as HTMLButtonElement).focus();
   await act(async () => panel.close()); await tick();
-  expect(panel.expanded).toBe(false); expect(document.activeElement).toBe(panel.triggerRef.current);
+  expect(panel.expanded).toBe(false); expect(panel.autoFixed).toBe(false); expect(document.activeElement).toBe(panel.triggerRef.current);
+});
+it('closes immediately when unpinning and keeps the stored preference in sync', async () => {
+  await mount(); expect(panel.pinned).toBe(true);
+  await act(async () => panel.pin(false));
+  expect(panel.expanded).toBe(false); expect(localStorage.getItem(key)).toBe('false');
 });
 it('pinning cancels a pending hide; Escape does not hide a pinned panel', async () => {
   localStorage.setItem(key,'false'); await mount();

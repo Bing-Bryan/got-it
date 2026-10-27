@@ -20,6 +20,7 @@ import { createBookmarkDraft, bookmarkDomRanges, type BookmarkDraft } from './li
 import { imageAnchorElement, imageSearchText } from './lib/image-actions';
 import { applyBookmarkHighlights } from './lib/bookmark-highlights';
 import { bookmarkQuote, bookmarkSegments, bookmarkPosition, type BookmarkCreate, type BookmarkResult } from './lib/bookmark-types';
+import { translatedBookmarkDisplays } from './lib/translated-bookmarks';
 import { useBookmarkFeedback } from './useBookmarkFeedback';
 import { BookmarkAction } from './BookmarkAction';
 import { BookmarksView } from './BookmarksView';
@@ -35,6 +36,7 @@ import { hostedDocumentQuestionContext } from "./lib/hosted-document-question";
 import { MarkdownWidthControls } from "./MarkdownWidthControls";
 import { useMarkdownWidth } from "./useMarkdownWidth";
 import { renderedReadingMinutes } from "./lib/reading-time";
+import { selectionToolbarPlacement } from "./lib/selection-toolbar-placement";
 import { SelectionActions } from "./SelectionActions";
 import { QuestionComposer } from "./QuestionComposer";
 import PdfOutline from "./PdfOutline";
@@ -265,6 +267,9 @@ function App() {
   const sidebar = useSidebar();
   const resultPanel = useResultPanel();
   const openResultPanel = resultPanel.openReading;
+  const resultPinActive = resultPanel.effectivelyPinned;
+  const resultPinLabel = resultPanel.pinned ? "解除固定并收起知识贴" : resultPanel.autoFixed ? "收起知识贴" : "固定知识贴";
+  const resultPinTitle = resultPanel.pinned ? "解除固定并收起知识贴" : resultPanel.autoFixed ? "知识贴已自动展开，点击收起" : "固定知识贴";
   const listScrollRef = useRef<HTMLDivElement>(null);
   const listPositions = useRef(new Map<string, {top:number;id?:string}>());
   const restoreListFocus = useRef(false);
@@ -374,6 +379,12 @@ function App() {
   const documentBookmarks=useDocumentBookmarks(library.entry?.id,bookmarkVersion);
   const activeBookmarkRevision=library.historyId||library.entry?.revisionId;
   const currentBookmarks=documentBookmarks.bookmarks.filter(bookmark=>bookmark.revisionId===activeBookmarkRevision);
+  const bookmarkDisplays=useMemo(
+    () => workspace.readingSide==='translated'&&workspace.document.kind!=='pdf'
+      ? translatedBookmarkDisplays(documentBookmarks.bookmarks,workspace.document,workspace.webTranslation,activeBookmarkRevision)
+      : undefined,
+    [documentBookmarks.bookmarks,activeBookmarkRevision,workspace.document,workspace.readingSide,workspace.webTranslation],
+  );
   function beginBookmarkSave(request:BookmarkCreate){bookmarkFeedback.started(request);const draft=bookmarkDraftRef.current;if(draft)bookmarkSelectionOperation.current={draft,operationId:request.operationId};}
   function finishBookmarkSave(result:BookmarkResult,request:BookmarkCreate){
     bookmarkSaved(result,request);setBookmarkCompleted(request);
@@ -650,7 +661,15 @@ function App() {
 
     return cleanup;
   }, [rendered.html, workspace.activeInquiryId, workspace.inquiries]);
-  useEffect(()=>{const article=articleRef.current;if(!article)return;return applyBookmarkHighlights(article,currentBookmarks);},[rendered.html,workspace.activeInquiryId,workspace.inquiries,documentBookmarks.bookmarks,activeBookmarkRevision]);
+  useEffect(()=>{
+    const article=articleRef.current;
+    if(!article)return;
+    return applyBookmarkHighlights(article,currentBookmarks,{
+      document:workspace.document,
+      translation:workspace.webTranslation,
+      readingSide:workspace.readingSide??'original',
+    });
+  },[rendered.html,workspace.activeInquiryId,workspace.inquiries,workspace.document,workspace.webTranslation,workspace.readingSide,documentBookmarks.bookmarks,activeBookmarkRevision]);
 
   useEffect(() => {
     const article = articleRef.current;
@@ -1259,7 +1278,7 @@ function App() {
           </div>
 
           <div className="toolbar-actions">
-          <DocumentBookmarks bookmarks={documentBookmarks.bookmarks} loading={documentBookmarks.loading} error={documentBookmarks.error} revisionId={activeBookmarkRevision} disabled={!library.entry||library.busy} onLocate={locateBookmark} onRetry={bookmarkFeedback.changed} onChanged={bookmarkFeedback.changed}/>
+          <DocumentBookmarks bookmarks={documentBookmarks.bookmarks} loading={documentBookmarks.loading} error={documentBookmarks.error} revisionId={activeBookmarkRevision} disabled={!library.entry||library.busy} displays={bookmarkDisplays} onLocate={locateBookmark} onRetry={bookmarkFeedback.changed} onChanged={bookmarkFeedback.changed}/>
             {!showStart?providerControl:null}
             <button
               className="icon-button drawer-results-trigger"
@@ -1335,7 +1354,7 @@ function App() {
         </div>
         <div className="panel-desktop-head">
           <div className="desktop-panel-controls">
-            <button className="icon-button" type="button" aria-label={resultPanel.pinned ? "解除固定知识贴" : "固定知识贴"} aria-pressed={resultPanel.pinned} title={resultPanel.pinned ? "解除固定，移开后收起" : "固定知识贴"} onClick={event => { resultPanel.pin(!resultPanel.pinned); if (resultPanel.pinned && event.detail > 0) event.currentTarget.blur(); }}><Pin size={15} fill={resultPanel.pinned ? "currentColor" : "none"} /></button>
+            <button className="icon-button" type="button" aria-label={resultPinLabel} aria-pressed={resultPinActive} title={resultPinTitle} onClick={event => { if (resultPanel.autoFixed) { resultPanel.close(); return; } resultPanel.pin(!resultPanel.pinned); if (resultPanel.pinned && event.detail > 0) event.currentTarget.blur(); }}><Pin size={15} fill={resultPinActive ? "currentColor" : "none"} /></button>
           </div>
           <div className="inquiry-tabs" role="tablist" aria-label="本文知识贴分类">
             {NEW_INQUIRY_INTENTS.map((intent, index) => {
@@ -1351,7 +1370,7 @@ function App() {
             })}
           </div>
         </div>
-        {!resultPanel.pinned ? <button className="result-collapse-action icon-button" type="button" aria-label="收起知识贴" title="收起知识贴（Esc）" onClick={resultPanel.close}><PanelRightClose size={15} /></button> : null}
+        {!resultPanel.effectivelyPinned ? <button className="result-collapse-action icon-button" type="button" aria-label="收起知识贴" title="收起知识贴（Esc）" onClick={resultPanel.close}><PanelRightClose size={15} /></button> : null}
         <div ref={listScrollRef} onScroll={rememberList} className={`intent-result${activeInquiry ? "" : " category-view"}`} id="intent-result" role="tabpanel" aria-labelledby={tabIntent !== "why" ? `intent-tab-${tabIntent}` : undefined}>
         {activeInquiry ? <div className="result-navigation">{activeInquiry.anchor.translation ? <button type="button" className="source-excerpt" onClick={()=>{if(activeInquiry.anchor.translation?.translationId!==workspace.webTranslation?.id || activeInquiry.anchor.translation?.version!==workspace.webTranslation?.version){showToast("旧译文摘录仍保留；当前译文版本不同，请用对应原文段落回看。");return;}updateWorkspace(current=>({...current,readingSide:"translated"}));requestAnimationFrame(()=>locateInquiry(activeInquiry.id,true));}}><span>译文摘录：{activeInquiry.anchor.translation.quote}</span></button> : null}<button className="return-to-list" type="button" onClick={() => switchTab(tabIntent, true)}><ChevronLeft size={16} aria-hidden="true" />返回</button>{activeInquiry.anchor.scope === "document" ? <span className="source-excerpt">全文</span> : <button className="source-excerpt" type="button" title={activeInquiry.anchor.quote} aria-label={`定位原文：${activeInquiry.anchor.image ? `图片 · ${activeInquiry.anchor.quote}` : activeInquiry.anchor.pdf?.kind === 'region' ? `第 ${activeInquiry.anchor.pdf.page} 页 · 所选区域` : activeInquiry.anchor.quote}`} onClick={() => { track("source-return"); if(activeInquiry.anchor.translation)updateWorkspace(current=>({...current,readingSide:"original"}));requestAnimationFrame(()=>locateInquiry(activeInquiry.id, true)); }}>{activeInquiry.anchor.image ? <span className="source-page">图片</span> : null}{activeInquiry.anchor.pdf ? <span className="source-page">第 {activeInquiry.anchor.pdf.page} 页{activeInquiry.anchor.pdf.kind === 'region' ? ' · 所选区域' : ''}</span> : null}{activeInquiry.anchor.pdf?.kind !== 'region' ? <span>{activeInquiry.anchor.translation?"对应原文段落：":""}{activeInquiry.anchor.quote}</span> : null}</button>}</div> : null}
           <div hidden={!!activeInquiry} className="category-heading category-toolbar"><strong>本文的{tabIntent === "ask" ? "问题" : INTENT_META[tabIntent].shortLabel}</strong><div className="category-heading-actions"><span>{categoryItems.length} 条</span>
@@ -1410,6 +1429,7 @@ function App() {
         <SelectionToolbar
           draft={bookmarkDraft}
           hidden={mobileDrawerOpen || providerOpen}
+          article={articleRef.current}
           hint={inquirySelectionError}
           unavailable={selectionUnavailable}
           onRecover={recoverAction}
@@ -1525,9 +1545,11 @@ function SelectionToolbar({
   onRecover,
   saveWarning,
   hidden = false,
+  article,
 }: {
   draft: BookmarkDraft;
   hidden?: boolean;
+  article?: HTMLElement | null;
   hint?:string;
   unavailable?:ActionUnavailable;
   saveWarning?:boolean;
@@ -1537,21 +1559,79 @@ function SelectionToolbar({
   disabled?: boolean;
   onClose: () => void;
 }) {
-  const left = Math.min(
-    Math.max(draft.rect.left + draft.rect.width / 2, 238),
-    window.innerWidth - 238,
-  );
-  const top = Math.min(draft.rect.top + draft.rect.height + 12, Math.max(12, window.innerHeight - 320));
+  const surface = useRef<HTMLDivElement>(null);
+  // Measure the real toolbar height before revealing it: the composer and
+  // warning rows change the height, and guessing it was the original bug.
+  useLayoutEffect(() => {
+    const element = surface.current;
+    if (!element || hidden) return;
+    let ranges = article ? bookmarkDomRanges(article, draft.anchor) : null;
+    let canResolve = !!ranges?.length;
+    const resolveRanges = () => {
+      if (!canResolve) return null;
+      if (!ranges?.length || ranges.some(range => !range.startContainer.isConnected)) {
+        ranges = article ? bookmarkDomRanges(article, draft.anchor) : null;
+        canResolve = !!ranges?.length;
+      }
+      return ranges;
+    };
+    const currentRect = () => {
+      const live = resolveRanges();
+      return live?.length ? unionRangeRect(live) : null;
+    };
+    const hide = () => {
+      element.style.visibility = "hidden";
+      if (element.contains(document.activeElement) && document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    };
+    const place = () => {
+      const anchor = currentRect();
+      // Keep the toolbar attached to the selection while the article scrolls;
+      // when the selection leaves the viewport, hide it instead of parking it
+      // at the old screen position. If the anchor cannot be resolved, hiding is
+      // safer than silently following a stale rectangle.
+      if (!anchor || anchor.bottom < 0 || anchor.top > window.innerHeight) {
+        hide();
+        return;
+      }
+      const placement = selectionToolbarPlacement(
+        anchor,
+        { width: element.offsetWidth, height: element.offsetHeight },
+        { width: window.innerWidth, height: window.innerHeight },
+      );
+      element.style.left = `${placement.left}px`;
+      element.style.top = `${placement.top}px`;
+      element.style.visibility = "visible";
+      element.dataset.placement = placement.side;
+    };
+    let frame = 0;
+    const schedule = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(() => { frame = 0; place(); });
+    };
+    place();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
+    observer?.observe(element);
+    if (article) observer?.observe(article);
+    window.addEventListener("scroll", schedule, true);
+    window.addEventListener("resize", schedule);
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      observer?.disconnect();
+      window.removeEventListener("scroll", schedule, true);
+      window.removeEventListener("resize", schedule);
+    };
+  }, [draft, hidden, article]);
   return (
     <div
+      ref={surface}
       className="selection-toolbar selection-surface"
       hidden={hidden}
       inert={hidden}
-      style={{ left, top }}
+      style={{ visibility: "hidden" }}
       onMouseDown={(event) => { if (!(event.target instanceof HTMLTextAreaElement)) event.preventDefault(); }}
     >
-      {/* The source highlight shows what is selected, so the quote only appears once 问一问 takes focus and the native highlight is gone. */}
-      <div className="selection-understanding" role="group" aria-label={`选中的原文：${selectionLabel(bookmarkQuote(draft.anchor))}`}><div className="selection-quote selection-quote--ask" aria-hidden="true">“{bookmarkQuote(draft.anchor)}”</div>
+      {/* The source highlight shows what is selected; the accessible name keeps the quote, and no visual quote row is rendered in any state. */}
+      <div className="selection-understanding" role="group" aria-label={`选中的原文：${selectionLabel(bookmarkQuote(draft.anchor))}`}>
       {hint?<p className="bookmark-selection-hint">{hint}</p>:null}
       <SelectionActions bookmark={bookmark} onSelect={onSelect} onClose={onClose} disabled={disabled} unavailable={unavailable} onRecover={onRecover} saveWarning={saveWarning}/></div>
     </div>
@@ -1561,6 +1641,30 @@ function SelectionToolbar({
 function selectionLabel(quote: string) {
   const chars = [...quote];
   return chars.length > 80 ? `${chars.slice(0, 80).join("")}…` : quote;
+}
+
+function unionRangeRect(ranges: Range[]) {
+  let left = Number.POSITIVE_INFINITY;
+  let top = Number.POSITIVE_INFINITY;
+  let right = Number.NEGATIVE_INFINITY;
+  let bottom = Number.NEGATIVE_INFINITY;
+  let found = false;
+  for (const range of ranges) {
+    const rects = typeof range.getClientRects === "function" ? [...range.getClientRects()] : [];
+    if (!rects.length) {
+      const rect = typeof range.getBoundingClientRect === "function" ? range.getBoundingClientRect() : null;
+      if (rect && (rect.width > 0 || rect.height > 0)) rects.push(rect);
+    }
+    for (const rect of rects) {
+      if (rect.width <= 0 && rect.height <= 0) continue;
+      left = Math.min(left, rect.left);
+      top = Math.min(top, rect.top);
+      right = Math.max(right, rect.right);
+      bottom = Math.max(bottom, rect.bottom);
+      found = true;
+    }
+  }
+  return found ? { left, top, width: right - left, height: bottom - top, bottom } : null;
 }
 
 interface InquiryPanelProps {

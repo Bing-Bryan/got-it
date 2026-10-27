@@ -1,5 +1,5 @@
 import {act} from 'react';import {createRoot,type Root} from 'react-dom/client';import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {DocumentBookmarks} from './DocumentBookmarks';import {useDocumentBookmarks} from './useDocumentBookmarks';import type {ReadingBookmark} from './lib/bookmark-types';
+import {DocumentBookmarks} from './DocumentBookmarks';import {useDocumentBookmarks} from './useDocumentBookmarks';import type {ReadingBookmark} from './lib/bookmark-types';import type {BookmarkDisplay} from './lib/translated-bookmarks';
 const {api}=vi.hoisted(()=>({api:vi.fn()}));vi.mock('./lib/library-client',()=>({libraryRequest:api}));let host:HTMLDivElement,root:Root;
 beforeEach(()=>{(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;host=document.createElement('div');document.body.append(host);root=createRoot(host);api.mockReset();});afterEach(async()=>{await act(async()=>root.unmount());host.remove();});
 function Harness({entryId}:{entryId:string}){const state=useDocumentBookmarks(entryId,0);return <output>{state.loading?'loading':state.error||state.bookmarks.map(b=>b.id).join(',')}</output>;}
@@ -8,5 +8,38 @@ it('does not replace a new document list with an old document late page',async()
 it('keeps entry scope after a paging revision mismatch instead of falling back to all bookmarks',async()=>{api.mockResolvedValueOnce({bookmarks:Array.from({length:200},(_,i)=>({id:String(i)})),total:201,revision:1}).mockResolvedValueOnce({bookmarks:[{id:'last'}],total:201,revision:2});await act(async()=>root.render(<Harness entryId="safe-entry"/>));expect(host.textContent).toContain('收藏列表已变化');expect(api.mock.calls.every(call=>call[0].includes('entryId=safe-entry'))).toBe(true);});
 it('labels old versions, keeps failed location in the document list, and returns Escape focus to its trigger',async()=>{const b={id:'one',excerpt:'Safe saved excerpt',revisionId:'old',createdAt:'2026-10-15',anchor:{}} as ReadingBookmark;await act(async()=>root.render(<DocumentBookmarks bookmarks={[b]} loading={false} error="" revisionId="current" onLocate={async()=>{throw Error('missing version');}} onRetry={()=>{}}/>));await act(async()=>host.querySelector<HTMLButtonElement>('.document-bookmarks-trigger')!.click());expect(host.textContent).toContain('已保存的旧版本');await act(async()=>host.querySelector<HTMLButtonElement>('.document-bookmark-row')!.click());expect(host.textContent).toContain('missing version');expect(host.querySelector('.document-bookmarks-panel')).not.toBeNull();await act(async()=>host.firstElementChild!.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})));expect(host.querySelector('.document-bookmarks-panel')).toBeNull();expect(document.activeElement).toBe(host.querySelector('.document-bookmarks-trigger'));});
 it('keeps a failed deletion readable and only removes/counts it after confirmed commit',async()=>{const b={id:'one',version:1,excerpt:'Safe deletable excerpt',revisionId:'current',createdAt:'2026',anchor:{}} as ReadingBookmark,onChanged=vi.fn();api.mockRejectedValueOnce(new Error('controlled delete failure')).mockResolvedValueOnce({deleted:true,revision:3});await act(async()=>root.render(<DocumentBookmarks bookmarks={[b]} loading={false} error="" revisionId="current" onLocate={async()=>{}} onRetry={()=>{}} onChanged={onChanged}/>));await act(async()=>host.querySelector<HTMLButtonElement>('.document-bookmarks-trigger')!.click());await act(async()=>host.querySelector<HTMLButtonElement>('.document-bookmark-actions button')!.click());expect(api).not.toHaveBeenCalled();await act(async()=>host.querySelector<HTMLButtonElement>('.bookmark-danger')!.click());expect(host.textContent).toContain('controlled delete failure');expect(host.textContent).toContain('Safe deletable excerpt');expect(onChanged).not.toHaveBeenCalled();await act(async()=>host.querySelector<HTMLButtonElement>('.bookmark-danger')!.click());expect(onChanged).toHaveBeenCalledOnce();expect(host.querySelector('.document-bookmark-row')).toBeNull();expect(host.querySelector('.document-bookmarks-panel header')?.textContent).toContain('0');});
+
+it('renders Chinese translated displays and labels the fallback without mixing in English',async()=>{
+ const b={id:'one',version:1,excerpt:'English source excerpt',revisionId:'current',createdAt:'2026-10-27',anchor:{}} as ReadingBookmark;
+ const cases:[BookmarkDisplay,string][]=[
+  [{quote:'对应的中文段落',kind:'paragraph',full:true},'译文对应段落'],
+  [{quote:'精确的中文选段',kind:'exact',full:true},'译文收藏'],
+  [{quote:'English source excerpt',kind:'original',full:false},'当前译文不可用'],
+ ];
+ for(const [display,label] of cases){
+  await act(async()=>root.render(<DocumentBookmarks bookmarks={[b]} loading={false} error="" revisionId="current" displays={new Map([['one',display]])} onLocate={async()=>{}} onRetry={()=>{}}/>));
+  const trigger=host.querySelector<HTMLButtonElement>('.document-bookmarks-trigger')!;
+  await act(async()=>trigger.click());
+  const row=host.querySelector<HTMLElement>('.document-bookmark-row')!;
+  expect(row.querySelector('span')?.textContent).toBe(display.quote);
+  expect(row.querySelector('small')?.textContent).toContain(label);
+  if(display.kind==='paragraph'){
+   expect(row.textContent).not.toContain('English source excerpt');
+   expect(row.title).toContain('按段落对应');
+  }
+  await act(async()=>trigger.click());
+ }
+});
+
+it('labels an old-revision row as an explicit fallback on the translated side',async()=>{
+ const b={id:'old',version:1,excerpt:'English old excerpt',revisionId:'old',createdAt:'2026-10-01',anchor:{}} as ReadingBookmark;
+ const displays=new Map([['old',{quote:'English old excerpt',kind:'original' as const,full:false}]]);
+ await act(async()=>root.render(<DocumentBookmarks bookmarks={[b]} loading={false} error="" revisionId="current" displays={displays} onLocate={async()=>{}} onRetry={()=>{}}/>));
+ await act(async()=>host.querySelector<HTMLButtonElement>('.document-bookmarks-trigger')!.click());
+ const row=host.querySelector<HTMLElement>('.document-bookmark-row')!;
+ expect(row.querySelector('span')?.textContent).toBe('English old excerpt');
+ expect(row.querySelector('small')?.textContent).toContain('已保存的旧版本');
+ expect(row.querySelector('small')?.textContent).toContain('当前译文不可用');
+});
 
 it('uses a named icon-only document trigger and closes its popover after location succeeds',async()=>{const onLocate=vi.fn().mockResolvedValue(undefined),b={id:'safe',excerpt:'Long text '.repeat(60),revisionId:'r',createdAt:'2026',anchor:{}} as ReadingBookmark;await act(async()=>root.render(<DocumentBookmarks bookmarks={[b]} loading={false} error="" revisionId="r" onLocate={onLocate} onRetry={()=>{}}/>));const trigger=host.querySelector<HTMLButtonElement>('.document-bookmarks-trigger')!;expect(trigger.textContent).toBe('');expect(trigger.querySelector('svg')?.getAttribute('width')).toBe('18');expect(trigger.getAttribute('aria-label')).toBe('本文收藏');expect(trigger.title).toBe('本文收藏');await act(async()=>trigger.click());expect(trigger.getAttribute('aria-expanded')).toBe('true');expect(host.querySelector('.document-bookmark-row>span')?.textContent).toBe(b.excerpt);await act(async()=>host.querySelector<HTMLButtonElement>('.document-bookmark-row')!.click());expect(onLocate).toHaveBeenCalledWith(b);expect(host.querySelector('.document-bookmarks-panel')).toBeNull();});

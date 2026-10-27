@@ -49,6 +49,7 @@ it.each(['explain','verify','ask'] as const)('uses the selected OCR quote for %s
  expect(host.querySelector('textarea')).toBeNull();expect(host.querySelector('.pdf-selected-quote')?.textContent).toBe('“2096”');
  await click(`.pdf-card-actions button:nth-child(${['explain','verify','ask'].indexOf(intent)+1})`);
  if(intent==='ask') await act(async()=>{const input=host.querySelector('textarea')!;Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(input,'这个图里的20%表示什么？');input.dispatchEvent(new Event('input',{bubbles:true}));});
+ if(intent==='ask') expect(host.querySelector('.pdf-selected-quote')?.textContent).toBe('“2096”');
  if(intent==='ask') await act(async()=>host.querySelector('form')!.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
  const draft=create.mock.calls[0][1] as SelectionDraft;expect(create.mock.calls[0][0]).toBe(intent);expect(draft.anchor.quote).toBe('2096');expect(draft.context).toBe('2096');expect(draft.anchor.pdf!.originalText).toBe('2096');expect(draft.anchor.pdf!.rects).toEqual([[20,200,80,220]]);
 });
