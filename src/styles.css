@@ -2401,7 +2401,7 @@ a:focus-visible {
 .app-sidebar-toggle--left { left: 12px; }
 .app-sidebar-toggle--right { right: 12px; }
 .app-frame:not(.sidebar-collapsed) .app-sidebar-toggle--left { left: calc(var(--left-width) - 40px); }
-.app-frame:not(.result-collapsed) .app-sidebar-toggle--right { right: calc(var(--right-width) - 52px); }
+.app-frame:not(.result-collapsed) .app-sidebar-toggle--right { right: calc(var(--right-width) - 44px); }
 .app-sidebar-toggle:hover { color: var(--accent); }
 .app-sidebar-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (pointer: coarse) {
@@ -3304,6 +3304,8 @@ details[open] > .disclosure-summary > .disclosure-chevron { transform: rotate(18
 /* The collapsed edge button needs a gutter; expanded panels own the inner edge. */
 @media (width > 1080px) {
   .app-frame.sidebar-collapsed .reader-toolbar { padding-left: 56px; }
+  .reader-tools { padding-left: 36px; }
+  .app-frame.sidebar-collapsed .reader-tools { padding-left: 72px; }
   .app-frame.sidebar-collapsed:not(.sidebar-animating) .left-sidebar-inner { visibility: hidden; }
 }
 @media (width > 780px) {
@@ -3359,3 +3361,12 @@ details[open] > .disclosure-summary > .disclosure-chevron { transform: rotate(18
 
 /* Preserve the existing two-line outline presentation without leaking a clipped half line. */
 .outline-item:not(.pdf-outline-item) { display: block; white-space: normal; -webkit-line-clamp: unset; }
+
+@media (width > 780px) {
+  .right-panel-inner { background: var(--panel); }
+}
+
+@media (width > 780px) {
+  .result-navigation { background: var(--panel); }
+  .inquiry-tabs [role="tab"][aria-selected="true"] { background: var(--panel); }
+}

@@ -9,7 +9,7 @@
     {
       "path": "src/App.tsx",
       "bytes": 125797,
-      "sha256": "dc793804b1658794d39308e9840bcde07f87e402be3e69f3e137e9bc179a0faf"
+      "sha256": "be52aea29dd89cec0edcd69d633ad591469c1d564bb52cf5dd2a8a4d83c78248"
     },
     {
       "path": "src/AssistantMessage.test.tsx",
@@ -1163,8 +1163,8 @@
     },
     {
       "path": "src/styles.css",
-      "bytes": 140688,
-      "sha256": "55f1a8ed2048cffe88a6383909e45a96a6c99dddf8939b5f70b2a53d43edb248"
+      "bytes": 141036,
+      "sha256": "2d6a43d19ee4ca021db009ad027069dd7d2b5c8f327341527eb038da0cb81531"
     },
     {
       "path": "src/test-support/library.ts",
@@ -1984,7 +1984,7 @@
     {
       "path": "scripts/generate-button-showcase.mjs",
       "bytes": 26453,
-      "sha256": "9b11315656885e9bee52a6c905c24e362bee7b93c8754ab4347c8c6af02b8c1c"
+      "sha256": "757979db6f2b05fd72009d10b0f4630b8c5d2279a7f04c4f3df3a9d74e3f7601"
     },
     {
       "path": "scripts/hosted-alert-recovery-drill.mjs",
@@ -2383,13 +2383,13 @@
     },
     {
       "path": "docs/ui-guidelines.md",
-      "bytes": 43199,
-      "sha256": "e79877c435def69387edf79fdf81d8a7d07a0c7d3b2cf266a52963dcbc9b2217"
+      "bytes": 43460,
+      "sha256": "939ed9116cdb8a0dcb9d88824deca648f3021b31d580a285f23a377ca6e18957"
     },
     {
       "path": "docs/ui/button-states.html",
-      "bytes": 261434,
-      "sha256": "79b01ebb82753d5b15e5d3bf2ca9971a807722a2dd01e6b97105b1d54a76e1f8"
+      "bytes": 261782,
+      "sha256": "355f91ba97833bc068eaec47bc6017e42f728b612ccda8ee04582c57facefda8"
     },
     {
       "path": "SECURITY.md",

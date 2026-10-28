@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Bookmark, BookmarkCheck, BookMarked, MessageSquareText, PanelLeftOpen, PanelRightOpen, X, Copy, Check, Plus, Languages, MoveHorizontal, MoveDiagonal, RotateCcw, RotateCw, Download, Upload, Terminal, ChevronDown, ChevronLeft, Lightbulb, ShieldCheck, BookOpenText, Trash2, ArrowUp, MessageCircle, RefreshCw, ExternalLink } from 'lucide-react';
 const icon = (I, size=16, props={}) => renderToStaticMarkup(createElement(I,{size,strokeWidth:1.8,'aria-hidden':true,...props}));
-const sidebarIcon = side => { const x=side==='left'?8.5:15.5; return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="4"/><path d="M${x} 4v16"/></svg>`; };
+const sidebarIcon = side => { const x=side==='left'?8.5:15.5; return `<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="4"/><path d="M${x} 4v16"/></svg>`; };
 const wrap=(cls,s)=>`<div class="${cls} demo-context">${s}</div>`;
 const b=(label,cls='',attrs='')=>`<button type="button" class="${cls}" ${attrs}>${label}</button>`;
 const rows=[];

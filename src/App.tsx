@@ -1557,7 +1557,7 @@ function BrandMark() {
 function SidebarToggleIcon({ side }: { side: "left" | "right" }) {
   const divider = side === "left" ? 8.5 : 15.5;
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="3" y="4" width="18" height="16" rx="4" />
       <path d={`M${divider} 4v16`} />
     </svg>
