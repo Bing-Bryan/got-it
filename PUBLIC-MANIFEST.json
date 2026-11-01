@@ -8,8 +8,8 @@
     },
     {
       "path": "src/App.tsx",
-      "bytes": 125797,
-      "sha256": "be52aea29dd89cec0edcd69d633ad591469c1d564bb52cf5dd2a8a4d83c78248"
+      "bytes": 127005,
+      "sha256": "45f2843a06cf9d877afc2004482c0889bc23f76fe7af644e58c48ed2a3c1ca83"
     },
     {
       "path": "src/AssistantMessage.test.tsx",
@@ -283,8 +283,8 @@
     },
     {
       "path": "src/bookmark-navigation-ui.test.tsx",
-      "bytes": 11309,
-      "sha256": "93d01ebbc06d21342ddc4e054eaff2c863e28e5b290377f877f8e3c5a207e853"
+      "bytes": 12076,
+      "sha256": "fe7dacfc2c9034203689193209736d4de800be171b3bfed0c89930a8e28da0a2"
     },
     {
       "path": "src/bookmark-selection.test.ts",
@@ -1163,8 +1163,8 @@
     },
     {
       "path": "src/styles.css",
-      "bytes": 141036,
-      "sha256": "2d6a43d19ee4ca021db009ad027069dd7d2b5c8f327341527eb038da0cb81531"
+      "bytes": 141232,
+      "sha256": "0e0fbce3093298fe474d72b8500f27eee2baf0042cbc3d50691d9ac1d705bcb1"
     },
     {
       "path": "src/test-support/library.ts",
@@ -1248,8 +1248,8 @@
     },
     {
       "path": "src/useReadingLibrary.ts",
-      "bytes": 64926,
-      "sha256": "e72286f676194ecfdd89629fd38449b51e336625d9fb2d11d0ac9eeebf480ad1"
+      "bytes": 65570,
+      "sha256": "2447e4792f2cbe5d9b4f7338cfb0a5e0fd8c28f4ddbe402c89e6b9204b1bba7e"
     },
     {
       "path": "src/useReadingViewport.test.tsx",

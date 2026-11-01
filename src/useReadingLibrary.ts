@@ -106,6 +106,7 @@ export function useReadingLibrary(options: Options) {
   const [recovery, setRecovery] = useState<RecoveryRecord | null>(null);
   const recoveryRef = useRef<RecoveryRecord | null>(null);
   const dismissedRecoveries = useRef(new Set<string>());
+  const closedRecoveries = useRef(new Set<string>());
   const [recoveries, setRecoveries] = useState<RecoverySummary[]>([]);
   const [draftWarning, setDraftWarning] = useState("");
   const [blocked, setBlocked] = useState(false);
@@ -386,7 +387,7 @@ export function useReadingLibrary(options: Options) {
       await api<LibraryEntry>(`/entries/${id}`); // Read before interrupting the current request.
       await preserve();
       const e = await api<LibraryEntry>(`/entries/${id}/activate`, {});
-      install(e); for (const r of recoveries) if (r.entryId===id || r.resultEntryId===id) dismissedRecoveries.current.delete(r.id);
+      install(e); for (const r of recoveries) if (r.entryId===id || r.resultEntryId===id) { dismissedRecoveries.current.delete(r.id); closedRecoveries.current.delete(r.id); }
       await refresh(); await refreshRecoveries(); await checkSource();
     });
   }
@@ -504,8 +505,9 @@ export function useReadingLibrary(options: Options) {
     const closing = recoveryRef.current;
     if (closing) {
       dismissedRecoveries.current.add(closing.id);
+      closedRecoveries.current.add(closing.id);
       // Closing means continue this reading visit, not immediately inspect the next known copy.
-      for (const record of recoveries) if (record.entryId === closing.entryId) dismissedRecoveries.current.add(record.id);
+      for (const record of recoveries) if (record.entryId === closing.entryId) { dismissedRecoveries.current.add(record.id); closedRecoveries.current.add(record.id); }
     }
     preview(null); readonlyRef.current=!!historyId;
   }
@@ -888,7 +890,11 @@ export function useReadingLibrary(options: Options) {
   }
   useEffect(()=> { if (!notice) return; const id=setTimeout(()=>setNotice(""),4500); return ()=>clearTimeout(id); },[notice]);
   useEffect(()=>()=>{fontReflow.current?.cleanup();fontReflow.current=null;},[]);
-  return { removeEntry, restoreEntry, removedUndo, returnToStart, webPrefill, ensureEntry, retryWebMedia, translate, stopTranslation, translationRunning, translationProgress, translationActivity, translationRepairCount, autoTranslate, setAutoTranslation, saveNow:flush, webImportOpen, webImportInline, webImportSuccess, webJob, webError, showWebImport, readWebUrl, readWebArticle, readXArticleFile, confirmWebImport, cancelWebImport, initialPosition: desiredPosition.current, entry, list, ready, busy:busy||preparingEntry, error, importError, clearError: () => { setError(""); setImportError(false); }, status, check, recovery, recoveries, blocked, draftWarning, notice, historyId,
+  // A pending recovery for the material being read must open before the start
+  // page can hide the reader. A dismissed or unrelated recovery must not trap
+  // the start button; those stay visible in the material list.
+  const activePendingRecovery = !!entry && recoveries.some(r => r.state==='pending' && r.hasDifferences!==false && (r.entryId===entry.id || r.resultEntryId===entry.id) && !closedRecoveries.current.has(r.id));
+  return { removeEntry, restoreEntry, removedUndo, returnToStart, webPrefill, ensureEntry, retryWebMedia, translate, stopTranslation, translationRunning, translationProgress, translationActivity, translationRepairCount, autoTranslate, setAutoTranslation, saveNow:flush, webImportOpen, webImportInline, webImportSuccess, webJob, webError, showWebImport, readWebUrl, readWebArticle, readXArticleFile, confirmWebImport, cancelWebImport, initialPosition: desiredPosition.current, entry, list, ready, busy:busy||preparingEntry, error, importError, clearError: () => { setError(""); setImportError(false); }, status, check, recovery, recoveries, activePendingRecovery, blocked, draftWarning, notice, historyId,
     readOnly: !!historyId || !!recovery || blocked || busy,
     openBookmark, prepareBookmarks:preserve, open, choose, importFile, checkSource: () => transition(checkSource), acceptUpdate, viewRevision, resolveRecovery, acknowledgeRecovery, showRecovery, closeRecovery,
     retry: () => ready && !blockedDraft.current ? transition(() => flush()) : initialize(),

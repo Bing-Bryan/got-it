@@ -269,6 +269,7 @@ function App() {
     return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
   }, [providerOpen]);
   const [toast, setToast] = useState<string | null>(null);
+  const [returnPending, setReturnPending] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [pdfTarget,setPdfTarget] = useState<{id:string;nonce:number;returnToSource?:boolean}|null>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -363,7 +364,10 @@ function App() {
   }, []);
   setBrowserLibraryNamespace(shareToken ? `share-${shareToken}` : '');
   const library = useReadingLibrary({ workspace, readingVisible:readingView==='reading', onOpened:enterReading, onEmptied:()=>{setReadingView('start');try{sessionStorage.setItem(START_VIEW_KEY,'start');}catch{}}, install: installLibraryWorkspace, interrupt: interruptForSwitch, getWorkspace: () => workspaceRef.current, update: (next) => { workspaceRef.current=next;setWorkspace(next); } });
-  const recoveryPriority=library.blocked||!!library.recovery||library.recoveries.some(r=>r.state==='pending'&&r.hasDifferences!==false);
+  // Keep the reader open only for a recovery that belongs to this material (or
+  // an unreadable saved copy). Recoveries on other materials stay in the list;
+  // forcing the reader for them made the start button appear broken.
+  const recoveryPriority=library.blocked||!!library.recovery||library.activePendingRecovery||library.recoveries.some(r=>r.state==='pending'&&!!r.savedRecordUnavailable);
   const libraryRef = useRef(library);
   libraryRef.current = library;
   const showStart=(!library.ready||!library.entry||readingView==='start')&&!recoveryPriority&&shareBoot!=="opening";
@@ -421,7 +425,25 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [shareToken, shareBoot]);
   useLayoutEffect(()=>{if(!showStart)library.rendered();},[showStart,documentLoadId]);
-  async function returnToStart(){if(shareToken){if(!library.ready||library.busy)return;const target=libraryRef.current.list.entries.find(entry=>entry.filename===shareFirstName.current)??libraryRef.current.list.entries[0];if(target)await libraryRef.current.open(target.id);return;}if(!library.ready||library.busy)return;if(await library.returnToStart()){setReadingView('start');try{sessionStorage.setItem(START_VIEW_KEY,'start');}catch{}setBookmarksOpen(false);setMobileSidebarOpen(false);setMobilePanelOpen(false);setSelectionDraft(null);setBookmarkDraft(null);window.getSelection()?.removeAllRanges();requestAnimationFrame(()=>document.querySelector<HTMLElement>(".reading-start-page")?.focus({preventScroll:true}));}}
+  async function returnToStart(){
+    if(!library.ready)return;
+    if(library.busy){setReturnPending(true);showToast("正在保存，保存完成后回到起始页。");return;}
+    if(shareToken){
+      // A share page has no start view of its own. Save this visit first so the
+      // browser does not show an unsaved-changes prompt, then return home.
+      if(await library.returnToStart())window.location.assign("/");
+      else showToast(libraryRef.current.error||"阅读进度尚未保存，暂时不能离开分享页。");
+      return;
+    }
+    if(recoveryPriority){showToast("有阅读记录待核对，先处理后才能回到起始页。");return;}
+    if(await library.returnToStart()){
+      setReadingView('start');try{sessionStorage.setItem(START_VIEW_KEY,'start');}catch{}
+      setBookmarksOpen(false);setMobileSidebarOpen(false);setMobilePanelOpen(false);setSelectionDraft(null);setBookmarkDraft(null);
+      window.getSelection()?.removeAllRanges();
+      requestAnimationFrame(()=>document.querySelector<HTMLElement>(".reading-start-page")?.focus({preventScroll:true}));
+    }else showToast(libraryRef.current.error||"阅读进度尚未保存，暂时无法回到起始页。");
+  }
+
   const documentBookmarks=useDocumentBookmarks(library.entry?.id,bookmarkVersion);
   const activeBookmarkRevision=library.historyId||library.entry?.revisionId;
   const currentBookmarks=documentBookmarks.bookmarks.filter(bookmark=>bookmark.revisionId===activeBookmarkRevision);
@@ -618,6 +640,15 @@ function App() {
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
     toastTimerRef.current = window.setTimeout(() => setToast(null), 3400);
   }, []);
+
+  // Clicking the brand while a save/switch is finishing used to be a silent
+  // no-op because the button was disabled. Keep the request and run it once the
+  // library is idle.
+  useEffect(() => {
+    if (!returnPending || !library.ready || library.busy) return;
+    setReturnPending(false);
+    void returnToStart();
+  }, [returnPending, library.ready, library.busy]);
 
   const refreshModels = useCallback(async (refresh = false) => {
     if(HOSTED){setModelsLoading(false);return;}
@@ -1308,7 +1339,7 @@ function App() {
       <aside id="document-navigation" ref={sidebar.ref} className="left-sidebar" aria-label="文档导航" aria-hidden={showStart||undefined} inert={showStart||(resultPanel.narrow && mobilePanelOpen) || (sidebar.narrow ? !mobileSidebarOpen : !sidebar.visible)} onMouseEnter={sidebar.cancel} onMouseLeave={sidebar.leave} onFocus={sidebar.cancel} onBlur={sidebar.leave}>
         <div className="left-sidebar-inner">
         <div className="brand-row">
-          <button type="button" className="start-brand" aria-label="回到起始页" title="回到起始页" disabled={!library.ready||library.busy} onClick={()=>void returnToStart()}><BrandMark /><strong>got it</strong></button>
+          <button type="button" className="start-brand" aria-label="回到起始页" title="回到起始页" disabled={!library.ready} aria-busy={library.busy||undefined} onClick={()=>void returnToStart()}><BrandMark /><strong>got it</strong></button>
           <button
             className="icon-button sidebar-close"
             type="button"
