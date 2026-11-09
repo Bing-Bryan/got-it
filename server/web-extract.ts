@@ -34,12 +34,19 @@ export async function extractWeb(input:string,options:{signal:AbortSignal;fetche
  const generic=!anthropic&&!claude?genericArticle(root):undefined;
  const main=anthropic&&find(root,n=>'tagName'in n&&n.tagName==='main'&&attr(n,'id')==='main-content');
  const article=generic?.article??(anthropic?(main&&find(main,n=>'tagName'in n&&n.tagName==='article')):find(root,n=>attr(n,'data-tpl')==='article'));
- const bodies=article?all(article,n=>anthropic?attr(n,'class').split(/\s+/).some(c=>/^Body-module-.*__body$/.test(c)):attr(n,'id')==='body'&&attr(n,'class').split(/\s+/).includes('prose')):[];
- const body=generic?.body??(bodies.length===1?bodies[0]:undefined),heading=generic?.heading??(article&&find(article,n=>'tagName'in n&&n.tagName==='h1'));
+ // Anthropic research pages moved from Body-module-*__body/PostDetail-*__heroImage to
+ // hashed CSS-module classes such as PA4F1q_body/VYxBBq_CoverImage; accept both templates.
+ const bodies=article?all(article,n=>anthropic?('tagName'in n&&n.tagName==='div'&&attr(n,'class').split(/\s+/).some(c=>/(?:^|[_-])body$/.test(c))):attr(n,'id')==='body'&&attr(n,'class').split(/\s+/).includes('prose')):[];
+ const outerBodies=bodies.filter(n=>!bodies.some(other=>other!==n&&all(other,c=>c===n).length));
+ const body=generic?.body??(outerBodies.length===1?outerBodies[0]:undefined),heading=generic?.heading??(article&&find(article,n=>'tagName'in n&&n.tagName==='h1'));
+ const header=anthropic&&article?children(article).find(n=>'tagName'in n&&n.tagName==='header'):undefined;
+ const headerImages=header?all(header,n=>'tagName'in n&&n.tagName==='img'):[];
  const outsideImages=anthropic&&article&&body?all(article,n=>'tagName'in n&&n.tagName==='img').filter(n=>!all(body,c=>c===n).length):[];
- const hero=outsideImages.filter(n=>attr(n,'class').split(/\s+/).some(c=>/^PostDetail-module-.*__heroImage$/.test(c)));
+ const auxiliary=(n:Tree['node'])=>{for(let p:Tree['node']|undefined=n;p;p='parentNode'in p?p.parentNode as Tree['node']:undefined)if('tagName'in p&&(p.tagName==='aside'||/(?:^|_)Footnotes$/.test(attr(p,'class'))))return true;return false;};
+ const hero=[...headerImages,...outsideImages.filter(n=>!headerImages.includes(n)&&attr(n,'class').split(/\s+/).some(c=>/__heroImage$/.test(c)))];
+ const stray=outsideImages.filter(n=>!hero.includes(n)&&!auxiliary(n));
  const title=heading&&normal(text(heading));
- if(!article||!body||!title||hero.length>1||outsideImages.some(n=>!hero.includes(n))||/^(?:sign in|log in|404|access denied|error|not found)\b/i.test(title)||normal(text(body)).length<300||all(body,n=>'tagName'in n&&n.tagName==='p').length<2||!generic&&!all(body,n=>'tagName'in n&&/^h[2-6]$/.test(n.tagName)).length)throw new WebError('文章正文结构已变化或内容不完整，无法生成有效预览。','web_structure');
+ if(!article||!body||!title||hero.length>1||stray.length||/^(?:sign in|log in|404|access denied|error|not found)\b/i.test(title)||normal(text(body)).length<300||all(body,n=>'tagName'in n&&n.tagName==='p').length<2||!generic&&!all(body,n=>'tagName'in n&&/^h[2-6]$/.test(n.tagName)).length)throw new WebError('文章正文结构已变化或内容不完整，无法生成有效预览。','web_structure');
  const media:WebMedia[]=[],resources=new Map<string,ValidImage>(),fragments:WebFragment[]=[];let headingIndex=0,totalMedia=0;
  if(attr(heading!,'id'))fragments.push({fragment:attr(heading!,'id'),headingIndex:0});
  function fragment(n:Tree['node'],index:number){const id=attr(n,'id');if(id&&!fragments.some(f=>f.fragment===id))fragments.push({fragment:id,headingIndex:index});}

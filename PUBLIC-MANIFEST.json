@@ -1813,13 +1813,13 @@
     },
     {
       "path": "server/web-extract.test.ts",
-      "bytes": 7044,
-      "sha256": "e0929e7c4c8c18d1620fc5d68483ff9484ae3201907057be8f4cc841e48ee851"
+      "bytes": 10254,
+      "sha256": "14041726a0a96f048e73bff9359f9ce783df5c4ac6682e776de1539bf109f331"
     },
     {
       "path": "server/web-extract.ts",
-      "bytes": 11681,
-      "sha256": "024ef58780590f8dcbacb3b16af0ba9319966e5fcbef0441f67fd3651d8f5931"
+      "bytes": 12495,
+      "sha256": "3d18d8376a455974ea17ef54133fc93c2eb81d885a3c745cdda6c9361ab61e4b"
     },
     {
       "path": "server/web-fetch.test.ts",
